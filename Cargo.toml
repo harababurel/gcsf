@@ -1,0 +1,13 @@
+[package]
+name = "gcsf"
+version = "0.1.0"
+authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
+
+[dependencies]
+google-drive3 = "*"
+hyper = "*"
+hyper-rustls = "*"
+yup-oauth2 = "*"
+serde = "*"
+serde_json = "*"
+fuse = "*"
