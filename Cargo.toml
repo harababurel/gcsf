@@ -5,9 +5,14 @@ authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
 
 [dependencies]
 google-drive3 = "*"
+maplit = "*"
+serde = "*"
+serde_derive = "*"
+serde_json = "*"
 hyper = "*"
 hyper-rustls = "*"
 yup-oauth2 = "*"
-serde = "*"
-serde_json = "*"
 fuse = "*"
+time = "*"
+log = "0.4"
+pretty_env_logger = "0.2.1"
