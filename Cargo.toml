@@ -4,12 +4,12 @@ version = "0.1.0"
 authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
 
 [dependencies]
-google-drive3 = "*"
+google-drive3 = "1.0.7+20171201"
 id_tree = "1.2.0"
-maplit = "*"
-serde = "*"
-serde_derive = "*"
-serde_json = "*"
+maplit = "1.0.1"
+serde = "1.0.39"
+serde_derive = "1.0.39"
+serde_json = "1.0.15"
 hyper = "*"
 hyper-rustls = "*"
 yup-oauth2 = "*"

@@ -2,20 +2,15 @@ use drive3;
 use fuse;
 use fuse::{FileAttr, FileType, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry, Request};
 use hyper;
-use hyper::Client;
 use hyper_rustls;
 use id_tree;
 use libc;
-use log;
 use oauth2;
-use oauth2::{ApplicationSecret, Authenticator, AuthenticatorDelegate, ConsoleApplicationSecret,
-             DefaultAuthenticatorDelegate, DiskTokenStorage, GetToken, MemoryStorage, TokenStorage};
-use serde;
+use oauth2::{ApplicationSecret, Authenticator, ConsoleApplicationSecret,
+             DefaultAuthenticatorDelegate, DiskTokenStorage};
 use serde_json;
-use std::borrow::BorrowMut;
 use std::clone::Clone;
 use std::collections::HashMap;
-use std::default::Default;
 use std::ffi::OsStr;
 use time::Timespec;
 
@@ -206,7 +201,7 @@ impl GCSF {
     }
 
     fn read_client_secret(file: &str) -> ApplicationSecret {
-        use std::fs::{File, OpenOptions};
+        use std::fs::OpenOptions;
         use std::io::Read;
 
         let mut secret = String::new();

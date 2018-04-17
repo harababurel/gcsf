@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 #![allow(unused_must_use)]
-#![allow(unused_imports)]
 #![allow(unused_mut)]
 #![allow(unreachable_code)]
 
@@ -8,10 +7,8 @@ extern crate fuse;
 extern crate gcsf;
 extern crate pretty_env_logger;
 
-use fuse::{BackgroundSession, Filesystem};
 use std::env;
 use std::ffi::OsStr;
-use std::io;
 
 fn mount_gcsf(mountpoint: &str) {
     let options = ["-o", "ro", "-o", "fsname=GCSF"]
