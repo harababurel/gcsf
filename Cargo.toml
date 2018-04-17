@@ -5,6 +5,7 @@ authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
 
 [dependencies]
 google-drive3 = "*"
+id_tree = "1.2.0"
 maplit = "*"
 serde = "*"
 serde_derive = "*"

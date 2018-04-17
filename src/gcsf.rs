@@ -4,6 +4,7 @@ use fuse::{FileAttr, FileType, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry,
 use hyper;
 use hyper::Client;
 use hyper_rustls;
+use id_tree;
 use libc;
 use log;
 use oauth2;
@@ -27,19 +28,28 @@ type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 
 pub struct GCSF {
     hub: GCDrive,
-    files: HashMap<String, File>,
+    hierarchy: id_tree::Tree<File>,
 }
 
 struct File {
     name: String,
+    kind: fuse::FileType,
     attr: fuse::FileAttr,
     pieces: Vec<String>, // filename of each piece of this file on google drive
 }
 
 impl GCSF {
     pub fn new() -> GCSF {
+        let wd = File {
+            name: String::from("."),
+            kind: fuse::FileType::Directory,
+            attr: HELLO_DIR_ATTR,
+            pieces: vec![],
+        };
+
         let some_file = File {
             name: String::from("some_file.txt"),
+            kind: fuse::FileType::RegularFile,
             attr: fuse::FileAttr {
                 ino: 10,
                 kind: fuse::FileType::RegularFile,
@@ -65,6 +75,7 @@ impl GCSF {
 
         let other_file = File {
             name: String::from("other_file.txt"),
+            kind: fuse::FileType::RegularFile,
             attr: fuse::FileAttr {
                 ino: 11,
                 kind: fuse::FileType::RegularFile,
@@ -84,12 +95,31 @@ impl GCSF {
             pieces: vec![String::from("123.bin"), String::from("456.bin")],
         };
 
+        let mut hierarchy: id_tree::Tree<File> =
+            id_tree::TreeBuilder::new().with_node_capacity(10).build();
+
+        let root_id: id_tree::NodeId = hierarchy
+            .insert(id_tree::Node::new(wd), id_tree::InsertBehavior::AsRoot)
+            .unwrap();
+
+        hierarchy
+            .insert(
+                id_tree::Node::new(some_file),
+                id_tree::InsertBehavior::UnderNode(&root_id),
+            )
+            .unwrap();
+        hierarchy
+            .insert(
+                id_tree::Node::new(other_file),
+                id_tree::InsertBehavior::UnderNode(&root_id),
+            )
+            .unwrap();
+
+        info!("hierarchy has height = {}", hierarchy.height());
+
         GCSF {
             hub: GCSF::create_drive_hub(),
-            files: hashmap!{
-                String::from("some_file.txt") => some_file,
-                String::from("other_file.txt") => other_file,
-            },
+            hierarchy,
         }
     }
 
@@ -176,11 +206,11 @@ impl fuse::Filesystem for GCSF {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
         if parent == 1 {
             let name = name.to_str().unwrap();
-            if self.files.contains_key(name) {
-                reply.entry(&TTL, &self.files[name].attr, 0);
-            } else {
-                reply.error(libc::ENOENT);
-            }
+            // if self.files.contains_key(name) {
+            //     reply.entry(&TTL, &self.files[name].attr, 0);
+            // } else {
+            reply.error(libc::ENOENT);
+        // }
         } else {
             reply.error(libc::ENOENT);
         }
@@ -192,12 +222,12 @@ impl fuse::Filesystem for GCSF {
             return;
         }
 
-        for (name, file) in &self.files {
-            if file.attr.ino == ino {
-                reply.attr(&TTL, &file.attr.clone());
-                return;
-            }
-        }
+        // for (name, file) in &self.files {
+        //     if file.attr.ino == ino {
+        //         reply.attr(&TTL, &file.attr.clone());
+        //         return;
+        //     }
+        // }
 
         reply.error(libc::ENOENT);
     }
@@ -238,10 +268,10 @@ impl fuse::Filesystem for GCSF {
                 reply.add(1, 0, FileType::Directory, ".");
                 reply.add(2, 1, FileType::Directory, "..");
 
-                for filename in self.files.keys() {
-                    info!("filename: {:?}", filename);
-                    reply.add(1 as u64, 1 as i64, FileType::RegularFile, filename);
-                }
+                // for filename in self.files.keys() {
+                //     info!("filename: {:?}", filename);
+                //     reply.add(1 as u64, 1 as i64, FileType::RegularFile, filename);
+                // }
             }
             reply.ok();
         } else {

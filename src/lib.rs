@@ -22,6 +22,7 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate maplit;
+extern crate id_tree;
 
 mod gcsf;
 
