@@ -13,6 +13,7 @@ use oauth2::{ApplicationSecret, Authenticator, AuthenticatorDelegate, ConsoleApp
 use serde;
 use serde_json;
 use std::borrow::BorrowMut;
+use std::clone::Clone;
 use std::collections::HashMap;
 use std::default::Default;
 use std::ffi::OsStr;
@@ -29,11 +30,12 @@ type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 pub struct GCSF {
     hub: GCDrive,
     hierarchy: id_tree::Tree<File>,
+    inode_to_node: HashMap<u64, id_tree::NodeId>,
 }
 
+#[derive(Clone)]
 struct File {
     name: String,
-    kind: fuse::FileType,
     attr: fuse::FileAttr,
     pieces: Vec<String>, // filename of each piece of this file on google drive
 }
@@ -42,14 +44,54 @@ impl GCSF {
     pub fn new() -> GCSF {
         let wd = File {
             name: String::from("."),
-            kind: fuse::FileType::Directory,
             attr: HELLO_DIR_ATTR,
             pieces: vec![],
         };
 
+        let hello_dir = File {
+            name: String::from("hello"),
+            attr: fuse::FileAttr {
+                ino: 2,
+                kind: fuse::FileType::Directory,
+                size: 0,
+                blocks: 0,
+                atime: Timespec::new(1, 0),
+                mtime: Timespec::new(1, 0),
+                ctime: Timespec::new(1, 0),
+                crtime: Timespec::new(1, 0),
+                perm: 0,
+                nlink: 0,
+                uid: 0,
+                gid: 0,
+                rdev: 0,
+                flags: 0,
+            },
+            pieces: vec![],
+        };
+
+        let world_file = File {
+            name: String::from("world.txt"),
+            attr: fuse::FileAttr {
+                ino: 13,
+                kind: fuse::FileType::RegularFile,
+                size: 1280,
+                blocks: 0,
+                atime: Timespec::new(1, 0),
+                mtime: Timespec::new(1, 0),
+                ctime: Timespec::new(1, 0),
+                crtime: Timespec::new(1, 0),
+                perm: 0,
+                nlink: 0,
+                uid: 0,
+                gid: 0,
+                rdev: 0,
+                flags: 0,
+            },
+            pieces: vec![String::from("100.bin")],
+        };
+
         let some_file = File {
             name: String::from("some_file.txt"),
-            kind: fuse::FileType::RegularFile,
             attr: fuse::FileAttr {
                 ino: 10,
                 kind: fuse::FileType::RegularFile,
@@ -75,7 +117,6 @@ impl GCSF {
 
         let other_file = File {
             name: String::from("other_file.txt"),
-            kind: fuse::FileType::RegularFile,
             attr: fuse::FileAttr {
                 ino: 11,
                 kind: fuse::FileType::RegularFile,
@@ -98,28 +139,69 @@ impl GCSF {
         let mut hierarchy: id_tree::Tree<File> =
             id_tree::TreeBuilder::new().with_node_capacity(10).build();
 
-        let root_id: id_tree::NodeId = hierarchy
-            .insert(id_tree::Node::new(wd), id_tree::InsertBehavior::AsRoot)
+        let wd_id: id_tree::NodeId = hierarchy
+            .insert(
+                id_tree::Node::new(wd.clone()),
+                id_tree::InsertBehavior::AsRoot,
+            )
             .unwrap();
 
-        hierarchy
+        let some_file_id = hierarchy
             .insert(
-                id_tree::Node::new(some_file),
-                id_tree::InsertBehavior::UnderNode(&root_id),
+                id_tree::Node::new(some_file.clone()),
+                id_tree::InsertBehavior::UnderNode(&wd_id),
             )
             .unwrap();
-        hierarchy
+
+        let other_file_id = hierarchy
             .insert(
-                id_tree::Node::new(other_file),
-                id_tree::InsertBehavior::UnderNode(&root_id),
+                id_tree::Node::new(other_file.clone()),
+                id_tree::InsertBehavior::UnderNode(&wd_id),
             )
             .unwrap();
+
+        let hello_dir_id = hierarchy
+            .insert(
+                id_tree::Node::new(hello_dir.clone()),
+                id_tree::InsertBehavior::UnderNode(&wd_id),
+            )
+            .unwrap();
+
+        let world_file_id = hierarchy
+            .insert(
+                id_tree::Node::new(world_file.clone()),
+                id_tree::InsertBehavior::UnderNode(&hello_dir_id),
+            )
+            .unwrap();
+
+        let inode_to_node = hashmap!{
+            wd.attr.ino => wd_id,
+            some_file.attr.ino => some_file_id,
+            other_file.attr.ino => other_file_id,
+            hello_dir.attr.ino => hello_dir_id,
+            world_file.attr.ino => world_file_id,
+        };
 
         info!("hierarchy has height = {}", hierarchy.height());
 
         GCSF {
             hub: GCSF::create_drive_hub(),
             hierarchy,
+            inode_to_node,
+        }
+    }
+
+    fn get_file(&self, ino: u64) -> Option<&File> {
+        match self.inode_to_node.get(&ino) {
+            Some(node_id) => Some(self.hierarchy.get(node_id).unwrap().data()),
+            None => None,
+        }
+    }
+
+    fn get_node(&self, ino: u64) -> Option<&id_tree::Node<File>> {
+        match self.inode_to_node.get(&ino) {
+            Some(node_id) => Some(self.hierarchy.get(node_id).unwrap()),
+            None => None,
         }
     }
 
@@ -203,17 +285,22 @@ impl GCSF {
 }
 
 impl fuse::Filesystem for GCSF {
-    fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
-        if parent == 1 {
-            let name = name.to_str().unwrap();
-            // if self.files.contains_key(name) {
-            //     reply.entry(&TTL, &self.files[name].attr, 0);
-            // } else {
-            reply.error(libc::ENOENT);
-        // }
-        } else {
-            reply.error(libc::ENOENT);
-        }
+    fn lookup(&mut self, _req: &Request, parent_ino: u64, name: &OsStr, reply: ReplyEntry) {
+        match self.get_node(parent_ino) {
+            Some(node) => {
+                for child_id in node.children() {
+                    let child_node = self.hierarchy.get(child_id).unwrap();
+                    let file = child_node.data();
+                    if file.name == name.to_str().unwrap() {
+                        reply.entry(&TTL, &file.attr, 0);
+                        break;
+                    }
+                }
+            }
+            None => {
+                reply.error(libc::ENOENT);
+            }
+        };
     }
 
     fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
@@ -262,20 +349,37 @@ impl fuse::Filesystem for GCSF {
         info!("ino: {}", ino);
         info!("_fh: {}", _fh);
         info!("offset: {}", offset);
-        if ino == 1 {
-            if offset == 0 {
-                //      ino  offset            kind  name
-                reply.add(1, 0, FileType::Directory, ".");
-                reply.add(2, 1, FileType::Directory, "..");
 
-                // for filename in self.files.keys() {
-                //     info!("filename: {:?}", filename);
-                //     reply.add(1 as u64, 1 as i64, FileType::RegularFile, filename);
-                // }
+        match self.get_node(ino) {
+            Some(node) => {
+                info!("matched node file = {}", node.data().name);
+                if offset == 0 {
+                    let wd_id = self.inode_to_node.get(&ino).unwrap();
+                    let wd_node = self.hierarchy.get(wd_id).unwrap();
+
+                    let mut curr_offs = 1;
+                    reply.add(
+                        wd_node.data().attr.ino,
+                        curr_offs,
+                        wd_node.data().attr.kind,
+                        ".",
+                    );
+                    reply.add(2, 1, FileType::Directory, "..");
+
+                    for child_id in wd_node.children() {
+                        let child_node = self.hierarchy.get(child_id).unwrap();
+                        let file = child_node.data();
+                        info!("child name: {}", &file.name);
+                        //                  ino  offset               kind        name
+                        reply.add(file.attr.ino, curr_offs, file.attr.kind, &file.name);
+                        curr_offs += 1;
+                    }
+                }
+                reply.ok();
             }
-            reply.ok();
-        } else {
-            reply.error(libc::ENOENT);
+            None => {
+                reply.error(libc::ENOENT);
+            }
         }
     }
 }
