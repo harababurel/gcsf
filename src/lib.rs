@@ -1,4 +1,4 @@
-#![feature(libc)]
+// #![feature(libc)]
 #![allow(dead_code)]
 #![allow(unused_must_use)]
 #![allow(unused_mut)]
@@ -9,17 +9,17 @@ extern crate fuse;
 extern crate google_drive3 as drive3;
 extern crate hyper;
 extern crate hyper_rustls;
+extern crate id_tree;
 extern crate libc;
-extern crate time;
-extern crate yup_oauth2 as oauth2;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate maplit;
 extern crate pretty_env_logger;
 extern crate serde;
 extern crate serde_json;
-#[macro_use]
-extern crate maplit;
-extern crate id_tree;
+extern crate time;
+extern crate yup_oauth2 as oauth2;
 
 mod gcsf;
 

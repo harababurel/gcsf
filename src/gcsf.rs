@@ -282,16 +282,14 @@ impl GCSF {
 impl fuse::Filesystem for GCSF {
     fn lookup(&mut self, _req: &Request, parent_ino: u64, name: &OsStr, reply: ReplyEntry) {
         match self.get_node(parent_ino) {
-            Some(node) => {
-                for child_id in node.children() {
-                    let child_node = self.hierarchy.get(child_id).unwrap();
-                    let file = child_node.data();
-                    if file.name == name.to_str().unwrap() {
-                        reply.entry(&TTL, &file.attr, 0);
-                        break;
-                    }
+            Some(node) => for child_id in node.children() {
+                let child_node = self.hierarchy.get(child_id).unwrap();
+                let file = child_node.data();
+                if file.name == name.to_str().unwrap() {
+                    reply.entry(&TTL, &file.attr, 0);
+                    break;
                 }
-            }
+            },
             None => {
                 reply.error(libc::ENOENT);
             }
