@@ -1,6 +1,9 @@
 language: rust
 rust:
   - stable
+before_install:
+  - sudo apt-get -qq update
+  - sudo apt-get install -y libfuse-dev
 before_script:
   - rustup component add rustfmt-preview
 script:
