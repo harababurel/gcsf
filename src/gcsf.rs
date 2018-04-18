@@ -1,13 +1,11 @@
 use drive3;
 use fuse;
-use fuse::{FileAttr, FileType, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry, Request};
+// use fuse::{FileAttr, FileType, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry, Request};
 use hyper;
 use hyper_rustls;
 use id_tree;
 use libc;
 use oauth2;
-use oauth2::{ApplicationSecret, Authenticator, ConsoleApplicationSecret,
-             DefaultAuthenticatorDelegate, DiskTokenStorage};
 use serde_json;
 use std::clone::Clone;
 use std::collections::HashMap;
@@ -200,7 +198,7 @@ impl GCSF {
         }
     }
 
-    fn read_client_secret(file: &str) -> ApplicationSecret {
+    fn read_client_secret(file: &str) -> oauth2::ApplicationSecret {
         use std::fs::OpenOptions;
         use std::io::Read;
 
@@ -210,14 +208,15 @@ impl GCSF {
             .open(file)
             .unwrap()
             .read_to_string(&mut secret);
-        let consappsec: ConsoleApplicationSecret = serde_json::from_str(secret.as_str()).unwrap();
+        let consappsec: oauth2::ConsoleApplicationSecret =
+            serde_json::from_str(secret.as_str()).unwrap();
         consappsec.installed.unwrap()
     }
 
     fn create_drive_auth() -> GCAuthenticator {
         // Get an ApplicationSecret instance by some means. It contains the `client_id` and
         // `client_secret`, among other things.
-        let secret: ApplicationSecret = GCSF::read_client_secret("client_secret.json");
+        let secret: oauth2::ApplicationSecret = GCSF::read_client_secret("client_secret.json");
 
         // Instantiate the authenticator. It will choose a suitable authentication flow for you,
         // unless you replace  `None` with the desired Flow.
@@ -226,14 +225,14 @@ impl GCSF {
         // what's going on. You probably want to bring in your own `TokenStorage`
         // to persist tokens and
         // retrieve them from storage.
-        let auth = Authenticator::new(
+        let auth = oauth2::Authenticator::new(
             &secret,
-            DefaultAuthenticatorDelegate,
+            oauth2::DefaultAuthenticatorDelegate,
             hyper::Client::with_connector(hyper::net::HttpsConnector::new(
                 hyper_rustls::TlsClient::new(),
             )),
             // <MemoryStorage as Default>::default(),
-            DiskTokenStorage::new(&String::from("/tmp/gcsf_token.json")).unwrap(),
+            oauth2::DiskTokenStorage::new(&String::from("/tmp/gcsf_token.json")).unwrap(),
             Some(oauth2::FlowType::InstalledRedirect(8080)), // This is the main change!
         );
 
@@ -280,23 +279,33 @@ impl GCSF {
 }
 
 impl fuse::Filesystem for GCSF {
-    fn lookup(&mut self, _req: &Request, parent_ino: u64, name: &OsStr, reply: ReplyEntry) {
+    fn lookup(
+        &mut self,
+        _req: &fuse::Request,
+        parent_ino: u64,
+        name: &OsStr,
+        reply: fuse::ReplyEntry,
+    ) {
         match self.get_node(parent_ino) {
-            Some(node) => for child_id in node.children() {
-                let child_node = self.hierarchy.get(child_id).unwrap();
-                let file = child_node.data();
-                if file.name == name.to_str().unwrap() {
-                    reply.entry(&TTL, &file.attr, 0);
-                    break;
+            Some(node) => {
+                for child_id in node.children() {
+                    let child_node = self.hierarchy.get(child_id).unwrap();
+                    let file = child_node.data();
+                    if file.name == name.to_str().unwrap() {
+                        reply.entry(&TTL, &file.attr, 0);
+                        return;
+                    }
                 }
-            },
+
+                reply.error(libc::ENOENT);
+            }
             None => {
                 reply.error(libc::ENOENT);
             }
         };
     }
 
-    fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
+    fn getattr(&mut self, _req: &fuse::Request, ino: u64, reply: fuse::ReplyAttr) {
         if ino == 1 {
             reply.attr(&TTL, &HELLO_DIR_ATTR);
             return;
@@ -315,12 +324,12 @@ impl fuse::Filesystem for GCSF {
     // Return contents of file. Not necessary yet.
     fn read(
         &mut self,
-        _req: &Request,
+        _req: &fuse::Request,
         ino: u64,
         _fh: u64,
         offset: i64,
         _size: u32,
-        reply: ReplyData,
+        reply: fuse::ReplyData,
     ) {
         // if ino == 2 {
         //     reply.data(&HELLO_TXT_CONTENT.as_bytes()[offset as usize..]);
@@ -331,11 +340,11 @@ impl fuse::Filesystem for GCSF {
 
     fn readdir(
         &mut self,
-        _req: &Request,
+        _req: &fuse::Request,
         ino: u64,
         _fh: u64,
         offset: i64,
-        mut reply: ReplyDirectory,
+        mut reply: fuse::ReplyDirectory,
     ) {
         // info!("readdir(); Request:");
         // info!("{:#?}", _req);
@@ -357,7 +366,7 @@ impl fuse::Filesystem for GCSF {
                         wd_node.data().attr.kind,
                         ".",
                     );
-                    reply.add(2, 1, FileType::Directory, "..");
+                    reply.add(2, 1, fuse::FileType::Directory, "..");
 
                     for child_id in wd_node.children() {
                         let child_node = self.hierarchy.get(child_id).unwrap();
@@ -375,14 +384,76 @@ impl fuse::Filesystem for GCSF {
             }
         }
     }
+
+    fn mkdir(
+        &mut self,
+        _req: &fuse::Request,
+        parent: u64,
+        name: &OsStr,
+        _mode: u32,
+        reply: fuse::ReplyEntry,
+    ) {
+        error!("pula bleaga");
+
+        if !self.inode_to_node.contains_key(&parent) {
+            error!(
+                "mkdir: could not find parent inode={} in the hierarchy",
+                parent
+            );
+            reply.error(libc::ENOTDIR);
+            return;
+        }
+
+        let parent_id = self.inode_to_node.get(&parent).unwrap().clone();
+        {
+            let parent_node = self.hierarchy.get(&parent_id).unwrap();
+            let parent_file = parent_node.data();
+            if parent_file.attr.kind != fuse::FileType::Directory {
+                reply.error(libc::ENOTDIR);
+                return;
+            }
+        }
+
+        let ino = 1234;
+        let child_dir = File {
+            name: name.to_str().unwrap().to_string(),
+            attr: fuse::FileAttr {
+                ino: ino,
+                kind: fuse::FileType::Directory,
+                size: 0,
+                blocks: 0,
+                atime: Timespec::new(1, 0),
+                mtime: Timespec::new(1, 0),
+                ctime: Timespec::new(1, 0),
+                crtime: Timespec::new(1, 0),
+                perm: 0,
+                nlink: 0,
+                uid: 0,
+                gid: 0,
+                rdev: 0,
+                flags: 0,
+            },
+            pieces: vec![],
+        };
+
+        let child_id: &id_tree::NodeId = &self.hierarchy
+            .insert(
+                id_tree::Node::new(child_dir.clone()),
+                id_tree::InsertBehavior::UnderNode(&parent_id),
+            )
+            .unwrap();
+
+        self.inode_to_node.insert(ino, child_id.clone());
+
+        reply.entry(&TTL, &child_dir.attr, 0);
+    }
 }
 
 const CREATE_TIME: Timespec = Timespec {
     sec: 1381237736,
     nsec: 0,
 }; // 2013-10-08 08:56
-
-const HELLO_DIR_ATTR: FileAttr = FileAttr {
+const HELLO_DIR_ATTR: fuse::FileAttr = fuse::FileAttr {
     ino: 1,
     size: 0,
     blocks: 0,
@@ -390,7 +461,7 @@ const HELLO_DIR_ATTR: FileAttr = FileAttr {
     mtime: CREATE_TIME,
     ctime: CREATE_TIME,
     crtime: CREATE_TIME,
-    kind: FileType::Directory,
+    kind: fuse::FileType::Directory,
     perm: 0o755,
     nlink: 2,
     uid: 501,
@@ -401,7 +472,7 @@ const HELLO_DIR_ATTR: FileAttr = FileAttr {
 
 const HELLO_TXT_CONTENT: &'static str = "Hello World!\n";
 
-const HELLO_TXT_ATTR: FileAttr = FileAttr {
+const HELLO_TXT_ATTR: fuse::FileAttr = fuse::FileAttr {
     ino: 10,
     size: 128,
     blocks: 1,
@@ -409,7 +480,7 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     mtime: CREATE_TIME,
     ctime: CREATE_TIME,
     crtime: CREATE_TIME,
-    kind: FileType::RegularFile,
+    kind: fuse::FileType::RegularFile,
     perm: 0o644,
     nlink: 1,
     uid: 1000,
@@ -417,4 +488,5 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
     rdev: 0,
     flags: 0,
 };
+
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second

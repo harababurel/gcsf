@@ -18,7 +18,7 @@ use std::thread;
 use std::time;
 
 fn mount_gcsf(mountpoint: &str) {
-    let options = ["-o", "ro", "-o", "fsname=GCSF"]
+    let options = ["-o", "fsname=GCSF"]
         .iter()
         .map(|o| o.as_ref())
         .collect::<Vec<&OsStr>>();
