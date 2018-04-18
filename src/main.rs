@@ -3,12 +3,19 @@
 #![allow(unused_mut)]
 #![allow(unreachable_code)]
 
+extern crate ctrlc;
 extern crate fuse;
 extern crate gcsf;
+#[macro_use]
+extern crate log;
 extern crate pretty_env_logger;
 
 use std::env;
 use std::ffi::OsStr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::thread;
+use std::time;
 
 fn mount_gcsf(mountpoint: &str) {
     let options = ["-o", "ro", "-o", "fsname=GCSF"]
@@ -17,7 +24,27 @@ fn mount_gcsf(mountpoint: &str) {
         .collect::<Vec<&OsStr>>();
 
     let fs = gcsf::GCSF::new();
-    fuse::mount(fs, &mountpoint, &options);
+
+    unsafe {
+        match fuse::spawn_mount(fs, &mountpoint, &options) {
+            Ok(_session) => {
+                info!("Mounted to {}", &mountpoint);
+
+                let running = Arc::new(AtomicBool::new(true));
+                let r = running.clone();
+
+                ctrlc::set_handler(move || {
+                    info!("Ctrl-C detected");
+                    r.store(false, Ordering::SeqCst);
+                }).expect("Error setting Ctrl-C handler");
+
+                while running.load(Ordering::SeqCst) {
+                    thread::sleep(time::Duration::from_millis(50));
+                }
+            }
+            Err(e) => error!("Could not mount to {}: {}", &mountpoint, e),
+        };
+    }
 }
 
 fn main() {
