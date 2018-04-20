@@ -22,7 +22,7 @@ type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 
 pub struct GCSF {
     hub: GCDrive,
-    hierarchy: id_tree::Tree<File>,
+    tree: id_tree::Tree<File>,
     inode_to_node: HashMap<u64, id_tree::NodeId>,
 }
 
@@ -129,43 +129,33 @@ impl GCSF {
             pieces: vec![String::from("123.bin"), String::from("456.bin")],
         };
 
-        let mut hierarchy: id_tree::Tree<File> =
+        let mut tree: id_tree::Tree<File> =
             id_tree::TreeBuilder::new().with_node_capacity(10).build();
 
-        let wd_id: id_tree::NodeId = hierarchy
-            .insert(
-                id_tree::Node::new(wd.clone()),
-                id_tree::InsertBehavior::AsRoot,
-            )
-            .unwrap();
+        let wd_id: id_tree::NodeId = tree.insert(
+            id_tree::Node::new(wd.clone()),
+            id_tree::InsertBehavior::AsRoot,
+        ).unwrap();
 
-        let some_file_id = hierarchy
-            .insert(
-                id_tree::Node::new(some_file.clone()),
-                id_tree::InsertBehavior::UnderNode(&wd_id),
-            )
-            .unwrap();
+        let some_file_id = tree.insert(
+            id_tree::Node::new(some_file.clone()),
+            id_tree::InsertBehavior::UnderNode(&wd_id),
+        ).unwrap();
 
-        let other_file_id = hierarchy
-            .insert(
-                id_tree::Node::new(other_file.clone()),
-                id_tree::InsertBehavior::UnderNode(&wd_id),
-            )
-            .unwrap();
+        let other_file_id = tree.insert(
+            id_tree::Node::new(other_file.clone()),
+            id_tree::InsertBehavior::UnderNode(&wd_id),
+        ).unwrap();
 
-        let hello_dir_id = hierarchy
-            .insert(
-                id_tree::Node::new(hello_dir.clone()),
-                id_tree::InsertBehavior::UnderNode(&wd_id),
-            )
-            .unwrap();
+        let hello_dir_id = tree.insert(
+            id_tree::Node::new(hello_dir.clone()),
+            id_tree::InsertBehavior::UnderNode(&wd_id),
+        ).unwrap();
 
-        let world_file_id = hierarchy
-            .insert(
-                id_tree::Node::new(world_file.clone()),
-                id_tree::InsertBehavior::UnderNode(&hello_dir_id),
-            )
-            .unwrap();
+        let world_file_id = tree.insert(
+            id_tree::Node::new(world_file.clone()),
+            id_tree::InsertBehavior::UnderNode(&hello_dir_id),
+        ).unwrap();
 
         let inode_to_node = hashmap!{
             wd.attr.ino => wd_id,
@@ -175,25 +165,23 @@ impl GCSF {
             world_file.attr.ino => world_file_id,
         };
 
-        info!("hierarchy has height = {}", hierarchy.height());
-
         GCSF {
             hub: GCSF::create_drive_hub(),
-            hierarchy,
+            tree,
             inode_to_node,
         }
     }
 
     fn get_file(&self, ino: u64) -> Option<&File> {
         match self.inode_to_node.get(&ino) {
-            Some(node_id) => Some(self.hierarchy.get(node_id).unwrap().data()),
+            Some(node_id) => Some(self.tree.get(node_id).unwrap().data()),
             None => None,
         }
     }
 
     fn get_node(&self, ino: u64) -> Option<&id_tree::Node<File>> {
         match self.inode_to_node.get(&ino) {
-            Some(node_id) => Some(self.hierarchy.get(node_id).unwrap()),
+            Some(node_id) => Some(self.tree.get(node_id).unwrap()),
             None => None,
         }
     }
@@ -298,7 +286,7 @@ impl fuse::Filesystem for GCSF {
         match self.get_node(parent_ino) {
             Some(node) => {
                 for child_id in node.children() {
-                    let child_node = self.hierarchy.get(child_id).unwrap();
+                    let child_node = self.tree.get(child_id).unwrap();
                     let file = child_node.data();
                     if file.name == name.to_str().unwrap() {
                         reply.entry(&TTL, &file.attr, 0);
@@ -355,7 +343,7 @@ impl fuse::Filesystem for GCSF {
                 info!("readdir({})", node.data().name);
                 if offset == 0 {
                     let wd_id = self.inode_to_node.get(&ino).unwrap();
-                    let wd_node = self.hierarchy.get(wd_id).unwrap();
+                    let wd_node = self.tree.get(wd_id).unwrap();
 
                     let mut curr_offs = 1;
                     reply.add(
@@ -367,7 +355,7 @@ impl fuse::Filesystem for GCSF {
                     curr_offs += 1;
 
                     if wd_node.parent().is_some() {
-                        let parent_node = self.hierarchy.get(wd_node.parent().unwrap()).unwrap();
+                        let parent_node = self.tree.get(wd_node.parent().unwrap()).unwrap();
                         reply.add(
                             parent_node.data().attr.ino,
                             curr_offs,
@@ -378,7 +366,7 @@ impl fuse::Filesystem for GCSF {
                     }
 
                     for child_id in wd_node.children() {
-                        let child_node = self.hierarchy.get(child_id).unwrap();
+                        let child_node = self.tree.get(child_id).unwrap();
                         let file = child_node.data();
                         info!("child name: {}", &file.name);
                         //                  ino  offset               kind        name
@@ -404,7 +392,7 @@ impl fuse::Filesystem for GCSF {
     ) {
         if !self.inode_to_node.contains_key(&parent) {
             error!(
-                "mkdir: could not find parent inode={} in the hierarchy",
+                "mkdir: could not find parent inode={} in the file tree",
                 parent
             );
             reply.error(libc::ENOTDIR);
@@ -441,7 +429,7 @@ impl fuse::Filesystem for GCSF {
         reply.entry(&TTL, &child_dir.attr, 0);
 
         let parent_id = self.inode_to_node.get(&parent).unwrap().clone();
-        let child_id: &id_tree::NodeId = &self.hierarchy
+        let child_id: &id_tree::NodeId = &self.tree
             .insert(
                 id_tree::Node::new(child_dir),
                 id_tree::InsertBehavior::UnderNode(&parent_id),
@@ -495,12 +483,11 @@ impl fmt::Debug for GCSF {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "GCSF(\n");
 
-        let mut stack: Vec<(u32, &id_tree::NodeId)> =
-            vec![(0, self.hierarchy.root_node_id().unwrap())];
+        let mut stack: Vec<(u32, &id_tree::NodeId)> = vec![(0, self.tree.root_node_id().unwrap())];
 
         while !stack.is_empty() {
             let (level, node_id) = stack.pop().unwrap();
-            let node = self.hierarchy.get(node_id).unwrap();
+            let node = self.tree.get(node_id).unwrap();
 
             (0..level).for_each(|_| {
                 write!(f, "\t");
