@@ -21,7 +21,7 @@ type GCAuthenticator = oauth2::Authenticator<
 type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 
 pub struct GCSF {
-    hub: GCDrive,
+    drive: GCDrive,
     tree: id_tree::Tree<File>,
     inode_to_node: HashMap<u64, id_tree::NodeId>,
 }
@@ -166,7 +166,7 @@ impl GCSF {
         };
 
         GCSF {
-            hub: GCSF::create_drive_hub(),
+            drive: GCSF::create_drive(),
             tree,
             inode_to_node,
         }
@@ -234,7 +234,7 @@ impl GCSF {
         auth
     }
 
-    fn create_drive_hub() -> GCDrive {
+    fn create_drive() -> GCDrive {
         let auth = GCSF::create_drive_auth();
         drive3::Drive::new(
             hyper::Client::with_connector(hyper::net::HttpsConnector::new(
@@ -245,7 +245,7 @@ impl GCSF {
     }
 
     fn ls(&self) -> Vec<drive3::File> {
-        let result = self.hub.files()
+        let result = self.drive.files()
         .list()
         .spaces("drive")
         .page_size(10)
@@ -263,7 +263,7 @@ impl GCSF {
     }
 
     // fn cat(&self, filename: &str) -> String {
-    //     let result = self.hub.files()
+    //     let result = self.drive.files()
     //     .list()
     //     .spaces("drive")
     //     .page_size(10)
