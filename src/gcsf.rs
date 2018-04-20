@@ -186,6 +186,10 @@ impl GCSF {
         }
     }
 
+    fn get_node_id(&self, ino: u64) -> Option<&id_tree::NodeId> {
+        self.inode_to_node.get(&ino)
+    }
+
     fn read_client_secret(file: &str) -> oauth2::ApplicationSecret {
         use std::fs::OpenOptions;
         use std::io::Read;
@@ -340,36 +344,25 @@ impl fuse::Filesystem for GCSF {
     ) {
         match self.get_node(ino) {
             Some(node) => {
-                info!("readdir({})", node.data().name);
                 if offset == 0 {
-                    let wd_id = self.inode_to_node.get(&ino).unwrap();
+                    let wd_id = self.get_node_id(ino).unwrap();
                     let wd_node = self.tree.get(wd_id).unwrap();
+                    let wd_file = wd_node.data();
 
                     let mut curr_offs = 1;
-                    reply.add(
-                        wd_node.data().attr.ino,
-                        curr_offs,
-                        wd_node.data().attr.kind,
-                        ".",
-                    );
+                    reply.add(wd_file.attr.ino, curr_offs, wd_file.attr.kind, ".");
                     curr_offs += 1;
 
                     if wd_node.parent().is_some() {
                         let parent_node = self.tree.get(wd_node.parent().unwrap()).unwrap();
-                        reply.add(
-                            parent_node.data().attr.ino,
-                            curr_offs,
-                            parent_node.data().attr.kind,
-                            "..",
-                        );
+                        let parent_file = parent_node.data();
+                        reply.add(parent_file.attr.ino, curr_offs, parent_file.attr.kind, "..");
                         curr_offs += 1;
                     }
 
                     for child_id in wd_node.children() {
                         let child_node = self.tree.get(child_id).unwrap();
                         let file = child_node.data();
-                        info!("child name: {}", &file.name);
-                        //                  ino  offset               kind        name
                         reply.add(file.attr.ino, curr_offs, file.attr.kind, &file.name);
                         curr_offs += 1;
                     }
@@ -437,6 +430,42 @@ impl fuse::Filesystem for GCSF {
             .unwrap();
 
         self.inode_to_node.insert(ino, child_id.clone());
+    }
+
+    fn rmdir(&mut self, _req: &fuse::Request, parent: u64, name: &OsStr, reply: fuse::ReplyEmpty) {
+        if !self.inode_to_node.contains_key(&parent) {
+            error!(
+                "rmdir: could not find parent inode={} in the file tree",
+                parent
+            );
+            reply.error(libc::ENOTDIR);
+            return;
+        }
+
+        match self.get_node(parent)
+            .unwrap()
+            .children()
+            .into_iter()
+            .find(|id| self.tree.get(id).unwrap().data().name == name.to_str().unwrap())
+            .map_or(None, |id| Some(id.clone()))
+        {
+            Some(id) => {
+                if !self.tree.get(&id).unwrap().children().is_empty() {
+                    reply.error(libc::ENOTEMPTY);
+                    return;
+                }
+
+                let ino = self.tree.get(&id).unwrap().data().attr.ino;
+                self.inode_to_node.remove(&ino);
+                self.tree
+                    .remove_node(id, id_tree::RemoveBehavior::DropChildren);
+
+                reply.ok();
+            }
+            None => {
+                reply.error(libc::ENOTDIR);
+            }
+        };
     }
 }
 
