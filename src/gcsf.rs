@@ -1,15 +1,18 @@
 use drive3;
-use std::fmt;
-use fuse;
+use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
+           ReplyEmpty, ReplyEntry, Request};
 use hyper;
 use hyper_rustls;
-use id_tree;
-use libc;
+use id_tree::{Node, NodeId, Tree, TreeBuilder};
+use id_tree::InsertBehavior::*;
+use id_tree::RemoveBehavior::*;
+use libc::{ENOENT, ENOTDIR, ENOTEMPTY};
 use oauth2;
 use serde_json;
 use std::clone::Clone;
 use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::fmt;
 use time::Timespec;
 
 type GCClient = hyper::Client;
@@ -22,14 +25,14 @@ type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 
 pub struct GCSF {
     drive: GCDrive,
-    tree: id_tree::Tree<File>,
-    inode_to_node: HashMap<u64, id_tree::NodeId>,
+    tree: Tree<File>,
+    inode_to_node: HashMap<u64, NodeId>,
 }
 
 #[derive(Clone)]
 struct File {
     name: String,
-    attr: fuse::FileAttr,
+    attr: FileAttr,
     pieces: Vec<String>, // filename of each piece of this file on google drive
 }
 
@@ -43,9 +46,9 @@ impl GCSF {
 
         let hello_dir = File {
             name: String::from("hello"),
-            attr: fuse::FileAttr {
+            attr: FileAttr {
                 ino: 2,
-                kind: fuse::FileType::Directory,
+                kind: FileType::Directory,
                 size: 0,
                 blocks: 0,
                 atime: Timespec::new(1, 0),
@@ -64,9 +67,9 @@ impl GCSF {
 
         let world_file = File {
             name: String::from("world.txt"),
-            attr: fuse::FileAttr {
+            attr: FileAttr {
                 ino: 13,
-                kind: fuse::FileType::RegularFile,
+                kind: FileType::RegularFile,
                 size: 1280,
                 blocks: 0,
                 atime: Timespec::new(1, 0),
@@ -85,9 +88,9 @@ impl GCSF {
 
         let some_file = File {
             name: String::from("some_file.txt"),
-            attr: fuse::FileAttr {
+            attr: FileAttr {
                 ino: 10,
-                kind: fuse::FileType::RegularFile,
+                kind: FileType::RegularFile,
                 size: 0,
                 blocks: 0,
                 atime: Timespec::new(1, 0),
@@ -110,9 +113,9 @@ impl GCSF {
 
         let other_file = File {
             name: String::from("other_file.txt"),
-            attr: fuse::FileAttr {
+            attr: FileAttr {
                 ino: 11,
-                kind: fuse::FileType::RegularFile,
+                kind: FileType::RegularFile,
                 size: 0,
                 blocks: 0,
                 atime: Timespec::new(1, 0),
@@ -129,33 +132,17 @@ impl GCSF {
             pieces: vec![String::from("123.bin"), String::from("456.bin")],
         };
 
-        let mut tree: id_tree::Tree<File> =
-            id_tree::TreeBuilder::new().with_node_capacity(10).build();
+        let mut tree: Tree<File> = TreeBuilder::new().with_node_capacity(10).build();
 
-        let wd_id: id_tree::NodeId = tree.insert(
-            id_tree::Node::new(wd.clone()),
-            id_tree::InsertBehavior::AsRoot,
-        ).unwrap();
-
-        let some_file_id = tree.insert(
-            id_tree::Node::new(some_file.clone()),
-            id_tree::InsertBehavior::UnderNode(&wd_id),
-        ).unwrap();
-
-        let other_file_id = tree.insert(
-            id_tree::Node::new(other_file.clone()),
-            id_tree::InsertBehavior::UnderNode(&wd_id),
-        ).unwrap();
-
-        let hello_dir_id = tree.insert(
-            id_tree::Node::new(hello_dir.clone()),
-            id_tree::InsertBehavior::UnderNode(&wd_id),
-        ).unwrap();
-
-        let world_file_id = tree.insert(
-            id_tree::Node::new(world_file.clone()),
-            id_tree::InsertBehavior::UnderNode(&hello_dir_id),
-        ).unwrap();
+        let wd_id: NodeId = tree.insert(Node::new(wd.clone()), AsRoot).unwrap();
+        let some_file_id = tree.insert(Node::new(some_file.clone()), UnderNode(&wd_id))
+            .unwrap();
+        let other_file_id = tree.insert(Node::new(other_file.clone()), UnderNode(&wd_id))
+            .unwrap();
+        let hello_dir_id = tree.insert(Node::new(hello_dir.clone()), UnderNode(&wd_id))
+            .unwrap();
+        let world_file_id = tree.insert(Node::new(world_file.clone()), UnderNode(&hello_dir_id))
+            .unwrap();
 
         let inode_to_node = hashmap!{
             wd.attr.ino => wd_id,
@@ -179,15 +166,30 @@ impl GCSF {
         }
     }
 
-    fn get_node(&self, ino: u64) -> Option<&id_tree::Node<File>> {
+    fn get_mut_file(&mut self, ino: u64) -> Option<&mut File> {
+        match self.inode_to_node.get(&ino) {
+            Some(node_id) => Some(self.tree.get_mut(node_id).unwrap().data_mut()),
+            None => None,
+        }
+    }
+
+    fn get_node(&self, ino: u64) -> Option<&Node<File>> {
         match self.inode_to_node.get(&ino) {
             Some(node_id) => Some(self.tree.get(node_id).unwrap()),
             None => None,
         }
     }
 
-    fn get_node_id(&self, ino: u64) -> Option<&id_tree::NodeId> {
+    fn get_node_id(&self, ino: u64) -> Option<&NodeId> {
         self.inode_to_node.get(&ino)
+    }
+
+    fn next_available_inode(&self) -> u64 {
+        (1..)
+            .filter(|inode| !self.inode_to_node.contains_key(inode))
+            .take(1)
+            .next()
+            .unwrap()
     }
 
     fn read_client_secret(file: &str) -> oauth2::ApplicationSecret {
@@ -248,23 +250,23 @@ impl GCSF {
         )
     }
 
-    fn ls(&self) -> Vec<drive3::File> {
-        let result = self.drive.files()
-        .list()
-        .spaces("drive")
-        .page_size(10)
-        // .order_by("folder,modifiedTime desc,name")
-        .corpora("user") // or "domain"
-        .doit();
+    // fn ls(&self) -> Vec<drive3::File> {
+    //     let result = self.drive.files()
+    //     .list()
+    //     .spaces("drive")
+    //     .page_size(10)
+    //     // .order_by("folder,modifiedTime desc,name")
+    //     .corpora("user") // or "domain"
+    //     .doit();
 
-        match result {
-            Err(e) => {
-                println!("{:#?}", e);
-                vec![]
-            }
-            Ok(res) => res.1.files.unwrap().into_iter().collect(),
-        }
-    }
+    //     match result {
+    //         Err(e) => {
+    //             println!("{:#?}", e);
+    //             vec![]
+    //         }
+    //         Ok(res) => res.1.files.unwrap().into_iter().collect(),
+    //     }
+    // }
 
     // fn cat(&self, filename: &str) -> String {
     //     let result = self.drive.files()
@@ -277,14 +279,8 @@ impl GCSF {
     // }
 }
 
-impl fuse::Filesystem for GCSF {
-    fn lookup(
-        &mut self,
-        _req: &fuse::Request,
-        parent_ino: u64,
-        name: &OsStr,
-        reply: fuse::ReplyEntry,
-    ) {
+impl Filesystem for GCSF {
+    fn lookup(&mut self, _req: &Request, parent_ino: u64, name: &OsStr, reply: ReplyEntry) {
         debug!("{:#?}", &self);
 
         match self.get_node(parent_ino) {
@@ -298,21 +294,21 @@ impl fuse::Filesystem for GCSF {
                     }
                 }
 
-                reply.error(libc::ENOENT);
+                reply.error(ENOENT);
             }
             None => {
-                reply.error(libc::ENOENT);
+                reply.error(ENOENT);
             }
         };
     }
 
-    fn getattr(&mut self, _req: &fuse::Request, ino: u64, reply: fuse::ReplyAttr) {
+    fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
         match self.get_file(ino) {
             Some(file) => {
                 reply.attr(&TTL, &file.attr);
             }
             None => {
-                reply.error(libc::ENOENT);
+                reply.error(ENOENT);
             }
         };
     }
@@ -320,27 +316,27 @@ impl fuse::Filesystem for GCSF {
     // Return contents of file. Not necessary yet.
     fn read(
         &mut self,
-        _req: &fuse::Request,
+        _req: &Request,
         ino: u64,
         _fh: u64,
         offset: i64,
         _size: u32,
-        reply: fuse::ReplyData,
+        reply: ReplyData,
     ) {
         // if ino == 2 {
         //     reply.data(&HELLO_TXT_CONTENT.as_bytes()[offset as usize..]);
         // } else {
-        reply.error(libc::ENOENT);
+        reply.error(ENOENT);
         // }
     }
 
     fn readdir(
         &mut self,
-        _req: &fuse::Request,
+        _req: &Request,
         ino: u64,
         _fh: u64,
         offset: i64,
-        mut reply: fuse::ReplyDirectory,
+        mut reply: ReplyDirectory,
     ) {
         match self.get_node(ino) {
             Some(node) => {
@@ -370,39 +366,122 @@ impl fuse::Filesystem for GCSF {
                 reply.ok();
             }
             None => {
-                reply.error(libc::ENOENT);
+                reply.error(ENOENT);
             }
         }
     }
-
-    fn mkdir(
+    fn setattr(
         &mut self,
-        _req: &fuse::Request,
+        _req: &Request,
+        ino: u64,
+        _mode: Option<u32>,
+        uid: Option<u32>,
+        gid: Option<u32>,
+        size: Option<u64>,
+        atime: Option<Timespec>,
+        mtime: Option<Timespec>,
+        _fh: Option<u64>,
+        crtime: Option<Timespec>,
+        chgtime: Option<Timespec>,
+        _bkuptime: Option<Timespec>,
+        flags: Option<u32>,
+        reply: ReplyAttr,
+    ) {
+        if !self.inode_to_node.contains_key(&ino) {
+            error!("create: could not find inode={} in the file tree", ino);
+            reply.error(ENOENT);
+            return;
+        }
+
+        let file = self.get_mut_file(ino).unwrap();
+
+        let new_attr = FileAttr {
+            ino: file.attr.ino,
+            kind: file.attr.kind,
+            size: size.unwrap_or(file.attr.size),
+            blocks: file.attr.blocks,
+            atime: atime.unwrap_or(file.attr.atime),
+            mtime: mtime.unwrap_or(file.attr.mtime),
+            ctime: chgtime.unwrap_or(file.attr.ctime),
+            crtime: crtime.unwrap_or(file.attr.crtime),
+            perm: file.attr.perm,
+            nlink: file.attr.nlink,
+            uid: uid.unwrap_or(file.attr.uid),
+            gid: gid.unwrap_or(file.attr.gid),
+            rdev: file.attr.rdev,
+            flags: flags.unwrap_or(file.attr.flags),
+        };
+        file.attr = new_attr;
+        reply.attr(&TTL, &file.attr);
+    }
+
+    fn create(
+        &mut self,
+        _req: &Request,
         parent: u64,
         name: &OsStr,
         _mode: u32,
-        reply: fuse::ReplyEntry,
+        _flags: u32,
+        reply: ReplyCreate,
     ) {
+        if !self.inode_to_node.contains_key(&parent) {
+            error!(
+                "create: could not find parent inode={} in the file tree",
+                parent
+            );
+            reply.error(ENOTDIR);
+            return;
+        }
+
+        let ino = self.next_available_inode();
+
+        let file = File {
+            name: name.to_str().unwrap().to_string(),
+            attr: FileAttr {
+                ino: ino,
+                kind: FileType::RegularFile,
+                size: 0,
+                blocks: 0,
+                atime: Timespec::new(1, 0),
+                mtime: Timespec::new(1, 0),
+                ctime: Timespec::new(1, 0),
+                crtime: Timespec::new(1, 0),
+                perm: 0,
+                nlink: 0,
+                uid: 0,
+                gid: 0,
+                rdev: 0,
+                flags: 0,
+            },
+            pieces: vec![],
+        };
+
+        reply.created(&TTL, &file.attr, 0, 0, 0);
+
+        let parent_id = self.inode_to_node.get(&parent).unwrap().clone();
+        let file_id: &NodeId = &self.tree
+            .insert(Node::new(file), UnderNode(&parent_id))
+            .unwrap();
+
+        self.inode_to_node.insert(ino, file_id.clone());
+    }
+
+    fn mkdir(&mut self, _req: &Request, parent: u64, name: &OsStr, _mode: u32, reply: ReplyEntry) {
         if !self.inode_to_node.contains_key(&parent) {
             error!(
                 "mkdir: could not find parent inode={} in the file tree",
                 parent
             );
-            reply.error(libc::ENOTDIR);
+            reply.error(ENOTDIR);
             return;
         }
 
-        let ino = (1..)
-            .filter(|inode| !self.inode_to_node.contains_key(inode))
-            .take(1)
-            .next()
-            .unwrap();
-
+        let ino = self.next_available_inode();
         let child_dir = File {
             name: name.to_str().unwrap().to_string(),
-            attr: fuse::FileAttr {
+            attr: FileAttr {
                 ino: ino,
-                kind: fuse::FileType::Directory,
+                kind: FileType::Directory,
                 size: 0,
                 blocks: 0,
                 atime: Timespec::new(1, 0),
@@ -422,23 +501,20 @@ impl fuse::Filesystem for GCSF {
         reply.entry(&TTL, &child_dir.attr, 0);
 
         let parent_id = self.inode_to_node.get(&parent).unwrap().clone();
-        let child_id: &id_tree::NodeId = &self.tree
-            .insert(
-                id_tree::Node::new(child_dir),
-                id_tree::InsertBehavior::UnderNode(&parent_id),
-            )
+        let child_id: &NodeId = &self.tree
+            .insert(Node::new(child_dir), UnderNode(&parent_id))
             .unwrap();
 
         self.inode_to_node.insert(ino, child_id.clone());
     }
 
-    fn rmdir(&mut self, _req: &fuse::Request, parent: u64, name: &OsStr, reply: fuse::ReplyEmpty) {
+    fn rmdir(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
         if !self.inode_to_node.contains_key(&parent) {
             error!(
                 "rmdir: could not find parent inode={} in the file tree",
                 parent
             );
-            reply.error(libc::ENOTDIR);
+            reply.error(ENOTDIR);
             return;
         }
 
@@ -451,19 +527,18 @@ impl fuse::Filesystem for GCSF {
         {
             Some(id) => {
                 if !self.tree.get(&id).unwrap().children().is_empty() {
-                    reply.error(libc::ENOTEMPTY);
+                    reply.error(ENOTEMPTY);
                     return;
                 }
 
                 let ino = self.tree.get(&id).unwrap().data().attr.ino;
                 self.inode_to_node.remove(&ino);
-                self.tree
-                    .remove_node(id, id_tree::RemoveBehavior::DropChildren);
+                self.tree.remove_node(id, DropChildren);
 
                 reply.ok();
             }
             None => {
-                reply.error(libc::ENOTDIR);
+                reply.error(ENOTDIR);
             }
         };
     }
@@ -473,7 +548,7 @@ const CREATE_TIME: Timespec = Timespec {
     sec: 1381237736,
     nsec: 0,
 }; // 2013-10-08 08:56
-const HELLO_DIR_ATTR: fuse::FileAttr = fuse::FileAttr {
+const HELLO_DIR_ATTR: FileAttr = FileAttr {
     ino: 1,
     size: 0,
     blocks: 0,
@@ -481,7 +556,7 @@ const HELLO_DIR_ATTR: fuse::FileAttr = fuse::FileAttr {
     mtime: CREATE_TIME,
     ctime: CREATE_TIME,
     crtime: CREATE_TIME,
-    kind: fuse::FileType::Directory,
+    kind: FileType::Directory,
     perm: 0o755,
     nlink: 2,
     uid: 501,
@@ -490,7 +565,7 @@ const HELLO_DIR_ATTR: fuse::FileAttr = fuse::FileAttr {
     flags: 0,
 };
 const HELLO_TXT_CONTENT: &'static str = "Hello World!\n";
-const HELLO_TXT_ATTR: fuse::FileAttr = fuse::FileAttr {
+const HELLO_TXT_ATTR: FileAttr = FileAttr {
     ino: 10,
     size: 128,
     blocks: 1,
@@ -498,7 +573,7 @@ const HELLO_TXT_ATTR: fuse::FileAttr = fuse::FileAttr {
     mtime: CREATE_TIME,
     ctime: CREATE_TIME,
     crtime: CREATE_TIME,
-    kind: fuse::FileType::RegularFile,
+    kind: FileType::RegularFile,
     perm: 0o644,
     nlink: 1,
     uid: 1000,
@@ -512,7 +587,7 @@ impl fmt::Debug for GCSF {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "GCSF(\n");
 
-        let mut stack: Vec<(u32, &id_tree::NodeId)> = vec![(0, self.tree.root_node_id().unwrap())];
+        let mut stack: Vec<(u32, &NodeId)> = vec![(0, self.tree.root_node_id().unwrap())];
 
         while !stack.is_empty() {
             let (level, node_id) = stack.pop().unwrap();
