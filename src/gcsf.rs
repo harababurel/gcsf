@@ -1,6 +1,6 @@
 use drive3;
+use std::fmt;
 use fuse;
-// use fuse::{FileAttr, FileType, ReplyAttr, ReplyData, ReplyDirectory, ReplyEntry, Request};
 use hyper;
 use hyper_rustls;
 use id_tree;
@@ -202,20 +202,27 @@ impl GCSF {
         use std::fs::OpenOptions;
         use std::io::Read;
 
-        let mut secret = String::new();
-        OpenOptions::new()
-            .read(true)
-            .open(file)
-            .unwrap()
-            .read_to_string(&mut secret);
-        let consappsec: oauth2::ConsoleApplicationSecret =
-            serde_json::from_str(secret.as_str()).unwrap();
-        consappsec.installed.unwrap()
+        match OpenOptions::new().read(true).open(file) {
+            Ok(mut f) => {
+                let mut secret = String::new();
+                f.read_to_string(&mut secret);
+
+                let app_secret: oauth2::ConsoleApplicationSecret =
+                    serde_json::from_str(secret.as_str()).unwrap();
+
+                app_secret.installed.unwrap()
+            }
+            Err(e) => {
+                error!("Could not read client secret: {}", e);
+                panic!();
+            }
+        }
     }
 
     fn create_drive_auth() -> GCAuthenticator {
         // Get an ApplicationSecret instance by some means. It contains the `client_id` and
         // `client_secret`, among other things.
+        //
         let secret: oauth2::ApplicationSecret = GCSF::read_client_secret("client_secret.json");
 
         // Instantiate the authenticator. It will choose a suitable authentication flow for you,
@@ -286,6 +293,8 @@ impl fuse::Filesystem for GCSF {
         name: &OsStr,
         reply: fuse::ReplyEntry,
     ) {
+        debug!("{:#?}", &self);
+
         match self.get_node(parent_ino) {
             Some(node) => {
                 for child_id in node.children() {
@@ -306,19 +315,14 @@ impl fuse::Filesystem for GCSF {
     }
 
     fn getattr(&mut self, _req: &fuse::Request, ino: u64, reply: fuse::ReplyAttr) {
-        if ino == 1 {
-            reply.attr(&TTL, &HELLO_DIR_ATTR);
-            return;
-        }
-
-        // for (name, file) in &self.files {
-        //     if file.attr.ino == ino {
-        //         reply.attr(&TTL, &file.attr.clone());
-        //         return;
-        //     }
-        // }
-
-        reply.error(libc::ENOENT);
+        match self.get_file(ino) {
+            Some(file) => {
+                reply.attr(&TTL, &file.attr);
+            }
+            None => {
+                reply.error(libc::ENOENT);
+            }
+        };
     }
 
     // Return contents of file. Not necessary yet.
@@ -346,15 +350,9 @@ impl fuse::Filesystem for GCSF {
         offset: i64,
         mut reply: fuse::ReplyDirectory,
     ) {
-        // info!("readdir(); Request:");
-        // info!("{:#?}", _req);
-        info!("ino: {}", ino);
-        info!("_fh: {}", _fh);
-        info!("offset: {}", offset);
-
         match self.get_node(ino) {
             Some(node) => {
-                info!("matched node file = {}", node.data().name);
+                info!("readdir({})", node.data().name);
                 if offset == 0 {
                     let wd_id = self.inode_to_node.get(&ino).unwrap();
                     let wd_node = self.hierarchy.get(wd_id).unwrap();
@@ -366,7 +364,18 @@ impl fuse::Filesystem for GCSF {
                         wd_node.data().attr.kind,
                         ".",
                     );
-                    reply.add(2, 1, fuse::FileType::Directory, "..");
+                    curr_offs += 1;
+
+                    if wd_node.parent().is_some() {
+                        let parent_node = self.hierarchy.get(wd_node.parent().unwrap()).unwrap();
+                        reply.add(
+                            parent_node.data().attr.ino,
+                            curr_offs,
+                            parent_node.data().attr.kind,
+                            "..",
+                        );
+                        curr_offs += 1;
+                    }
 
                     for child_id in wd_node.children() {
                         let child_node = self.hierarchy.get(child_id).unwrap();
@@ -393,8 +402,6 @@ impl fuse::Filesystem for GCSF {
         _mode: u32,
         reply: fuse::ReplyEntry,
     ) {
-        error!("pula bleaga");
-
         if !self.inode_to_node.contains_key(&parent) {
             error!(
                 "mkdir: could not find parent inode={} in the hierarchy",
@@ -404,17 +411,12 @@ impl fuse::Filesystem for GCSF {
             return;
         }
 
-        let parent_id = self.inode_to_node.get(&parent).unwrap().clone();
-        {
-            let parent_node = self.hierarchy.get(&parent_id).unwrap();
-            let parent_file = parent_node.data();
-            if parent_file.attr.kind != fuse::FileType::Directory {
-                reply.error(libc::ENOTDIR);
-                return;
-            }
-        }
+        let ino = (1..)
+            .filter(|inode| !self.inode_to_node.contains_key(inode))
+            .take(1)
+            .next()
+            .unwrap();
 
-        let ino = 1234;
         let child_dir = File {
             name: name.to_str().unwrap().to_string(),
             attr: fuse::FileAttr {
@@ -436,16 +438,17 @@ impl fuse::Filesystem for GCSF {
             pieces: vec![],
         };
 
+        reply.entry(&TTL, &child_dir.attr, 0);
+
+        let parent_id = self.inode_to_node.get(&parent).unwrap().clone();
         let child_id: &id_tree::NodeId = &self.hierarchy
             .insert(
-                id_tree::Node::new(child_dir.clone()),
+                id_tree::Node::new(child_dir),
                 id_tree::InsertBehavior::UnderNode(&parent_id),
             )
             .unwrap();
 
         self.inode_to_node.insert(ino, child_id.clone());
-
-        reply.entry(&TTL, &child_dir.attr, 0);
     }
 }
 
@@ -469,9 +472,7 @@ const HELLO_DIR_ATTR: fuse::FileAttr = fuse::FileAttr {
     rdev: 0,
     flags: 0,
 };
-
 const HELLO_TXT_CONTENT: &'static str = "Hello World!\n";
-
 const HELLO_TXT_ATTR: fuse::FileAttr = fuse::FileAttr {
     ino: 10,
     size: 128,
@@ -488,5 +489,30 @@ const HELLO_TXT_ATTR: fuse::FileAttr = fuse::FileAttr {
     rdev: 0,
     flags: 0,
 };
-
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
+
+impl fmt::Debug for GCSF {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "GCSF(\n");
+
+        let mut stack: Vec<(u32, &id_tree::NodeId)> =
+            vec![(0, self.hierarchy.root_node_id().unwrap())];
+
+        while !stack.is_empty() {
+            let (level, node_id) = stack.pop().unwrap();
+            let node = self.hierarchy.get(node_id).unwrap();
+
+            (0..level).for_each(|_| {
+                write!(f, "\t");
+            });
+
+            write!(f, "{:3} => {}\n", node.data().attr.ino, node.data().name);
+
+            for child_id in node.children() {
+                stack.push((level + 1, child_id));
+            }
+        }
+
+        write!(f, ")\n")
+    }
+}
