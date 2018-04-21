@@ -2,6 +2,7 @@
 name = "gcsf"
 version = "0.1.0"
 authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
+license = "MIT"
 
 [dependencies]
 fuse = "0.3.1"
