@@ -369,7 +369,13 @@ impl Filesystem for GCSF {
                 let new_data: &mut Vec<u8> = file.data.as_mut().unwrap();
 
                 // TODO: resize might not be the best choice, because it truncates if the new size is small
-                new_data.resize(offset + data.len(), 0);
+                let old_size = new_data.len();
+                let new_size = offset + data.len();
+                new_data.resize(new_size, 0);
+
+                if new_size < old_size {
+                    new_data.shrink_to_fit();
+                }
 
                 // TODO: memcpy or similar
                 for i in offset..offset + data.len() {
