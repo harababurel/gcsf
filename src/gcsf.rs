@@ -1,6 +1,6 @@
 use drive3;
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
-           ReplyEmpty, ReplyEntry, Request};
+           ReplyEmpty, ReplyEntry, ReplyWrite, Request};
 use hyper;
 use hyper_rustls;
 use id_tree::{Node, NodeId, Tree, TreeBuilder};
@@ -10,9 +10,11 @@ use libc::{ENOENT, ENOTDIR, ENOTEMPTY};
 use oauth2;
 use serde_json;
 use std::clone::Clone;
+use std::cmp;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt;
+// use std::thread;
 use time::Timespec;
 
 type GCClient = hyper::Client;
@@ -34,6 +36,7 @@ struct File {
     name: String,
     attr: FileAttr,
     pieces: Vec<String>, // filename of each piece of this file on google drive
+    data: Option<Vec<u8>>,
 }
 
 impl GCSF {
@@ -42,6 +45,7 @@ impl GCSF {
             name: String::from("."),
             attr: HELLO_DIR_ATTR,
             pieces: vec![],
+            data: None,
         };
 
         let hello_dir = File {
@@ -55,7 +59,7 @@ impl GCSF {
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
                 crtime: Timespec::new(1, 0),
-                perm: 0,
+                perm: 0o644,
                 nlink: 0,
                 uid: 0,
                 gid: 0,
@@ -63,6 +67,7 @@ impl GCSF {
                 flags: 0,
             },
             pieces: vec![],
+            data: None,
         };
 
         let world_file = File {
@@ -76,7 +81,7 @@ impl GCSF {
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
                 crtime: Timespec::new(1, 0),
-                perm: 0,
+                perm: 0o644,
                 nlink: 0,
                 uid: 0,
                 gid: 0,
@@ -84,6 +89,7 @@ impl GCSF {
                 flags: 0,
             },
             pieces: vec![String::from("100.bin")],
+            data: Some(String::from("world file here\n").into_bytes()),
         };
 
         let some_file = File {
@@ -91,13 +97,13 @@ impl GCSF {
             attr: FileAttr {
                 ino: 10,
                 kind: FileType::RegularFile,
-                size: 0,
+                size: 1000,
                 blocks: 0,
                 atime: Timespec::new(1, 0),
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
                 crtime: Timespec::new(1, 0),
-                perm: 0,
+                perm: 0o644,
                 nlink: 0,
                 uid: 0,
                 gid: 0,
@@ -109,6 +115,7 @@ impl GCSF {
                 String::from("2.bin"),
                 String::from("3.bin"),
             ],
+            data: Some(String::from("some file content\n").into_bytes()),
         };
 
         let other_file = File {
@@ -116,13 +123,13 @@ impl GCSF {
             attr: FileAttr {
                 ino: 11,
                 kind: FileType::RegularFile,
-                size: 0,
+                size: 1000,
                 blocks: 0,
                 atime: Timespec::new(1, 0),
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
                 crtime: Timespec::new(1, 0),
-                perm: 0,
+                perm: 0o644,
                 nlink: 0,
                 uid: 0,
                 gid: 0,
@@ -130,6 +137,7 @@ impl GCSF {
                 flags: 0,
             },
             pieces: vec![String::from("123.bin"), String::from("456.bin")],
+            data: Some(String::from("other file content\n").into_bytes()),
         };
 
         let mut tree: Tree<File> = TreeBuilder::new().with_node_capacity(10).build();
@@ -313,21 +321,68 @@ impl Filesystem for GCSF {
         };
     }
 
-    // Return contents of file. Not necessary yet.
     fn read(
         &mut self,
         _req: &Request,
         ino: u64,
         _fh: u64,
         offset: i64,
-        _size: u32,
+        size: u32,
         reply: ReplyData,
     ) {
-        // if ino == 2 {
-        //     reply.data(&HELLO_TXT_CONTENT.as_bytes()[offset as usize..]);
-        // } else {
-        reply.error(ENOENT);
-        // }
+        match self.get_file(ino) {
+            Some(ref file) => {
+                if file.data.is_some() {
+                    let data = file.data.to_owned().unwrap();
+                    reply.data(
+                        &data[offset as usize
+                                  ..cmp::min(data.len(), offset as usize + size as usize)],
+                    );
+                } else {
+                    reply.error(ENOENT);
+                }
+            }
+            None => {
+                error!("read: could not find ino={}", ino);
+            }
+        };
+    }
+
+    fn write(
+        &mut self,
+        _req: &Request,
+        ino: u64,
+        _fh: u64,
+        offset: i64,
+        data: &[u8],
+        _flags: u32,
+        reply: ReplyWrite,
+    ) {
+        let offset: usize = cmp::max(offset, 0) as usize;
+
+        match self.get_mut_file(ino) {
+            Some(ref mut file) => {
+                if !file.data.is_some() {
+                    file.data = Some(Vec::new());
+                }
+
+                let new_data: &mut Vec<u8> = file.data.as_mut().unwrap();
+
+                // TODO: resize might not be the best choice, because it truncates if the new size is small
+                new_data.resize(offset + data.len(), 0);
+
+                // TODO: memcpy or similar
+                for i in offset..offset + data.len() {
+                    new_data[i] = data[i - offset];
+                }
+
+                file.attr.size = new_data.len() as u64;
+                reply.written(data.len() as u32);
+            }
+            None => {
+                reply.error(ENOENT);
+            }
+        };
     }
 
     fn readdir(
@@ -446,7 +501,7 @@ impl Filesystem for GCSF {
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
                 crtime: Timespec::new(1, 0),
-                perm: 0,
+                perm: 0o644,
                 nlink: 0,
                 uid: 0,
                 gid: 0,
@@ -454,6 +509,7 @@ impl Filesystem for GCSF {
                 flags: 0,
             },
             pieces: vec![],
+            data: None,
         };
 
         reply.created(&TTL, &file.attr, 0, 0, 0);
@@ -488,7 +544,7 @@ impl Filesystem for GCSF {
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
                 crtime: Timespec::new(1, 0),
-                perm: 0,
+                perm: 0o644,
                 nlink: 0,
                 uid: 0,
                 gid: 0,
@@ -496,6 +552,7 @@ impl Filesystem for GCSF {
                 flags: 0,
             },
             pieces: vec![],
+            data: None,
         };
 
         reply.entry(&TTL, &child_dir.attr, 0);
@@ -597,7 +654,13 @@ impl fmt::Debug for GCSF {
                 write!(f, "\t");
             });
 
-            write!(f, "{:3} => {}\n", node.data().attr.ino, node.data().name);
+            let file = node.data();
+            write!(f, "{:3} => {}", file.attr.ino, file.name);
+            if file.data.is_some() {
+                let preview_data: Vec<&u8> = file.data.as_ref().unwrap().iter().take(20).collect();
+                write!(f, "({:?})", preview_data);
+            }
+            write!(f, "\n");
 
             for child_id in node.children() {
                 stack.push((level + 1, child_id));
