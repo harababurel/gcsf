@@ -6,7 +6,7 @@ use hyper_rustls;
 use id_tree::{Node, NodeId, Tree, TreeBuilder};
 use id_tree::InsertBehavior::*;
 use id_tree::RemoveBehavior::*;
-use libc::{ENOENT, ENOTDIR, ENOTEMPTY};
+use libc::{EISDIR, ENOENT, ENOTDIR, ENOTEMPTY};
 use oauth2;
 use serde_json;
 use std::clone::Clone;
@@ -431,6 +431,7 @@ impl Filesystem for GCSF {
             }
         }
     }
+
     fn setattr(
         &mut self,
         _req: &Request,
@@ -526,6 +527,41 @@ impl Filesystem for GCSF {
             .unwrap();
 
         self.inode_to_node.insert(ino, file_id.clone());
+    }
+
+    fn unlink(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
+        if !self.inode_to_node.contains_key(&parent) {
+            error!(
+                "unlink: could not find parent inode={} in the file tree",
+                parent
+            );
+            reply.error(ENOTDIR);
+            return;
+        }
+
+        match self.get_node(parent)
+            .unwrap()
+            .children()
+            .into_iter()
+            .find(|id| self.tree.get(id).unwrap().data().name == name.to_str().unwrap())
+            .map_or(None, |id| Some(id.clone()))
+        {
+            Some(id) => {
+                if self.tree.get(&id).unwrap().data().attr.kind == FileType::Directory {
+                    reply.error(EISDIR);
+                    return;
+                }
+                let ino = self.tree.get(&id).unwrap().data().attr.ino;
+
+                self.inode_to_node.remove(&ino);
+                self.tree.remove_node(id, DropChildren); // can't even have children
+
+                reply.ok();
+            }
+            None => {
+                reply.error(ENOTDIR);
+            }
+        };
     }
 
     fn mkdir(&mut self, _req: &Request, parent: u64, name: &OsStr, _mode: u32, reply: ReplyEntry) {
@@ -648,6 +684,7 @@ const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
 impl fmt::Debug for GCSF {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use std::str;
         write!(f, "GCSF(\n");
 
         let mut stack: Vec<(u32, &NodeId)> = vec![(0, self.tree.root_node_id().unwrap())];
@@ -663,8 +700,19 @@ impl fmt::Debug for GCSF {
             let file = node.data();
             write!(f, "{:3} => {}", file.attr.ino, file.name);
             if file.data.is_some() {
-                let preview_data: Vec<&u8> = file.data.as_ref().unwrap().iter().take(20).collect();
-                write!(f, "({:?})", preview_data);
+                let preview_data: Vec<u8> = file.data
+                    .as_ref()
+                    .unwrap()
+                    .clone()
+                    .into_iter()
+                    .take(50)
+                    .collect();
+
+                let preview_string = str::from_utf8(preview_data.as_slice()).unwrap_or("binary");
+                write!(f, " ({:?})", preview_string);
+                if preview_data.len() < file.data.as_ref().unwrap().len() {
+                    write!(f, "...");
+                }
             }
             write!(f, "\n");
 
