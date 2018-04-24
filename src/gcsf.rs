@@ -11,10 +11,11 @@ use oauth2;
 use serde_json;
 use std::clone::Clone;
 use std::cmp;
+// use std::io;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt;
-// use std::thread;
+use failure::{err_msg, Error, ResultExt};
 use time::Timespec;
 
 type GCClient = hyper::Client;
@@ -161,7 +162,7 @@ impl GCSF {
         };
 
         GCSF {
-            drive: GCSF::create_drive(),
+            drive: GCSF::create_drive().unwrap(),
             tree,
             inode_to_node,
         }
@@ -200,32 +201,26 @@ impl GCSF {
             .unwrap()
     }
 
-    fn read_client_secret(file: &str) -> oauth2::ApplicationSecret {
+    fn read_client_secret(file: &str) -> Result<oauth2::ApplicationSecret, Error> {
         use std::fs::OpenOptions;
         use std::io::Read;
 
-        match OpenOptions::new().read(true).open(file) {
-            Ok(mut f) => {
-                let mut secret = String::new();
-                f.read_to_string(&mut secret);
+        let mut file = OpenOptions::new().read(true).open(file)?;
 
-                let app_secret: oauth2::ConsoleApplicationSecret =
-                    serde_json::from_str(secret.as_str()).unwrap();
+        let mut secret = String::new();
+        file.read_to_string(&mut secret);
 
-                app_secret.installed.unwrap()
-            }
-            Err(e) => {
-                error!("Could not read client secret: {}", e);
-                panic!();
-            }
-        }
+        let app_secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(secret.as_str())?;
+        app_secret
+            .installed
+            .ok_or(err_msg("Option did not contain a value."))
     }
 
-    fn create_drive_auth() -> GCAuthenticator {
+    fn create_drive_auth() -> Result<GCAuthenticator, Error> {
         // Get an ApplicationSecret instance by some means. It contains the `client_id` and
         // `client_secret`, among other things.
         //
-        let secret: oauth2::ApplicationSecret = GCSF::read_client_secret("client_secret.json");
+        let secret: oauth2::ApplicationSecret = GCSF::read_client_secret("client_secret.json")?;
 
         // Instantiate the authenticator. It will choose a suitable authentication flow for you,
         // unless you replace  `None` with the desired Flow.
@@ -245,17 +240,17 @@ impl GCSF {
             Some(oauth2::FlowType::InstalledRedirect(8080)), // This is the main change!
         );
 
-        auth
+        Ok(auth)
     }
 
-    fn create_drive() -> GCDrive {
-        let auth = GCSF::create_drive_auth();
-        drive3::Drive::new(
+    fn create_drive() -> Result<GCDrive, Error> {
+        let auth = GCSF::create_drive_auth()?;
+        Ok(drive3::Drive::new(
             hyper::Client::with_connector(hyper::net::HttpsConnector::new(
                 hyper_rustls::TlsClient::new(),
             )),
             auth,
-        )
+        ))
     }
 
     // fn ls(&self) -> Vec<drive3::File> {

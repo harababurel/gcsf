@@ -5,6 +5,7 @@
 #![allow(unused_variables)]
 #![allow(unreachable_code)]
 
+extern crate failure;
 extern crate fuse;
 extern crate google_drive3 as drive3;
 extern crate hyper;
