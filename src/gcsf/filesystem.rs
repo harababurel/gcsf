@@ -1,43 +1,27 @@
-use drive3;
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyWrite, Request};
-use hyper;
-use hyper_rustls;
+// use hyper;
+// use hyper_rustls;
 use id_tree::{Node, NodeId, Tree, TreeBuilder};
 use id_tree::InsertBehavior::*;
 use id_tree::RemoveBehavior::*;
 use libc::{EISDIR, ENOENT, ENOTDIR, ENOTEMPTY};
-use oauth2;
-use serde_json;
+// use oauth2;
+// use serde_json;
 use std::clone::Clone;
 use std::cmp;
-// use std::io;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt;
-use failure::{err_msg, Error, ResultExt};
+// use failure::{err_msg, Error, ResultExt};
 use time::Timespec;
 
-type GCClient = hyper::Client;
-type GCAuthenticator = oauth2::Authenticator<
-    oauth2::DefaultAuthenticatorDelegate,
-    oauth2::DiskTokenStorage,
-    hyper::Client,
->;
-type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
+use super::File;
 
 pub struct GCSF {
-    drive: GCDrive,
+    // drive: GCDrive,
     tree: Tree<File>,
     inode_to_node: HashMap<u64, NodeId>,
-}
-
-#[derive(Clone)]
-struct File {
-    name: String,
-    attr: FileAttr,
-    pieces: Vec<String>, // filename of each piece of this file on google drive
-    data: Option<Vec<u8>>,
 }
 
 impl GCSF {
@@ -162,7 +146,7 @@ impl GCSF {
         };
 
         GCSF {
-            drive: GCSF::create_drive().unwrap(),
+            // drive: GCSF::create_drive().unwrap(),
             tree,
             inode_to_node,
         }
@@ -201,57 +185,57 @@ impl GCSF {
             .unwrap()
     }
 
-    fn read_client_secret(file: &str) -> Result<oauth2::ApplicationSecret, Error> {
-        use std::fs::OpenOptions;
-        use std::io::Read;
+    // fn read_client_secret(file: &str) -> Result<oauth2::ApplicationSecret, Error> {
+    //     use std::fs::OpenOptions;
+    //     use std::io::Read;
 
-        let mut file = OpenOptions::new().read(true).open(file)?;
+    //     let mut file = OpenOptions::new().read(true).open(file)?;
 
-        let mut secret = String::new();
-        file.read_to_string(&mut secret);
+    //     let mut secret = String::new();
+    //     file.read_to_string(&mut secret);
 
-        let app_secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(secret.as_str())?;
-        app_secret
-            .installed
-            .ok_or(err_msg("Option did not contain a value."))
-    }
+    //     let app_secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(secret.as_str())?;
+    //     app_secret
+    //         .installed
+    //         .ok_or(err_msg("Option did not contain a value."))
+    // }
 
-    fn create_drive_auth() -> Result<GCAuthenticator, Error> {
-        // Get an ApplicationSecret instance by some means. It contains the `client_id` and
-        // `client_secret`, among other things.
-        //
-        let secret: oauth2::ApplicationSecret = GCSF::read_client_secret("client_secret.json")?;
+    //fn create_drive_auth() -> Result<GCAuthenticator, Error> {
+    //    // Get an ApplicationSecret instance by some means. It contains the `client_id` and
+    //    // `client_secret`, among other things.
+    //    //
+    //    let secret: oauth2::ApplicationSecret = GCSF::read_client_secret("client_secret.json")?;
 
-        // Instantiate the authenticator. It will choose a suitable authentication flow for you,
-        // unless you replace  `None` with the desired Flow.
-        // Provide your own `AuthenticatorDelegate` to adjust the way it operates
-        // and get feedback about
-        // what's going on. You probably want to bring in your own `TokenStorage`
-        // to persist tokens and
-        // retrieve them from storage.
-        let auth = oauth2::Authenticator::new(
-            &secret,
-            oauth2::DefaultAuthenticatorDelegate,
-            hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-                hyper_rustls::TlsClient::new(),
-            )),
-            // <MemoryStorage as Default>::default(),
-            oauth2::DiskTokenStorage::new(&String::from("/tmp/gcsf_token.json")).unwrap(),
-            Some(oauth2::FlowType::InstalledRedirect(8080)), // This is the main change!
-        );
+    //    // Instantiate the authenticator. It will choose a suitable authentication flow for you,
+    //    // unless you replace  `None` with the desired Flow.
+    //    // Provide your own `AuthenticatorDelegate` to adjust the way it operates
+    //    // and get feedback about
+    //    // what's going on. You probably want to bring in your own `TokenStorage`
+    //    // to persist tokens and
+    //    // retrieve them from storage.
+    //    let auth = oauth2::Authenticator::new(
+    //        &secret,
+    //        oauth2::DefaultAuthenticatorDelegate,
+    //        hyper::Client::with_connector(hyper::net::HttpsConnector::new(
+    //            hyper_rustls::TlsClient::new(),
+    //        )),
+    //        // <MemoryStorage as Default>::default(),
+    //        oauth2::DiskTokenStorage::new(&String::from("/tmp/gcsf_token.json")).unwrap(),
+    //        Some(oauth2::FlowType::InstalledRedirect(8080)), // This is the main change!
+    //    );
 
-        Ok(auth)
-    }
+    //    Ok(auth)
+    //}
 
-    fn create_drive() -> Result<GCDrive, Error> {
-        let auth = GCSF::create_drive_auth()?;
-        Ok(drive3::Drive::new(
-            hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-                hyper_rustls::TlsClient::new(),
-            )),
-            auth,
-        ))
-    }
+    // fn create_drive() -> Result<GCDrive, Error> {
+    //     let auth = GCSF::create_drive_auth()?;
+    //     Ok(drive3::Drive::new(
+    //         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
+    //             hyper_rustls::TlsClient::new(),
+    //         )),
+    //         auth,
+    //     ))
+    // }
 
     // fn ls(&self) -> Vec<drive3::File> {
     //     let result = self.drive.files()
