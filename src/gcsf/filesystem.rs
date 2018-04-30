@@ -1,13 +1,9 @@
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyWrite, Request};
-// use hyper;
-// use hyper_rustls;
 use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
 use id_tree::InsertBehavior::*;
 use id_tree::RemoveBehavior::*;
 use libc::{EISDIR, ENOENT, ENOTDIR, ENOTEMPTY};
-// use oauth2;
-// use serde_json;
 use std::clone::Clone;
 use std::cmp;
 use std::collections::HashMap;
@@ -17,23 +13,24 @@ use failure::{err_msg, Error, ResultExt};
 use time::Timespec;
 
 use super::File;
+use super::fetcher::{DataFetcher, GoogleDriveFetcher, InMemoryFetcher};
 
 pub type Inode = u64;
 
-pub struct GCSF {
+pub struct GCSF<DF: DataFetcher> {
     // drive: GCDrive,
     tree: Tree<Inode>,
     files: HashMap<Inode, File>,
     ids: HashMap<Inode, NodeId>,
+    data_fetcher: DF,
 }
 
-impl GCSF {
-    pub fn new() -> GCSF {
+impl<DF: DataFetcher> GCSF<DF> {
+    pub fn new() -> GCSF<DF> {
         let wd = File {
             name: String::from("."),
             attr: HELLO_DIR_ATTR,
             pieces: vec![],
-            data: None,
         };
 
         let hello_dir = File {
@@ -55,7 +52,6 @@ impl GCSF {
                 flags: 0,
             },
             pieces: vec![],
-            data: None,
         };
 
         let world_file = File {
@@ -77,7 +73,6 @@ impl GCSF {
                 flags: 0,
             },
             pieces: vec![String::from("100.bin")],
-            data: Some(String::from("world file here\n").into_bytes()),
         };
 
         let some_file = File {
@@ -103,7 +98,6 @@ impl GCSF {
                 String::from("2.bin"),
                 String::from("3.bin"),
             ],
-            data: Some(String::from("some file content\n").into_bytes()),
         };
 
         let other_file = File {
@@ -125,7 +119,6 @@ impl GCSF {
                 flags: 0,
             },
             pieces: vec![String::from("123.bin"), String::from("456.bin")],
-            data: Some(String::from("other file content\n").into_bytes()),
         };
 
         let mut tree: Tree<Inode> = TreeBuilder::new().with_node_capacity(5).build();
@@ -161,6 +154,7 @@ impl GCSF {
             tree,
             files,
             ids,
+            data_fetcher: DF::new(),
         }
     }
 
@@ -298,7 +292,7 @@ impl GCSF {
     // }
 }
 
-impl Filesystem for GCSF {
+impl<DF: DataFetcher> Filesystem for GCSF<DF> {
     fn lookup(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
         debug!("{:?}", self);
         match self.get_file_from_parent(parent, name) {
@@ -333,14 +327,14 @@ impl Filesystem for GCSF {
     ) {
         let file = self.get_file(ino).unwrap();
 
-        if file.has_data() {
-            let data = file.data.as_ref().unwrap();
-            let lo = offset as usize;
-            let hi = cmp::min(data.len(), lo + size as usize);
-            reply.data(&data[lo..hi]);
-        } else {
-            reply.error(ENOENT);
-        }
+        // if file.has_data() {
+        //     let data = file.data.as_ref().unwrap();
+        //     let lo = offset as usize;
+        //     let hi = cmp::min(data.len(), lo + size as usize);
+        //     reply.data(&data[lo..hi]);
+        // } else {
+        //     reply.error(ENOENT);
+        // }
     }
 
     fn write(
@@ -355,6 +349,7 @@ impl Filesystem for GCSF {
     ) {
         let offset: usize = cmp::max(offset, 0) as usize;
 
+        /*
         match self.get_mut_file(ino) {
             Some(ref mut file) => {
                 if !file.data.is_some() {
@@ -384,6 +379,7 @@ impl Filesystem for GCSF {
                 reply.error(ENOENT);
             }
         };
+        */
     }
 
     fn readdir(
@@ -507,7 +503,6 @@ impl Filesystem for GCSF {
                 flags: 0,
             },
             pieces: vec![],
-            data: None,
         };
 
         reply.created(&TTL, &file.attr, 0, 0, 0);
@@ -566,7 +561,6 @@ impl Filesystem for GCSF {
                 flags: 0,
             },
             pieces: vec![],
-            data: None,
         };
 
         reply.entry(&TTL, &dir.attr, 0);
@@ -634,7 +628,7 @@ const HELLO_TXT_ATTR: FileAttr = FileAttr {
 };
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
-impl fmt::Debug for GCSF {
+impl<DF: DataFetcher> fmt::Debug for GCSF<DF> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use std::str;
         write!(f, "GCSF(\n");
@@ -650,21 +644,21 @@ impl fmt::Debug for GCSF {
 
             let file = self.get_file_with_id(node_id).unwrap();
             write!(f, "{:3} => {}", file.inode(), file.name);
-            if file.data.is_some() {
-                let preview_data: Vec<u8> = file.data
-                    .as_ref()
-                    .unwrap()
-                    .clone()
-                    .into_iter()
-                    .take(50)
-                    .collect();
+            // if file.data.is_some() {
+            //     let preview_data: Vec<u8> = file.data
+            //         .as_ref()
+            //         .unwrap()
+            //         .clone()
+            //         .into_iter()
+            //         .take(50)
+            //         .collect();
 
-                let preview_string = str::from_utf8(preview_data.as_slice()).unwrap_or("binary");
-                write!(f, " ({:?})", preview_string);
-                if preview_data.len() < file.data.as_ref().unwrap().len() {
-                    write!(f, "...");
-                }
-            }
+            //     let preview_string = str::from_utf8(preview_data.as_slice()).unwrap_or("binary");
+            //     write!(f, " ({:?})", preview_string);
+            //     if preview_data.len() < file.data.as_ref().unwrap().len() {
+            //         write!(f, "...");
+            //     }
+            // }
             write!(f, "\n");
 
             self.tree.children_ids(node_id).unwrap().for_each(|id| {

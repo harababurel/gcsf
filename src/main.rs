@@ -17,13 +17,15 @@ use std::sync::Arc;
 use std::thread;
 use std::time;
 
+use gcsf::{InMemoryFetcher, GCSF};
+
 fn mount_gcsf(mountpoint: &str) {
     let options = ["-o", "fsname=GCSF"]
         .iter()
         .map(|o| o.as_ref())
         .collect::<Vec<&OsStr>>();
 
-    let fs = gcsf::GCSF::new();
+    let fs: GCSF<InMemoryFetcher> = GCSF::new();
 
     unsafe {
         match fuse::spawn_mount(fs, &mountpoint, &options) {
