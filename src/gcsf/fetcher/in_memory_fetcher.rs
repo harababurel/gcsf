@@ -15,7 +15,7 @@ impl DataFetcher for InMemoryFetcher {
         }
     }
 
-    fn read(&self, inode: Inode, offset: usize, size: usize) -> Option<&[u8]> {
+    fn read(&mut self, inode: Inode, offset: usize, size: usize) -> Option<&[u8]> {
         self.data
             .get(&inode)
             .map(|data| &data[offset..cmp::min(data.len(), offset + size)])

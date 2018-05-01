@@ -546,17 +546,11 @@ impl<DF: DataFetcher> fmt::Debug for GCSF<DF> {
             });
 
             let file = self.get_file_with_id(node_id).unwrap();
-            let preview_string = str::from_utf8(
-                self.data_fetcher.read(file.inode(), 0, 100).unwrap_or(&[]),
-            ).unwrap_or("binary file");
+            // let preview_string = str::from_utf8(
+            //     self.data_fetcher.read(file.inode(), 0, 100).unwrap_or(&[]),
+            // ).unwrap_or("binary file");
 
-            write!(
-                f,
-                "{:3} => {} ({:?})\n",
-                file.inode(),
-                file.name,
-                preview_string
-            );
+            write!(f, "{:3} => {}\n", file.inode(), file.name,);
 
             self.tree.children_ids(node_id).unwrap().for_each(|id| {
                 stack.push((level + 1, id));

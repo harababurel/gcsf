@@ -20,6 +20,7 @@ type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 
 pub struct GoogleDriveFetcher {
     hub: GCDrive,
+    buff: Vec<u8>,
 }
 
 impl GoogleDriveFetcher {
@@ -75,6 +76,40 @@ impl GoogleDriveFetcher {
         ))
     }
 
+    fn get_file_content(&self, name: &str) -> drive3::Result<Vec<u8>> {
+        let query = format!("name=\"{}\"", name);
+        let (search_response, file_list) = self.hub
+            .files()
+            .list()
+            .spaces("drive")
+            .corpora("user")
+            .q(&query)
+            .page_size(1)
+            .doit()?;
+
+        // TODO: simplify this chain
+        let metadata = file_list
+            .files
+            .map(|files| files.into_iter().take(1).next())
+            .ok_or(drive3::Error::FieldClash("haha"))?
+            .ok_or(drive3::Error::Failure(search_response))?;
+
+        let mut get_result = self.hub
+            .files()
+            .get(&metadata.id.unwrap())
+            .supports_team_drives(false)
+            .add_scope(drive3::Scope::Full)
+            .param("alt", "media")
+            .doit()?;
+
+        debug!("get_result: {:#?}", &get_result);
+
+        let mut content: Vec<u8> = Vec::new();
+        get_result.0.read_to_end(&mut content);
+
+        Ok(content)
+    }
+
     // fn ls(&self) -> Vec<drive3::File> {
     //     let result = self.drive.files()
     //     .list()
@@ -109,19 +144,28 @@ impl DataFetcher for GoogleDriveFetcher {
         debug!("GoogleDriveFetcher::new()");
         GoogleDriveFetcher {
             hub: GoogleDriveFetcher::create_drive().unwrap(),
+            buff: Vec::new(),
         }
     }
 
-    fn read(&self, inode: Inode, offset: usize, size: usize) -> Option<&[u8]> {
-        None
+    fn read(&mut self, inode: Inode, offset: usize, size: usize) -> Option<&[u8]> {
+        let filename = format!("{}.txt", inode);
+        match self.get_file_content(&filename) {
+            Ok(data) => {
+                self.buff = data.to_vec();
+                Some(&self.buff)
+            }
+            Err(e) => {
+                error!("Got error: {:?}", e);
+                Some(&[])
+            }
+        }
     }
 
     fn write(&mut self, inode: Inode, offset: usize, data: &[u8]) {
         let dummy_file = DummyFile::new(data);
         let mut req = drive3::File::default();
         req.name = Some(inode.to_string() + ".txt");
-        // req.id = Some(inode.to_string());
-        // req.size = Some(data.len().to_string());
         let result = self.hub
             .files()
             .create(req)
@@ -129,6 +173,8 @@ impl DataFetcher for GoogleDriveFetcher {
             .supports_team_drives(false)
             .ignore_default_visibility(true)
             .upload_resumable(dummy_file, "text/plain".parse().unwrap());
+
+        debug!("write result: {:#?}", result);
     }
 
     fn remove(&mut self, inode: Inode) {}
@@ -207,18 +253,21 @@ impl Read for DummyFile {
     where
         Self: Sized,
     {
+        error!("infinite bytes()");
         self.bytes()
     }
     fn chain<R: Read>(self, next: R) -> io::Chain<Self, R>
     where
         Self: Sized,
     {
+        error!("infinite chain()");
         self.chain(next)
     }
     fn take(self, limit: u64) -> io::Take<Self>
     where
         Self: Sized,
     {
+        error!("infinite take()");
         self.take(limit)
     }
 }
