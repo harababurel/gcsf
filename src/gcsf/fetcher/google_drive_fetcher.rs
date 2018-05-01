@@ -4,6 +4,8 @@ use hyper;
 use hyper_rustls;
 use oauth2;
 use serde_json;
+use std::io::{Read, Seek, SeekFrom};
+use std::io;
 use super::DataFetcher;
 
 type Inode = u64;
@@ -104,6 +106,7 @@ impl GoogleDriveFetcher {
 
 impl DataFetcher for GoogleDriveFetcher {
     fn new() -> GoogleDriveFetcher {
+        debug!("GoogleDriveFetcher::new()");
         GoogleDriveFetcher {
             hub: GoogleDriveFetcher::create_drive().unwrap(),
         }
@@ -113,7 +116,107 @@ impl DataFetcher for GoogleDriveFetcher {
         None
     }
 
-    fn write(&mut self, inode: Inode, offset: usize, data: &[u8]) {}
+    fn write(&mut self, inode: Inode, offset: usize, data: &[u8]) {
+        let dummy_file = DummyFile::new(data);
+        let mut req = drive3::File::default();
+        req.name = Some(inode.to_string() + ".txt");
+        // req.id = Some(inode.to_string());
+        // req.size = Some(data.len().to_string());
+        let result = self.hub.files().create(req)
+                     .use_content_as_indexable_text(true)
+                     .supports_team_drives(false)
+                     .ignore_default_visibility(true)
+                     .upload_resumable(dummy_file, "text/plain".parse().unwrap());
+    }
 
     fn remove(&mut self, inode: Inode) {}
+}
+
+struct DummyFile {
+    cursor: u64,
+    data: Vec<u8>,
+}
+
+impl DummyFile {
+    fn new(data: &[u8]) -> DummyFile {
+        DummyFile {
+            cursor: 0,
+            data: Vec::from(data),
+        }
+    }
+}
+
+impl Seek for DummyFile {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        let position: i64 = match pos {
+            SeekFrom::Start(offset) => offset as i64,
+            SeekFrom::End(offset) => self.data.len() as i64 - offset,
+            SeekFrom::Current(offset) => self.cursor as i64 + offset,
+        };
+
+        if position < 0 {
+            Err(io::Error::from(io::ErrorKind::InvalidInput))
+        } else {
+            self.cursor = position as u64;
+            Ok(self.cursor)
+        }
+    }
+}
+
+impl Read for DummyFile {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.cursor < self.data.len() as u64 {
+            buf[0] = self.data[self.cursor as usize];
+            self.cursor += 1;
+            Ok(1)
+        } else {
+            Ok(0)
+        }
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
+        let mut written: usize = 0;
+        for i in self.cursor..self.data.len() as u64 {
+            buf.push(self.data[i as usize]);
+            written += 1;
+        }
+        self.cursor += written as u64;
+        Ok(written)
+    }
+    fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
+        let mut written: usize = 0;
+        for i in self.cursor..self.data.len() as u64 {
+            buf.push(self.data[i as usize] as char);
+            written += 1;
+        }
+        self.cursor += written as u64;
+        Ok(written)
+    }
+    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+        Ok(())
+    }
+    fn by_ref(&mut self) -> &mut Self
+    where
+        Self: Sized,
+    {
+        self
+    }
+    fn bytes(self) -> io::Bytes<Self>
+    where
+        Self: Sized,
+    {
+        self.bytes()
+    }
+    fn chain<R: Read>(self, next: R) -> io::Chain<Self, R>
+    where
+        Self: Sized,
+    {
+        self.chain(next)
+    }
+    fn take(self, limit: u64) -> io::Take<Self>
+    where
+        Self: Sized,
+    {
+        self.take(limit)
+    }
 }
