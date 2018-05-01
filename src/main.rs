@@ -12,8 +12,8 @@ extern crate pretty_env_logger;
 
 use std::env;
 use std::ffi::OsStr;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time;
 

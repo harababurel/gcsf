@@ -1,16 +1,14 @@
-use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
-           ReplyEmpty, ReplyEntry, ReplyWrite, Request};
-use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
+use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyWrite, Request};
 use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
+use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
 use libc::{EISDIR, ENOENT, ENOTDIR, ENOTEMPTY};
 use std::clone::Clone;
 use std::cmp;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt;
-use failure::{err_msg, Error, ResultExt};
 use time::Timespec;
 
 use super::File;
