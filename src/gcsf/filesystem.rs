@@ -191,6 +191,7 @@ impl<DF: DataFetcher> GCSF<DF> {
         self.tree.remove_node(id, DropChildren);
         self.files.remove(&ino);
         self.ids.remove(&ino);
+        self.data_fetcher.remove(ino);
 
         Ok(())
     }

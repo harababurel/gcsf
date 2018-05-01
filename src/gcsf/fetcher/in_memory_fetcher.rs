@@ -40,4 +40,8 @@ impl DataFetcher for InMemoryFetcher {
             file_data[i] = data[i - offset];
         }
     }
+
+    fn remove(&mut self, inode: Inode) {
+        self.data.remove(&inode);
+    }
 }
