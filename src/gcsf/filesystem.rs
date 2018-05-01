@@ -2,6 +2,7 @@ use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, Re
            ReplyEmpty, ReplyEntry, ReplyWrite, Request};
 use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
 use id_tree::InsertBehavior::*;
+use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
 use libc::{EISDIR, ENOENT, ENOTDIR, ENOTEMPTY};
 use std::clone::Clone;
@@ -383,6 +384,28 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
                 reply.error(ENOENT);
             }
         }
+    }
+
+    fn rename(
+        &mut self,
+        _req: &Request,
+        parent: Inode,
+        name: &OsStr,
+        new_parent: u64,
+        new_name: &OsStr,
+        reply: ReplyEmpty,
+    ) {
+        let file_inode = self.get_file_from_parent(parent, name).unwrap().inode();
+
+        // TODO: is to_owned() safe?
+        let file_id = self.get_node_id(file_inode).unwrap().to_owned();
+        let new_parent_id = self.get_node_id(new_parent).unwrap().to_owned();
+
+        self.tree.move_node(&file_id, ToParent(&new_parent_id));
+
+        self.get_mut_file(file_inode).unwrap().name = new_name.to_str().unwrap().to_string();
+
+        reply.ok()
     }
 
     fn setattr(
