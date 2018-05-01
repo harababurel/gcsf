@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time;
 
-use gcsf::{InMemoryFetcher, GCSF};
+use gcsf::{GoogleDriveFetcher, InMemoryFetcher, GCSF};
 
 fn mount_gcsf(mountpoint: &str) {
     let options = ["-o", "fsname=GCSF"]
@@ -26,7 +26,6 @@ fn mount_gcsf(mountpoint: &str) {
         .collect::<Vec<&OsStr>>();
 
     let fs: GCSF<InMemoryFetcher> = GCSF::new();
-
     unsafe {
         match fuse::spawn_mount(fs, &mountpoint, &options) {
             Ok(_session) => {

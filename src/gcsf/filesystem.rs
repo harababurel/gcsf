@@ -19,7 +19,6 @@ use super::fetcher::{DataFetcher, GoogleDriveFetcher, InMemoryFetcher};
 pub type Inode = u64;
 
 pub struct GCSF<DF: DataFetcher> {
-    // drive: GCDrive,
     tree: Tree<Inode>,
     files: HashMap<Inode, File>,
     ids: HashMap<Inode, NodeId>,
@@ -142,7 +141,6 @@ impl<DF: DataFetcher> GCSF<DF> {
         };
 
         GCSF {
-            // drive: GCSF::create_drive().unwrap(),
             tree,
             files,
             ids,
@@ -203,86 +201,6 @@ impl<DF: DataFetcher> GCSF<DF> {
             .next()
             .unwrap()
     }
-
-    // fn read_client_secret(file: &str) -> Result<oauth2::ApplicationSecret, Error> {
-    //     use std::fs::OpenOptions;
-    //     use std::io::Read;
-
-    //     let mut file = OpenOptions::new().read(true).open(file)?;
-
-    //     let mut secret = String::new();
-    //     file.read_to_string(&mut secret);
-
-    //     let app_secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(secret.as_str())?;
-    //     app_secret
-    //         .installed
-    //         .ok_or(err_msg("Option did not contain a value."))
-    // }
-
-    //fn create_drive_auth() -> Result<GCAuthenticator, Error> {
-    //    // Get an ApplicationSecret instance by some means. It contains the `client_id` and
-    //    // `client_secret`, among other things.
-    //    //
-    //    let secret: oauth2::ApplicationSecret = GCSF::read_client_secret("client_secret.json")?;
-
-    //    // Instantiate the authenticator. It will choose a suitable authentication flow for you,
-    //    // unless you replace  `None` with the desired Flow.
-    //    // Provide your own `AuthenticatorDelegate` to adjust the way it operates
-    //    // and get feedback about
-    //    // what's going on. You probably want to bring in your own `TokenStorage`
-    //    // to persist tokens and
-    //    // retrieve them from storage.
-    //    let auth = oauth2::Authenticator::new(
-    //        &secret,
-    //        oauth2::DefaultAuthenticatorDelegate,
-    //        hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-    //            hyper_rustls::TlsClient::new(),
-    //        )),
-    //        // <MemoryStorage as Default>::default(),
-    //        oauth2::DiskTokenStorage::new(&String::from("/tmp/gcsf_token.json")).unwrap(),
-    //        Some(oauth2::FlowType::InstalledRedirect(8080)), // This is the main change!
-    //    );
-
-    //    Ok(auth)
-    //}
-
-    // fn create_drive() -> Result<GCDrive, Error> {
-    //     let auth = GCSF::create_drive_auth()?;
-    //     Ok(drive3::Drive::new(
-    //         hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-    //             hyper_rustls::TlsClient::new(),
-    //         )),
-    //         auth,
-    //     ))
-    // }
-
-    // fn ls(&self) -> Vec<drive3::File> {
-    //     let result = self.drive.files()
-    //     .list()
-    //     .spaces("drive")
-    //     .page_size(10)
-    //     // .order_by("folder,modifiedTime desc,name")
-    //     .corpora("user") // or "domain"
-    //     .doit();
-
-    //     match result {
-    //         Err(e) => {
-    //             println!("{:#?}", e);
-    //             vec![]
-    //         }
-    //         Ok(res) => res.1.files.unwrap().into_iter().collect(),
-    //     }
-    // }
-
-    // fn cat(&self, filename: &str) -> String {
-    //     let result = self.drive.files()
-    //     .list()
-    //     .spaces("drive")
-    //     .page_size(10)
-    //     // .order_by("folder,modifiedTime desc,name")
-    //     .corpora("user") // or "domain"
-    //     .doit();
-    // }
 }
 
 impl<DF: DataFetcher> Filesystem for GCSF<DF> {
@@ -403,7 +321,6 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         let new_parent_id = self.get_node_id(new_parent).unwrap().to_owned();
 
         self.tree.move_node(&file_id, ToParent(&new_parent_id));
-
         self.get_mut_file(file_inode).unwrap().name = new_name.to_str().unwrap().to_string();
 
         reply.ok()
@@ -630,23 +547,11 @@ impl<DF: DataFetcher> fmt::Debug for GCSF<DF> {
             });
 
             let file = self.get_file_with_id(node_id).unwrap();
-            write!(f, "{:3} => {}", file.inode(), file.name);
-            // if file.data.is_some() {
-            //     let preview_data: Vec<u8> = file.data
-            //         .as_ref()
-            //         .unwrap()
-            //         .clone()
-            //         .into_iter()
-            //         .take(50)
-            //         .collect();
+            let preview_string = str::from_utf8(
+                self.data_fetcher.read(file.inode(), 0, 100).unwrap_or(&[]),
+            ).unwrap_or("binary file");
 
-            //     let preview_string = str::from_utf8(preview_data.as_slice()).unwrap_or("binary");
-            //     write!(f, " ({:?})", preview_string);
-            //     if preview_data.len() < file.data.as_ref().unwrap().len() {
-            //         write!(f, "...");
-            //     }
-            // }
-            write!(f, "\n");
+            write!(f, "{:3} => {} ({:?})\n", file.inode(), file.name, preview_string);
 
             self.tree.children_ids(node_id).unwrap().for_each(|id| {
                 stack.push((level + 1, id));

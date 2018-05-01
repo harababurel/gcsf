@@ -25,4 +25,4 @@ extern crate yup_oauth2 as oauth2;
 mod gcsf;
 
 pub use gcsf::filesystem::GCSF;
-pub use gcsf::fetcher::InMemoryFetcher;
+pub use gcsf::fetcher::{InMemoryFetcher, GoogleDriveFetcher};
