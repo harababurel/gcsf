@@ -30,7 +30,6 @@ impl<DF: DataFetcher> GCSF<DF> {
         let wd = File {
             name: String::from("."),
             attr: HELLO_DIR_ATTR,
-            pieces: vec![],
         };
 
         let hello_dir = File {
@@ -51,7 +50,6 @@ impl<DF: DataFetcher> GCSF<DF> {
                 rdev: 0,
                 flags: 0,
             },
-            pieces: vec![],
         };
 
         let world_file = File {
@@ -72,7 +70,6 @@ impl<DF: DataFetcher> GCSF<DF> {
                 rdev: 0,
                 flags: 0,
             },
-            pieces: vec![String::from("100.bin")],
         };
 
         let some_file = File {
@@ -93,11 +90,6 @@ impl<DF: DataFetcher> GCSF<DF> {
                 rdev: 0,
                 flags: 0,
             },
-            pieces: vec![
-                String::from("1.bin"),
-                String::from("2.bin"),
-                String::from("3.bin"),
-            ],
         };
 
         let other_file = File {
@@ -118,7 +110,6 @@ impl<DF: DataFetcher> GCSF<DF> {
                 rdev: 0,
                 flags: 0,
             },
-            pieces: vec![String::from("123.bin"), String::from("456.bin")],
         };
 
         let mut tree: Tree<Inode> = TreeBuilder::new().with_node_capacity(5).build();
@@ -325,16 +316,11 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         size: u32,
         reply: ReplyData,
     ) {
-        let file = self.get_file(ino).unwrap();
-
-        // if file.has_data() {
-        //     let data = file.data.as_ref().unwrap();
-        //     let lo = offset as usize;
-        //     let hi = cmp::min(data.len(), lo + size as usize);
-        //     reply.data(&data[lo..hi]);
-        // } else {
-        //     reply.error(ENOENT);
-        // }
+        reply.data(
+            self.data_fetcher
+                .read(ino, offset as usize, size as usize)
+                .unwrap_or(&[]),
+        );
     }
 
     fn write(
@@ -348,38 +334,17 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         reply: ReplyWrite,
     ) {
         let offset: usize = cmp::max(offset, 0) as usize;
+        self.data_fetcher.write(ino, offset, data);
 
-        /*
         match self.get_mut_file(ino) {
             Some(ref mut file) => {
-                if !file.data.is_some() {
-                    file.data = Some(Vec::new());
-                }
-
-                let new_data: &mut Vec<u8> = file.data.as_mut().unwrap();
-
-                // TODO: resize might not be the best choice, because it truncates if the new size is small
-                let old_size = new_data.len();
-                let new_size = offset + data.len();
-                new_data.resize(new_size, 0);
-
-                if new_size < old_size {
-                    new_data.shrink_to_fit();
-                }
-
-                // TODO: memcpy or similar
-                for i in offset..offset + data.len() {
-                    new_data[i] = data[i - offset];
-                }
-
-                file.attr.size = new_data.len() as u64;
+                file.attr.size = offset as u64 + data.len() as u64;
                 reply.written(data.len() as u32);
             }
             None => {
                 reply.error(ENOENT);
             }
         };
-        */
     }
 
     fn readdir(
@@ -502,7 +467,6 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
                 rdev: 0,
                 flags: 0,
             },
-            pieces: vec![],
         };
 
         reply.created(&TTL, &file.attr, 0, 0, 0);
@@ -560,7 +524,6 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
                 rdev: 0,
                 flags: 0,
             },
-            pieces: vec![],
         };
 
         reply.entry(&TTL, &dir.attr, 0);
