@@ -122,11 +122,13 @@ impl DataFetcher for GoogleDriveFetcher {
         req.name = Some(inode.to_string() + ".txt");
         // req.id = Some(inode.to_string());
         // req.size = Some(data.len().to_string());
-        let result = self.hub.files().create(req)
-                     .use_content_as_indexable_text(true)
-                     .supports_team_drives(false)
-                     .ignore_default_visibility(true)
-                     .upload_resumable(dummy_file, "text/plain".parse().unwrap());
+        let result = self.hub
+            .files()
+            .create(req)
+            .use_content_as_indexable_text(true)
+            .supports_team_drives(false)
+            .ignore_default_visibility(true)
+            .upload_resumable(dummy_file, "text/plain".parse().unwrap());
     }
 
     fn remove(&mut self, inode: Inode) {}

@@ -1,4 +1,5 @@
-use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyWrite, Request};
+use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
+           ReplyEmpty, ReplyEntry, ReplyWrite, Request};
 use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
@@ -549,7 +550,13 @@ impl<DF: DataFetcher> fmt::Debug for GCSF<DF> {
                 self.data_fetcher.read(file.inode(), 0, 100).unwrap_or(&[]),
             ).unwrap_or("binary file");
 
-            write!(f, "{:3} => {} ({:?})\n", file.inode(), file.name, preview_string);
+            write!(
+                f,
+                "{:3} => {} ({:?})\n",
+                file.inode(),
+                file.name,
+                preview_string
+            );
 
             self.tree.children_ids(node_id).unwrap().for_each(|id| {
                 stack.push((level + 1, id));
