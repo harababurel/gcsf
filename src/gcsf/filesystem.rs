@@ -28,10 +28,35 @@ const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
 impl<DF: DataFetcher> GCSF<DF> {
     pub fn new() -> GCSF<DF> {
+        let mut tree = TreeBuilder::new().with_node_capacity(1).build();
+
+        let root = File {
+            name: String::from("."),
+            attr: FileAttr {
+                ino: 1,
+                size: 0,
+                blocks: 0,
+                atime: Timespec { sec: 0, nsec: 0 },
+                mtime: Timespec { sec: 0, nsec: 0 },
+                ctime: Timespec { sec: 0, nsec: 0 },
+                crtime: Timespec { sec: 0, nsec: 0 },
+                kind: FileType::Directory,
+                perm: 0o755,
+                nlink: 2,
+                uid: 0,
+                gid: 0,
+                rdev: 0,
+                flags: 0,
+            },
+        };
+
+        let root_inode = root.inode();
+        let root_id: NodeId = tree.insert(Node::new(root.inode()), AsRoot).unwrap();
+
         GCSF {
-            tree: TreeBuilder::new().with_node_capacity(5).build(),
-            files: HashMap::new(),
-            ids: HashMap::new(),
+            tree,
+            files: hashmap!{root_inode => root},
+            ids: hashmap!{root_inode => root_id},
             data_fetcher: DF::new(),
         }
     }
@@ -165,25 +190,25 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
     ) {
         match self.get_node_id(ino) {
             Some(wd_id) => {
-                if offset == 0 {
-                    let mut curr_offs = 1;
-                    let wd_file = self.get_file(ino).unwrap();
-                    reply.add(ino, curr_offs, wd_file.attr.kind, ".");
+                let mut curr_offs = offset + 1;
+                let wd_file = self.get_file(ino).unwrap();
+
+                // https://github.com/libfuse/libfuse/blob/master/include/fuse_lowlevel.h#L693
+                // reply.add(ino, curr_offs, wd_file.attr.kind, ".");
+                // curr_offs += 1;
+
+                let wd_node = self.tree.get(wd_id).unwrap();
+                if wd_node.parent().is_some() {
+                    let parent_node = self.tree.get(wd_node.parent().unwrap()).unwrap();
+                    let parent_file = self.get_file(*parent_node.data()).unwrap();
+                    // reply.add(parent_file.inode(), curr_offs, parent_file.kind(), "..");
+                    // curr_offs += 1;
+                }
+
+                for child in self.tree.children(wd_id).unwrap().skip(offset as usize) {
+                    let file = self.get_file(*child.data()).unwrap();
+                    reply.add(file.inode(), curr_offs, file.kind(), &file.name);
                     curr_offs += 1;
-
-                    let wd_node = self.tree.get(wd_id).unwrap();
-                    if wd_node.parent().is_some() {
-                        let parent_node = self.tree.get(wd_node.parent().unwrap()).unwrap();
-                        let parent_file = self.get_file(*parent_node.data()).unwrap();
-                        reply.add(parent_file.inode(), curr_offs, parent_file.kind(), "..");
-                        curr_offs += 1;
-                    }
-
-                    for child in self.tree.children(wd_id).unwrap() {
-                        let file = self.get_file(*child.data()).unwrap();
-                        reply.add(file.inode(), curr_offs, file.kind(), &file.name);
-                        curr_offs += 1;
-                    }
                 }
                 reply.ok();
             }
@@ -385,6 +410,10 @@ impl<DF: DataFetcher> fmt::Debug for GCSF<DF> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use std::str;
         write!(f, "GCSF(\n");
+
+        if self.tree.root_node_id().is_none() {
+            return write!(f, ")\n");
+        }
 
         let mut stack: Vec<(u32, &NodeId)> = vec![(0, self.tree.root_node_id().unwrap())];
 
