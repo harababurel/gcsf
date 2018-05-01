@@ -26,3 +26,6 @@ mod gcsf;
 
 pub use gcsf::filesystem::GCSF;
 pub use gcsf::fetcher::{GoogleDriveFetcher, InMemoryFetcher};
+
+#[cfg(test)]
+mod tests;
