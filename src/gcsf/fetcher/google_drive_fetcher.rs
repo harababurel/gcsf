@@ -76,7 +76,12 @@ impl GoogleDriveFetcher {
         ))
     }
 
-    fn get_file_content(&self, name: &str) -> drive3::Result<Vec<u8>> {
+    // Will still detect a file even if it is in Trash
+    fn file_exists(&self, name: &str) -> drive3::Result<()> {
+        self.get_file_id(name).and_then(|id| Ok(()))
+    }
+
+    fn get_file_id(&self, name: &str) -> drive3::Result<String> {
         let query = format!("name=\"{}\"", name);
         let (search_response, file_list) = self.hub
             .files()
@@ -85,27 +90,33 @@ impl GoogleDriveFetcher {
             .corpora("user")
             .q(&query)
             .page_size(1)
+            .add_scope(drive3::Scope::Full)
             .doit()?;
 
-        // TODO: simplify this chain
         let metadata = file_list
             .files
             .map(|files| files.into_iter().take(1).next())
             .ok_or(drive3::Error::FieldClash("haha"))?
             .ok_or(drive3::Error::Failure(search_response))?;
 
-        let mut get_result = self.hub
+        metadata.id.ok_or(drive3::Error::FieldClash(
+            "file metadata does not contain an id",
+        ))
+    }
+
+    fn get_file_content(&self, name: &str) -> drive3::Result<Vec<u8>> {
+        let file_id = self.get_file_id(name)?;
+
+        let (mut response, empty_file) = self.hub
             .files()
-            .get(&metadata.id.unwrap())
+            .get(&file_id)
             .supports_team_drives(false)
-            .add_scope(drive3::Scope::Full)
             .param("alt", "media")
+            .add_scope(drive3::Scope::Full)
             .doit()?;
 
-        debug!("get_result: {:#?}", &get_result);
-
         let mut content: Vec<u8> = Vec::new();
-        get_result.0.read_to_end(&mut content);
+        response.read_to_end(&mut content);
 
         Ok(content)
     }
@@ -163,18 +174,27 @@ impl DataFetcher for GoogleDriveFetcher {
     }
 
     fn write(&mut self, inode: Inode, offset: usize, data: &[u8]) {
-        let dummy_file = DummyFile::new(data);
-        let mut req = drive3::File::default();
-        req.name = Some(inode.to_string() + ".txt");
-        let result = self.hub
-            .files()
-            .create(req)
-            .use_content_as_indexable_text(true)
-            .supports_team_drives(false)
-            .ignore_default_visibility(true)
-            .upload_resumable(dummy_file, "text/plain".parse().unwrap());
+        let filename = format!("{}.txt", inode);
 
-        debug!("write result: {:#?}", result);
+        let existence = self.file_exists(&filename);
+        debug!("existence: {:?}", existence);
+
+        if existence.is_err() {
+            let dummy_file = DummyFile::new(data);
+            let mut req = drive3::File::default();
+            req.name = Some(inode.to_string() + ".txt");
+            let result = self.hub
+                .files()
+                .create(req)
+                .use_content_as_indexable_text(true)
+                .supports_team_drives(false)
+                .ignore_default_visibility(true)
+                .upload_resumable(dummy_file, "text/plain".parse().unwrap());
+
+            debug!("write result: {:#?}", result);
+        } else {
+            warn!("file already exists! should download + overwrite + upload");
+        }
     }
 
     fn remove(&mut self, inode: Inode) {}
