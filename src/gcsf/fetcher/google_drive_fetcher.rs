@@ -177,7 +177,7 @@ impl DataFetcher for GoogleDriveFetcher {
         let filename = format!("{}.txt", inode);
 
         let existence = self.file_exists(&filename);
-        debug!("existence: {:?}", existence);
+        // debug!("existence: {:?}", existence);
 
         if existence.is_err() {
             let dummy_file = DummyFile::new(data);
@@ -191,13 +191,40 @@ impl DataFetcher for GoogleDriveFetcher {
                 .ignore_default_visibility(true)
                 .upload_resumable(dummy_file, "text/plain".parse().unwrap());
 
-            debug!("write result: {:#?}", result);
+        // debug!("write result: {:#?}", result);
         } else {
             warn!("file already exists! should download + overwrite + upload");
+            let mut file_data = self.get_file_content(&filename).unwrap_or_default();
+
+            let old_size = file_data.len();
+            let new_size = offset + data.len();
+
+            file_data.resize(new_size, 0);
+            if new_size < old_size {
+                file_data.shrink_to_fit();
+            }
+
+            // TODO: memcpy or similar
+            for i in offset..offset + data.len() {
+                file_data[i] = data[i - offset];
+            }
+
+            self.remove(inode);
+            self.write(inode, offset, &file_data);
         }
     }
 
-    fn remove(&mut self, inode: Inode) {}
+    fn remove(&mut self, inode: Inode) {
+        let filename = format!("{}.txt", inode);
+        let file_id = self.get_file_id(&filename).unwrap_or_default();
+        let result = self.hub
+            .files()
+            .delete(&file_id)
+            .supports_team_drives(false)
+            .doit();
+
+        let result = self.hub.files().empty_trash().doit();
+    }
 }
 
 struct DummyFile {
