@@ -35,7 +35,7 @@ impl<DF: DataFetcher> GCSF<DF> {
             attr: FileAttr {
                 ino: 1,
                 size: 0,
-                blocks: 0,
+                blocks: 123,
                 atime: Timespec { sec: 0, nsec: 0 },
                 mtime: Timespec { sec: 0, nsec: 0 },
                 ctime: Timespec { sec: 0, nsec: 0 },
@@ -80,6 +80,7 @@ impl<DF: DataFetcher> GCSF<DF> {
     fn get_file(&self, ino: Inode) -> Option<&File> {
         self.files.get(&ino)
     }
+
     fn get_mut_file(&mut self, ino: Inode) -> Option<&mut File> {
         self.files.get_mut(&ino)
     }
@@ -149,6 +150,8 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         size: u32,
         reply: ReplyData,
     ) {
+        // for some reason this breaks (error code 22) for large blocks (128KB instead of 4KB)
+        // TODO: find a solution
         reply.data(
             self.data_fetcher
                 .read(ino, offset as usize, size as usize)
@@ -309,7 +312,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
                 ino: ino,
                 kind: FileType::RegularFile,
                 size: 0,
-                blocks: 0,
+                blocks: 123,
                 atime: Timespec::new(1, 0),
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
@@ -366,7 +369,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
                 ino: ino,
                 kind: FileType::Directory,
                 size: 0,
-                blocks: 0,
+                blocks: 123,
                 atime: Timespec::new(1, 0),
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
@@ -403,6 +406,11 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
             Ok(()) => reply.ok(),
             Err(e) => reply.error(ENOENT),
         };
+    }
+
+    fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
+        self.data_fetcher.flush(ino);
+        reply.ok();
     }
 }
 

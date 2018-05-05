@@ -6,6 +6,7 @@ use oauth2;
 use serde_json;
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
+use std::collections::HashMap;
 use super::DataFetcher;
 
 type Inode = u64;
@@ -21,6 +22,13 @@ type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 pub struct GoogleDriveFetcher {
     hub: GCDrive,
     buff: Vec<u8>,
+    pending_writes: HashMap<Inode, Vec<PendingWrite>>,
+}
+
+struct PendingWrite {
+    inode: Inode,
+    offset: usize,
+    data: Vec<u8>,
 }
 
 impl GoogleDriveFetcher {
@@ -121,6 +129,26 @@ impl GoogleDriveFetcher {
         Ok(content)
     }
 
+    fn apply_pending_writes_on_data(&mut self, inode: Inode, data: &mut Vec<u8>) {
+        self.pending_writes
+            .entry(inode)
+            .or_insert(Vec::new())
+            .iter()
+            .filter(|write| write.inode == inode)
+            .for_each(|pending_write| {
+                info!("found a pending write! applying now");
+                let required_size = pending_write.offset + pending_write.data.len();
+
+                data.resize(required_size, 0);
+
+                // TODO: memcpy or similar
+                for i in pending_write.offset..pending_write.offset + pending_write.data.len() {
+                    data[i] = pending_write.data[i - pending_write.offset];
+                }
+            });
+
+        self.pending_writes.remove(&inode);
+    }
     // fn ls(&self) -> Vec<drive3::File> {
     //     let result = self.drive.files()
     //     .list()
@@ -156,6 +184,7 @@ impl DataFetcher for GoogleDriveFetcher {
         GoogleDriveFetcher {
             hub: GoogleDriveFetcher::create_drive().unwrap(),
             buff: Vec::new(),
+            pending_writes: HashMap::new(),
         }
     }
 
@@ -174,13 +203,48 @@ impl DataFetcher for GoogleDriveFetcher {
     }
 
     fn write(&mut self, inode: Inode, offset: usize, data: &[u8]) {
+        if !self.pending_writes.contains_key(&inode) {
+            self.pending_writes.insert(inode, Vec::new());
+        }
+
+        self.pending_writes
+            .entry(inode)
+            .or_insert(Vec::new())
+            .push(PendingWrite {
+                inode,
+                offset,
+                data: data.to_vec(),
+            });
+    }
+
+    fn remove(&mut self, inode: Inode) {
         let filename = format!("{}.txt", inode);
+        let file_id = self.get_file_id(&filename).unwrap_or_default();
+        let result = self.hub
+            .files()
+            .delete(&file_id)
+            .supports_team_drives(false)
+            .doit();
+
+        let result = self.hub.files().empty_trash().doit();
+    }
+
+    fn flush(&mut self, inode: Inode) {
+        let filename = format!("{}.txt", inode);
+
+        if !self.pending_writes.contains_key(&inode) {
+            info!("flush() called but there are no pending writes on inode={}. nothing to do, moving on...", inode);
+            return;
+        }
 
         let existence = self.file_exists(&filename);
         // debug!("existence: {:?}", existence);
 
         if existence.is_err() {
-            let dummy_file = DummyFile::new(data);
+            let mut data: Vec<u8> = Vec::new();
+            self.apply_pending_writes_on_data(inode, &mut data);
+
+            let dummy_file = DummyFile::new(&data);
             let mut req = drive3::File::default();
             req.name = Some(inode.to_string() + ".txt");
             let result = self.hub
@@ -195,38 +259,13 @@ impl DataFetcher for GoogleDriveFetcher {
         } else {
             warn!("file already exists! should download + overwrite + upload");
             let mut file_data = self.get_file_content(&filename).unwrap_or_default();
-
-            let old_size = file_data.len();
-            let new_size = offset + data.len();
-
-            file_data.resize(new_size, 0);
-            if new_size < old_size {
-                file_data.shrink_to_fit();
-            }
-
-            // TODO: memcpy or similar
-            for i in offset..offset + data.len() {
-                file_data[i] = data[i - offset];
-            }
-
-            self.remove(inode);
-            self.write(inode, offset, &file_data);
+            self.apply_pending_writes_on_data(inode, &mut file_data);
+            self.remove(inode); // delete the file from drive
+            self.write(inode, 0, &file_data); // create a single pending write containing the final state of the file
+            self.flush(inode); // flush that pending write on a freshly created file
         }
     }
-
-    fn remove(&mut self, inode: Inode) {
-        let filename = format!("{}.txt", inode);
-        let file_id = self.get_file_id(&filename).unwrap_or_default();
-        let result = self.hub
-            .files()
-            .delete(&file_id)
-            .supports_team_drives(false)
-            .doit();
-
-        let result = self.hub.files().empty_trash().doit();
-    }
 }
-
 struct DummyFile {
     cursor: u64,
     data: Vec<u8>,
