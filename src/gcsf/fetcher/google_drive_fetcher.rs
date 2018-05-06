@@ -186,7 +186,7 @@ impl DataFetcher for GoogleDriveFetcher {
             }
             Err(e) => {
                 error!("Got error: {:?}", e);
-                Some(&[])
+                None
             }
         }
     }
