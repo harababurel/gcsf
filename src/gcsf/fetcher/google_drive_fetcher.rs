@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
 use super::DataFetcher;
+use super::lru_time_cache;
 
 type Inode = u64;
 
