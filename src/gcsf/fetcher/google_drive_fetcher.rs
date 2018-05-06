@@ -4,10 +4,10 @@ use hyper;
 use hyper_rustls;
 use oauth2;
 use serde_json;
-use std::io::{Read, Seek, SeekFrom};
-use std::io;
 use std::cmp;
 use std::collections::HashMap;
+use std::io::{Read, Seek, SeekFrom};
+use std::io;
 use super::DataFetcher;
 
 type Inode = u64;
@@ -150,33 +150,6 @@ impl GoogleDriveFetcher {
 
         self.pending_writes.remove(&inode);
     }
-    // fn ls(&self) -> Vec<drive3::File> {
-    //     let result = self.drive.files()
-    //     .list()
-    //     .spaces("drive")
-    //     .page_size(10)
-    //     // .order_by("folder,modifiedTime desc,name")
-    //     .corpora("user") // or "domain"
-    //     .doit();
-
-    //     match result {
-    //         Err(e) => {
-    //             println!("{:#?}", e);
-    //             vec![]
-    //         }
-    //         Ok(res) => res.1.files.unwrap().into_iter().collect(),
-    //     }
-    // }
-
-    // fn cat(&self, filename: &str) -> String {
-    //     let result = self.drive.files()
-    //     .list()
-    //     .spaces("drive")
-    //     .page_size(10)
-    //     // .order_by("folder,modifiedTime desc,name")
-    //     .corpora("user") // or "domain"
-    //     .doit();
-    // }
 }
 
 impl DataFetcher for GoogleDriveFetcher {

@@ -150,8 +150,6 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         size: u32,
         reply: ReplyData,
     ) {
-        // for some reason this breaks (error code 22) for large blocks (128KB instead of 4KB)
-        // TODO: find a solution
         reply.data(
             self.data_fetcher
                 .read(ino, offset as usize, size as usize)
