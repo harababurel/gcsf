@@ -6,6 +6,7 @@ use oauth2;
 use serde_json;
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
+use std::cmp;
 use std::collections::HashMap;
 use super::DataFetcher;
 
@@ -192,7 +193,7 @@ impl DataFetcher for GoogleDriveFetcher {
         let filename = format!("{}.txt", inode);
         match self.get_file_content(&filename) {
             Ok(data) => {
-                self.buff = data.to_vec();
+                self.buff = data[offset..cmp::min(data.len(), offset + size)].to_vec();
                 Some(&self.buff)
             }
             Err(e) => {
@@ -334,26 +335,5 @@ impl Read for DummyFile {
         Self: Sized,
     {
         self
-    }
-    fn bytes(self) -> io::Bytes<Self>
-    where
-        Self: Sized,
-    {
-        error!("infinite bytes()");
-        self.bytes()
-    }
-    fn chain<R: Read>(self, next: R) -> io::Chain<Self, R>
-    where
-        Self: Sized,
-    {
-        error!("infinite chain()");
-        self.chain(next)
-    }
-    fn take(self, limit: u64) -> io::Take<Self>
-    where
-        Self: Sized,
-    {
-        error!("infinite take()");
-        self.take(limit)
     }
 }
