@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
 use super::DataFetcher;
-use super::lru_time_cache;
+use super::lru_time_cache::LruCache;
 
 type Inode = u64;
 
@@ -25,6 +25,7 @@ pub struct GoogleDriveFetcher {
     hub: GCDrive,
     buff: Vec<u8>,
     pending_writes: HashMap<Inode, Vec<PendingWrite>>,
+    cache: LruCache<Inode, Vec<u8>>,
 }
 
 struct PendingWrite {
@@ -156,18 +157,30 @@ impl GoogleDriveFetcher {
 impl DataFetcher for GoogleDriveFetcher {
     fn new() -> GoogleDriveFetcher {
         debug!("GoogleDriveFetcher::new()");
+
+        let ttl = ::std::time::Duration::from_secs(10);
+        let max_count = 100;
+
         GoogleDriveFetcher {
             hub: GoogleDriveFetcher::create_drive().unwrap(),
             buff: Vec::new(),
             pending_writes: HashMap::new(),
+            cache: LruCache::<Inode, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
         }
     }
 
     fn read(&mut self, inode: Inode, offset: usize, size: usize) -> Option<&[u8]> {
+        if self.cache.contains_key(&inode) {
+            let data = self.cache.get(&inode).unwrap();
+            self.buff = data[offset..cmp::min(data.len(), offset + size)].to_vec();
+            return Some(&self.buff);
+        }
+
         let filename = format!("{}.txt", inode);
         match self.get_file_content(&filename) {
             Ok(data) => {
                 self.buff = data[offset..cmp::min(data.len(), offset + size)].to_vec();
+                self.cache.insert(inode, data.to_vec());
                 Some(&self.buff)
             }
             Err(e) => {
@@ -211,6 +224,8 @@ impl DataFetcher for GoogleDriveFetcher {
             info!("flush() called but there are no pending writes on inode={}. nothing to do, moving on...", inode);
             return;
         }
+
+        self.cache.remove(&inode);
 
         let existence = self.file_exists(&filename);
         // debug!("existence: {:?}", existence);
