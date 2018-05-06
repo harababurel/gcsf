@@ -158,7 +158,7 @@ impl DataFetcher for GoogleDriveFetcher {
     fn new() -> GoogleDriveFetcher {
         debug!("GoogleDriveFetcher::new()");
 
-        let ttl = ::std::time::Duration::from_secs(10);
+        let ttl = ::std::time::Duration::from_secs(5 * 60);
         let max_count = 100;
 
         GoogleDriveFetcher {
@@ -256,6 +256,7 @@ impl DataFetcher for GoogleDriveFetcher {
         }
     }
 }
+
 struct DummyFile {
     cursor: u64,
     data: Vec<u8>,
