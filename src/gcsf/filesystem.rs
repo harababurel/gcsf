@@ -1,5 +1,5 @@
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
-           ReplyEmpty, ReplyEntry, ReplyWrite, Request};
+           ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
 use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
@@ -10,6 +10,7 @@ use std::cmp;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt;
+use std;
 use time::Timespec;
 
 use super::File;
@@ -409,6 +410,22 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
     fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
         self.data_fetcher.flush(ino);
         reply.ok();
+    }
+
+    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+        let (size, capacity) = self.data_fetcher.size_and_capacity();
+        let capacity = capacity.unwrap_or(std::i64::MAX as u64);
+
+        reply.statfs(
+            /* blocks:*/ capacity,
+            /* bfree: */ capacity - size,
+            /* bavail: */ capacity - size,
+            /* files: */ std::u64::MAX,
+            /* ffree: */ std::u64::MAX - self.files.len() as u64,
+            /* bsize: */ 1,
+            /* namelen: */ 1024,
+            /* frsize: */ 1,
+        );
     }
 }
 

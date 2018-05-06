@@ -8,6 +8,7 @@ use std::cmp;
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
+use std;
 use super::DataFetcher;
 use super::lru_time_cache::LruCache;
 
@@ -254,6 +255,27 @@ impl DataFetcher for GoogleDriveFetcher {
             self.write(inode, 0, &file_data); // create a single pending write containing the final state of the file
             self.flush(inode); // flush that pending write on a freshly created file
         }
+    }
+
+    fn size_and_capacity(&mut self) -> (u64, Option<u64>) {
+        let result = self.hub
+            .about()
+            .get()
+            .param("fields", "storageQuota")
+            .doit();
+
+        if result.is_err() {
+            error!("{:#?}", result);
+            return (0, Some(0));
+        }
+
+        let about = result.unwrap().1;
+        let storage_quota = about.storage_quota.unwrap();
+
+        let usage = storage_quota.usage.unwrap().parse::<u64>().unwrap();
+        let limit = storage_quota.limit.map(|s| s.parse::<u64>().unwrap());
+
+        (usage, limit)
     }
 }
 

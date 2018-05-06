@@ -11,4 +11,8 @@ pub trait DataFetcher {
             inode
         );
     }
+    fn size_and_capacity(&mut self) -> (u64, Option<u64>) {
+        warn!("DataFetcher::size_and_capacity() called, but no trait implementation is provided");
+        (0, Some(0))
+    }
 }
