@@ -229,9 +229,14 @@ impl DataFetcher for GoogleDriveFetcher {
             .files()
             .delete(&file_id)
             .supports_team_drives(false)
+            .add_scope(drive3::Scope::Full)
             .doit();
 
-        let result = self.hub.files().empty_trash().doit();
+        let result = self.hub
+            .files()
+            .empty_trash()
+            .add_scope(drive3::Scope::Full)
+            .doit();
     }
 
     fn flush(&mut self, inode: Inode) {
@@ -278,6 +283,7 @@ impl DataFetcher for GoogleDriveFetcher {
             .about()
             .get()
             .param("fields", "storageQuota")
+            .add_scope(drive3::Scope::Full)
             .doit();
 
         if result.is_err() {
