@@ -282,6 +282,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
             rdev: file.attr.rdev,
             flags: flags.unwrap_or(file.attr.flags),
         };
+
         file.attr = new_attr;
         reply.attr(&TTL, &file.attr);
     }
@@ -316,7 +317,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
                 crtime: Timespec::new(1, 0),
-                perm: 0o644,
+                perm: 0o744,
                 nlink: 0,
                 uid: req.uid(),
                 gid: req.gid(),
