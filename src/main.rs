@@ -20,7 +20,7 @@ use std::time;
 use gcsf::{GoogleDriveFetcher, InMemoryFetcher, GCSF};
 
 fn mount_gcsf(mountpoint: &str) {
-    let options = ["-o", "fsname=GCSF"]
+    let options = ["-o", "fsname=GCSF", "-o", "allow_root"]
         .iter()
         .map(|o| o.as_ref())
         .collect::<Vec<&OsStr>>();
