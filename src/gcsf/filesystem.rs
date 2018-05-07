@@ -288,7 +288,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
 
     fn create(
         &mut self,
-        _req: &Request,
+        req: &Request,
         parent: Inode,
         name: &OsStr,
         _mode: u32,
@@ -318,8 +318,8 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
                 crtime: Timespec::new(1, 0),
                 perm: 0o644,
                 nlink: 0,
-                uid: 0,
-                gid: 0,
+                uid: req.uid(),
+                gid: req.gid(),
                 rdev: 0,
                 flags: 0,
             },
