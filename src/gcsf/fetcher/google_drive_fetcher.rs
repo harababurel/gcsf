@@ -41,7 +41,6 @@ impl GoogleDriveFetcher {
         use std::io::Read;
 
         let mut file = OpenOptions::new().read(true).open(file)?;
-
         let mut secret = String::new();
         file.read_to_string(&mut secret);
 
@@ -72,7 +71,7 @@ impl GoogleDriveFetcher {
             )),
             // <MemoryStorage as Default>::default(),
             oauth2::DiskTokenStorage::new(&String::from("/tmp/gcsf_token.json")).unwrap(),
-            Some(oauth2::FlowType::InstalledRedirect(8080)), // This is the main change!
+            Some(oauth2::FlowType::InstalledRedirect(8080)),
         );
 
         Ok(auth)
@@ -144,11 +143,7 @@ impl GoogleDriveFetcher {
                 let required_size = pending_write.offset + pending_write.data.len();
 
                 data.resize(required_size, 0);
-
-                // TODO: memcpy or similar
-                for i in pending_write.offset..pending_write.offset + pending_write.data.len() {
-                    data[i] = pending_write.data[i - pending_write.offset];
-                }
+                data[pending_write.offset..].copy_from_slice(&pending_write.data[..]);
             });
 
         self.pending_writes.remove(&inode);
@@ -168,6 +163,11 @@ impl DataFetcher for GoogleDriveFetcher {
             .param("fields", "user")
             .add_scope(drive3::Scope::Full)
             .doit();
+
+        // TODO: find a way to set "Accept-Encoding: gzip"
+        // https://developers.google.com/drive/v3/web/performance
+        let user_agent = hub.user_agent(String::new());
+        hub.user_agent(format!("{} (gzip)", user_agent));
 
         if result.is_ok() {
             let user_details = result.unwrap().1.user.unwrap();

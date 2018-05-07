@@ -1,5 +1,7 @@
 use std::cmp;
 use std::collections::HashMap;
+use std::mem;
+use std::ptr;
 use super::DataFetcher;
 
 type Inode = u64;
@@ -35,10 +37,7 @@ impl DataFetcher for InMemoryFetcher {
             file_data.shrink_to_fit();
         }
 
-        // TODO: memcpy or similar
-        for i in offset..offset + data.len() {
-            file_data[i] = data[i - offset];
-        }
+        file_data[offset..].copy_from_slice(&data[..]);
     }
 
     fn remove(&mut self, inode: Inode) {
