@@ -1,5 +1,5 @@
 use drive3;
-use failure::{err_msg, Error, ResultExt};
+use failure::{err_msg, Error};
 use hyper;
 use hyper_rustls;
 use oauth2;
@@ -8,7 +8,6 @@ use std::cmp;
 use std::collections::HashMap;
 use std::io::{Read, Seek, SeekFrom};
 use std::io;
-use std;
 use super::DataFetcher;
 use super::lru_time_cache::LruCache;
 
@@ -42,7 +41,7 @@ impl GoogleDriveFetcher {
 
         let mut file = OpenOptions::new().read(true).open(file)?;
         let mut secret = String::new();
-        file.read_to_string(&mut secret);
+        file.read_to_string(&mut secret)?;
 
         let app_secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(secret.as_str())?;
         app_secret
@@ -89,7 +88,7 @@ impl GoogleDriveFetcher {
 
     // Will still detect a file even if it is in Trash
     fn file_exists(&self, name: &str) -> drive3::Result<()> {
-        self.get_file_id(name).and_then(|id| Ok(()))
+        self.get_file_id(name).and_then(|_| Ok(()))
     }
 
     fn get_file_id(&self, name: &str) -> drive3::Result<String> {
@@ -118,7 +117,7 @@ impl GoogleDriveFetcher {
     fn get_file_content(&self, name: &str) -> drive3::Result<Vec<u8>> {
         let file_id = self.get_file_id(name)?;
 
-        let (mut response, empty_file) = self.hub
+        let (mut response, _empty_file) = self.hub
             .files()
             .get(&file_id)
             .supports_team_drives(false)
@@ -127,7 +126,7 @@ impl GoogleDriveFetcher {
             .doit()?;
 
         let mut content: Vec<u8> = Vec::new();
-        response.read_to_end(&mut content);
+        let _result = response.read_to_end(&mut content);
 
         Ok(content)
     }
@@ -225,14 +224,14 @@ impl DataFetcher for GoogleDriveFetcher {
     fn remove(&mut self, inode: Inode) {
         let filename = format!("{}.txt", inode);
         let file_id = self.get_file_id(&filename).unwrap_or_default();
-        let result = self.hub
+        let _result = self.hub
             .files()
             .delete(&file_id)
             .supports_team_drives(false)
             .add_scope(drive3::Scope::Full)
             .doit();
 
-        let result = self.hub
+        let _result = self.hub
             .files()
             .empty_trash()
             .add_scope(drive3::Scope::Full)
@@ -259,7 +258,7 @@ impl DataFetcher for GoogleDriveFetcher {
             let dummy_file = DummyFile::new(&data);
             let mut req = drive3::File::default();
             req.name = Some(inode.to_string() + ".txt");
-            let result = self.hub
+            let _result = self.hub
                 .files()
                 .create(req)
                 .use_content_as_indexable_text(true)
@@ -361,7 +360,7 @@ impl Read for DummyFile {
         self.cursor += written as u64;
         Ok(written)
     }
-    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
+    fn read_exact(&mut self, _buf: &mut [u8]) -> io::Result<()> {
         Ok(())
     }
     fn by_ref(&mut self) -> &mut Self

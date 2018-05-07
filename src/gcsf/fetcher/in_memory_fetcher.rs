@@ -1,7 +1,5 @@
 use std::cmp;
 use std::collections::HashMap;
-use std::mem;
-use std::ptr;
 use super::DataFetcher;
 
 type Inode = u64;

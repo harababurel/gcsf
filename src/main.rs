@@ -1,8 +1,3 @@
-#![allow(dead_code)]
-#![allow(unused_must_use)]
-#![allow(unused_mut)]
-#![allow(unreachable_code)]
-
 extern crate ctrlc;
 extern crate fuse;
 extern crate gcsf;
@@ -17,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time;
 
-use gcsf::{GoogleDriveFetcher, InMemoryFetcher, GCSF};
+use gcsf::{GoogleDriveFetcher, GCSF};
 
 fn mount_gcsf(mountpoint: &str) {
     let options = ["-o", "fsname=GCSF", "-o", "allow_root"]

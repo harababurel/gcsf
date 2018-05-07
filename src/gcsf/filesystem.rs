@@ -4,7 +4,7 @@ use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
 use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
-use libc::{EISDIR, ENOENT, ENOTDIR, ENOTEMPTY};
+use libc::{ENOENT, ENOTDIR, ENOTEMPTY};
 use std::clone::Clone;
 use std::cmp;
 use std::collections::HashMap;
@@ -14,7 +14,7 @@ use std;
 use time::Timespec;
 
 use super::File;
-use super::fetcher::{DataFetcher, GoogleDriveFetcher, InMemoryFetcher};
+use super::fetcher::DataFetcher;
 
 pub type Inode = u64;
 
@@ -74,7 +74,7 @@ impl<DF: DataFetcher> GCSF<DF> {
     fn get_file_with_id(&self, id: &NodeId) -> Option<&File> {
         match self.tree.get(id) {
             Ok(node) => self.files.get(node.data()),
-            Err(e) => None,
+            Err(_e) => None,
         }
     }
 
@@ -86,6 +86,7 @@ impl<DF: DataFetcher> GCSF<DF> {
         self.files.get_mut(&ino)
     }
 
+    #[allow(dead_code)]
     fn get_node(&self, ino: Inode) -> Result<&Node<Inode>, NodeIdError> {
         let node_id = self.ids.get(&ino).unwrap();
         self.tree.get(&node_id)
@@ -101,7 +102,7 @@ impl<DF: DataFetcher> GCSF<DF> {
 
     fn remove(&mut self, ino: Inode) -> Result<(), &str> {
         let id = self.get_node_id(ino).ok_or("NodeId not found")?.clone();
-        self.tree.remove_node(id, DropChildren);
+        let _result = self.tree.remove_node(id, DropChildren);
         self.files.remove(&ino);
         self.ids.remove(&ino);
         self.data_fetcher.remove(ino);
@@ -193,19 +194,10 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         match self.get_node_id(ino) {
             Some(wd_id) => {
                 let mut curr_offs = offset + 1;
-                let wd_file = self.get_file(ino).unwrap();
 
                 // https://github.com/libfuse/libfuse/blob/master/include/fuse_lowlevel.h#L693
                 // reply.add(ino, curr_offs, wd_file.attr.kind, ".");
                 // curr_offs += 1;
-
-                let wd_node = self.tree.get(wd_id).unwrap();
-                if wd_node.parent().is_some() {
-                    let parent_node = self.tree.get(wd_node.parent().unwrap()).unwrap();
-                    let parent_file = self.get_file(*parent_node.data()).unwrap();
-                    // reply.add(parent_file.inode(), curr_offs, parent_file.kind(), "..");
-                    // curr_offs += 1;
-                }
 
                 for child in self.tree.children(wd_id).unwrap().skip(offset as usize) {
                     let file = self.get_file(*child.data()).unwrap();
@@ -235,7 +227,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         let file_id = self.get_node_id(file_inode).unwrap().to_owned();
         let new_parent_id = self.get_node_id(new_parent).unwrap().to_owned();
 
-        self.tree.move_node(&file_id, ToParent(&new_parent_id));
+        let _result = self.tree.move_node(&file_id, ToParent(&new_parent_id));
         self.get_mut_file(file_inode).unwrap().name = new_name.to_str().unwrap().to_string();
 
         reply.ok()
@@ -341,7 +333,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
 
         match self.remove(ino) {
             Ok(()) => reply.ok(),
-            Err(e) => reply.error(ENOENT),
+            Err(_e) => reply.error(ENOENT),
         };
     }
 
@@ -404,7 +396,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
 
         match self.remove(ino) {
             Ok(()) => reply.ok(),
-            Err(e) => reply.error(ENOENT),
+            Err(_e) => reply.error(ENOENT),
         };
     }
 
@@ -432,8 +424,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
 
 impl<DF: DataFetcher> fmt::Debug for GCSF<DF> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use std::str;
-        write!(f, "GCSF(\n");
+        write!(f, "GCSF(\n")?;
 
         if self.tree.root_node_id().is_none() {
             return write!(f, ")\n");
@@ -444,16 +435,16 @@ impl<DF: DataFetcher> fmt::Debug for GCSF<DF> {
         while !stack.is_empty() {
             let (level, node_id) = stack.pop().unwrap();
 
-            (0..level).for_each(|_| {
-                write!(f, "\t");
-            });
+            for _ in 0..level {
+                write!(f, "\t")?;
+            }
 
             let file = self.get_file_with_id(node_id).unwrap();
             // let preview_string = str::from_utf8(
             //     self.data_fetcher.read(file.inode(), 0, 100).unwrap_or(&[]),
             // ).unwrap_or("binary file");
 
-            write!(f, "{:3} => {}\n", file.inode(), file.name,);
+            write!(f, "{:3} => {}\n", file.inode(), file.name)?;
 
             self.tree.children_ids(node_id).unwrap().for_each(|id| {
                 stack.push((level + 1, id));
