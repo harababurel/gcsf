@@ -3,6 +3,8 @@ use failure::{err_msg, Error};
 use hyper;
 use hyper_rustls;
 use oauth2;
+use rand::Rng;
+use rand;
 use serde_json;
 use std::cmp;
 use std::collections::HashMap;
@@ -22,9 +24,10 @@ type GCAuthenticator = oauth2::Authenticator<
 type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 
 pub struct GoogleDriveFetcher {
-    hub: GCDrive,
+    hubs: Vec<GCDrive>,
     buff: Vec<u8>,
     pending_writes: HashMap<Inode, Vec<PendingWrite>>,
+    file_location: HashMap<Inode, usize>,
     cache: LruCache<Inode, Vec<u8>>,
 }
 
@@ -49,7 +52,7 @@ impl GoogleDriveFetcher {
             .ok_or(err_msg("Option did not contain a value."))
     }
 
-    fn create_drive_auth() -> Result<GCAuthenticator, Error> {
+    fn create_drive_auth(name: &str) -> Result<GCAuthenticator, Error> {
         // Get an ApplicationSecret instance by some means. It contains the `client_id` and
         // `client_secret`, among other things.
         //
@@ -69,15 +72,15 @@ impl GoogleDriveFetcher {
                 hyper_rustls::TlsClient::new(),
             )),
             // <MemoryStorage as Default>::default(),
-            oauth2::DiskTokenStorage::new(&String::from("/tmp/gcsf_token.json")).unwrap(),
+            oauth2::DiskTokenStorage::new(&format!("/tmp/gcsf_token_{}.json", name)).unwrap(),
             Some(oauth2::FlowType::InstalledRedirect(8080)),
         );
 
         Ok(auth)
     }
 
-    fn create_drive() -> Result<GCDrive, Error> {
-        let auth = Self::create_drive_auth()?;
+    fn create_drive(name: &str) -> Result<GCDrive, Error> {
+        let auth = Self::create_drive_auth(name)?;
         Ok(drive3::Drive::new(
             hyper::Client::with_connector(hyper::net::HttpsConnector::new(
                 hyper_rustls::TlsClient::new(),
@@ -87,13 +90,20 @@ impl GoogleDriveFetcher {
     }
 
     // Will still detect a file even if it is in Trash
-    fn file_exists(&self, name: &str) -> drive3::Result<()> {
-        self.get_file_id(name).and_then(|_| Ok(()))
+    fn file_exists(&self, inode: Inode) -> drive3::Result<()> {
+        self.get_file_id(inode).and_then(|_| Ok(()))
     }
 
-    fn get_file_id(&self, name: &str) -> drive3::Result<String> {
-        let query = format!("name=\"{}\"", name);
-        let (search_response, file_list) = self.hub
+    fn get_file_id(&self, inode: Inode) -> drive3::Result<String> {
+        let hub = self.hub_containing_file(inode);
+        if hub.is_none() {
+            return Err(drive3::Error::FieldClash("file not found on any drive"));
+        }
+
+        let filename = format!("{}.txt", inode);
+        let query = format!("name=\"{}\"", filename);
+
+        let (search_response, file_list) = hub.unwrap()
             .files()
             .list()
             .spaces("drive")
@@ -114,10 +124,11 @@ impl GoogleDriveFetcher {
         ))
     }
 
-    fn get_file_content(&self, name: &str) -> drive3::Result<Vec<u8>> {
-        let file_id = self.get_file_id(name)?;
+    fn get_file_content(&self, inode: Inode) -> drive3::Result<Vec<u8>> {
+        let file_id = self.get_file_id(inode)?;
 
-        let (mut response, _empty_file) = self.hub
+        let (mut response, _empty_file) = self.hub_containing_file(inode)
+            .unwrap()
             .files()
             .get(&file_id)
             .supports_team_drives(false)
@@ -147,6 +158,24 @@ impl GoogleDriveFetcher {
 
         self.pending_writes.remove(&inode);
     }
+
+    fn hub_containing_file(&self, inode: Inode) -> Option<&GCDrive> {
+        self.file_location
+            .get(&inode)
+            .map(|&index| &self.hubs[index])
+    }
+
+    fn random_hub_index(&self) -> usize {
+        let mut rng = rand::thread_rng();
+        rng.gen_range(0, self.hubs.len())
+    }
+
+    fn random_hub(&self) -> (usize, &GCDrive) {
+        let mut rng = rand::thread_rng();
+        let index = rng.gen_range(0, self.hubs.len());
+
+        (index, &self.hubs[index])
+    }
 }
 
 impl DataFetcher for GoogleDriveFetcher {
@@ -155,32 +184,38 @@ impl DataFetcher for GoogleDriveFetcher {
 
         let ttl = ::std::time::Duration::from_secs(5 * 60);
         let max_count = 100;
-        let mut hub = GoogleDriveFetcher::create_drive().unwrap();
 
-        let result = hub.about()
-            .get()
-            .param("fields", "user")
-            .add_scope(drive3::Scope::Full)
-            .doit();
+        let mut hubs = Vec::new();
+        for hub_name in vec!["gcsf0001", "gcsf0002"] {
+            let mut hub = GoogleDriveFetcher::create_drive(hub_name).unwrap();
+            let result = hub.about()
+                .get()
+                .param("fields", "user")
+                .add_scope(drive3::Scope::Full)
+                .doit();
 
-        // TODO: find a way to set "Accept-Encoding: gzip"
-        // https://developers.google.com/drive/v3/web/performance
-        let user_agent = hub.user_agent(String::new());
-        hub.user_agent(format!("{} (gzip)", user_agent));
+            // TODO: find a way to set "Accept-Encoding: gzip"
+            // https://developers.google.com/drive/v3/web/performance
+            let user_agent = hub.user_agent(String::new());
+            hub.user_agent(format!("{} (gzip)", user_agent));
 
-        if result.is_ok() {
-            let user_details = result.unwrap().1.user.unwrap();
-            println!(
-                "Logged in as {} ({})",
-                user_details.display_name.unwrap(),
-                user_details.email_address.unwrap()
-            );
+            if result.is_ok() {
+                let user_details = result.unwrap().1.user.unwrap();
+                println!(
+                    "Logged in as {} ({})",
+                    user_details.display_name.unwrap(),
+                    user_details.email_address.unwrap()
+                );
+            }
+
+            hubs.push(hub);
         }
 
         GoogleDriveFetcher {
-            hub,
+            hubs,
             buff: Vec::new(),
             pending_writes: HashMap::new(),
+            file_location: HashMap::new(),
             cache: LruCache::<Inode, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
         }
     }
@@ -192,8 +227,8 @@ impl DataFetcher for GoogleDriveFetcher {
             return Some(&self.buff);
         }
 
-        let filename = format!("{}.txt", inode);
-        match self.get_file_content(&filename) {
+        // let filename = format!("{}.txt", inode);
+        match self.get_file_content(inode) {
             Ok(data) => {
                 self.buff = data[offset..cmp::min(data.len(), offset + size)].to_vec();
                 self.cache.insert(inode, data.to_vec());
@@ -222,25 +257,27 @@ impl DataFetcher for GoogleDriveFetcher {
     }
 
     fn remove(&mut self, inode: Inode) {
-        let filename = format!("{}.txt", inode);
-        let file_id = self.get_file_id(&filename).unwrap_or_default();
-        let _result = self.hub
-            .files()
+        // let filename = format!("{}.txt", inode);
+        let file_id = self.get_file_id(inode).unwrap_or_default();
+        let hub = self.hub_containing_file(inode);
+        if hub.is_none() {
+            return;
+        }
+        let hub = hub.unwrap();
+
+        let _result = hub.files()
             .delete(&file_id)
             .supports_team_drives(false)
             .add_scope(drive3::Scope::Full)
             .doit();
 
-        let _result = self.hub
-            .files()
+        let _result = hub.files()
             .empty_trash()
             .add_scope(drive3::Scope::Full)
             .doit();
     }
 
     fn flush(&mut self, inode: Inode) {
-        let filename = format!("{}.txt", inode);
-
         if !self.pending_writes.contains_key(&inode) {
             info!("flush() called but there are no pending writes on inode={}. nothing to do, moving on...", inode);
             return;
@@ -248,7 +285,7 @@ impl DataFetcher for GoogleDriveFetcher {
 
         self.cache.remove(&inode);
 
-        let existence = self.file_exists(&filename);
+        let existence = self.file_exists(inode);
         // debug!("existence: {:?}", existence);
 
         if existence.is_err() {
@@ -258,18 +295,22 @@ impl DataFetcher for GoogleDriveFetcher {
             let dummy_file = DummyFile::new(&data);
             let mut req = drive3::File::default();
             req.name = Some(inode.to_string() + ".txt");
-            let _result = self.hub
-                .files()
-                .create(req)
-                .use_content_as_indexable_text(true)
-                .supports_team_drives(false)
-                .ignore_default_visibility(true)
-                .upload_resumable(dummy_file, "text/plain".parse().unwrap());
 
+            let hub_index = self.random_hub_index();
+            {
+                let _result = self.hubs[hub_index]
+                    .files()
+                    .create(req)
+                    .use_content_as_indexable_text(true)
+                    .supports_team_drives(false)
+                    .ignore_default_visibility(true)
+                    .upload_resumable(dummy_file, "text/plain".parse().unwrap());
+            }
+            self.file_location.insert(inode, hub_index);
         // debug!("write result: {:#?}", result);
         } else {
             warn!("file already exists! should download + overwrite + upload");
-            let mut file_data = self.get_file_content(&filename).unwrap_or_default();
+            let mut file_data = self.get_file_content(inode).unwrap_or_default();
             self.apply_pending_writes_on_data(inode, &mut file_data);
             self.remove(inode); // delete the file from drive
             self.write(inode, 0, &file_data); // create a single pending write containing the final state of the file
@@ -278,25 +319,35 @@ impl DataFetcher for GoogleDriveFetcher {
     }
 
     fn size_and_capacity(&mut self) -> (u64, Option<u64>) {
-        let result = self.hub
-            .about()
-            .get()
-            .param("fields", "storageQuota")
-            .add_scope(drive3::Scope::Full)
-            .doit();
+        self.hubs
+            .iter()
+            .map(|hub| {
+                let result = hub.about()
+                    .get()
+                    .param("fields", "storageQuota")
+                    .add_scope(drive3::Scope::Full)
+                    .doit();
 
-        if result.is_err() {
-            error!("{:#?}", result);
-            return (0, Some(0));
-        }
+                if result.is_err() {
+                    error!("{:#?}", result);
+                    return (0, Some(0));
+                }
 
-        let about = result.unwrap().1;
-        let storage_quota = about.storage_quota.unwrap();
+                let about = result.unwrap().1;
+                let storage_quota = about.storage_quota.unwrap();
 
-        let usage = storage_quota.usage.unwrap().parse::<u64>().unwrap();
-        let limit = storage_quota.limit.map(|s| s.parse::<u64>().unwrap());
+                let usage = storage_quota.usage.unwrap().parse::<u64>().unwrap();
+                let limit = storage_quota.limit.map(|s| s.parse::<u64>().unwrap());
 
-        (usage, limit)
+                (usage, limit)
+            })
+            .fold((0, Some(0)), |(acc_usage, acc_limit), (usage, limit)| {
+                if acc_limit.is_none() || limit.is_none() {
+                    return (acc_usage + usage, None);
+                } else {
+                    return (acc_usage + usage, Some(acc_limit.unwrap() + limit.unwrap()));
+                }
+            })
     }
 }
 

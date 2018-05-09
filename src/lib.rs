@@ -10,6 +10,7 @@ extern crate log;
 #[macro_use]
 extern crate maplit;
 extern crate pretty_env_logger;
+extern crate rand;
 extern crate serde;
 extern crate serde_json;
 extern crate time;

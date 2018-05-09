@@ -20,6 +20,7 @@ serde_derive = "1.0.39"
 serde_json = "1.0.15"
 time = "0.1.39"
 yup-oauth2 = "1.0.7"
+rand = "0.4.2"
 
 # These versions required by google-drive3
 hyper = "0.10"
