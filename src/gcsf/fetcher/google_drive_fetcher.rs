@@ -1,3 +1,5 @@
+use super::DataFetcher;
+use super::lru_time_cache::LruCache;
 use drive3;
 use failure::{err_msg, Error};
 use hyper;
@@ -6,10 +8,8 @@ use oauth2;
 use serde_json;
 use std::cmp;
 use std::collections::HashMap;
-use std::io::{Read, Seek, SeekFrom};
 use std::io;
-use super::DataFetcher;
-use super::lru_time_cache::LruCache;
+use std::io::{Read, Seek, SeekFrom};
 
 type Inode = u64;
 
@@ -146,6 +146,47 @@ impl GoogleDriveFetcher {
             });
 
         self.pending_writes.remove(&inode);
+    }
+
+    pub fn get_all_files(&mut self) -> Vec<drive3::File> {
+        let mut all_files = Vec::new();
+
+        let mut page_token: Option<String> = None;
+        loop {
+            let mut request = self.hub.files()
+                .list()
+                .param("fields", "nextPageToken,files(name,id,size,mimeType,parents)")
+                .spaces("drive") // TODO: maybe add photos as well
+                .page_size(1000)
+                .corpora("user")
+                .q("'me' in owners")
+                .add_scope(drive3::Scope::Full);
+
+            if page_token.is_some() {
+                request = request.page_token(&page_token.unwrap());
+            }
+
+            let result = request.doit();
+            if result.is_err() {
+                error!("{:#?}", result);
+                break;
+            }
+
+            let filelist = result.unwrap().1;
+            match filelist.files {
+                Some(files) => {
+                    debug!("extended with {} files", files.len());
+                    all_files.extend(files);
+                }
+                _ => warn!("Filelist does not contain any files!"),
+            };
+
+            page_token = filelist.next_page_token;
+            if page_token.is_none() {
+                break;
+            }
+        }
+        return all_files;
     }
 }
 

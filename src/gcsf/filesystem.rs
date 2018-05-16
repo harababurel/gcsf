@@ -5,33 +5,88 @@ use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
 use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
 use libc::{ENOENT, ENOTDIR, ENOTEMPTY};
+use std;
 use std::clone::Clone;
 use std::cmp;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt;
-use std;
 use time::Timespec;
 
-use super::File;
-use super::fetcher::DataFetcher;
+use super::fetcher::{DataFetcher, GoogleDriveFetcher};
 
 pub type Inode = u64;
+pub type DriveId = String;
 
-pub struct GCSF<DF: DataFetcher> {
+pub struct GCSF {
     tree: Tree<Inode>,
-    files: HashMap<Inode, File>,
-    ids: HashMap<Inode, NodeId>,
-    data_fetcher: DF,
+    files: HashMap<Inode, super::File>,
+    node_ids: HashMap<Inode, NodeId>,
+    drive_ids: HashMap<DriveId, Inode>,
+    drive_fetcher: GoogleDriveFetcher,
 }
 
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
-impl<DF: DataFetcher> GCSF<DF> {
-    pub fn new() -> GCSF<DF> {
-        let mut tree = TreeBuilder::new().with_node_capacity(1).build();
+impl GCSF {
+    pub fn new() -> GCSF {
+        let mut tree = TreeBuilder::new().with_node_capacity(500).build();
 
-        let root = File {
+        let root = GCSF::new_root_file();
+        let root_inode = root.inode();
+        let root_id: NodeId = tree.insert(Node::new(root_inode), AsRoot).unwrap();
+
+        let mut files = hashmap!{root_inode => root};
+        let mut node_ids = hashmap!{root_inode => root_id.clone()};
+        let mut drive_ids = HashMap::new();
+        let mut drive_fetcher = GoogleDriveFetcher::new();
+
+        let mut inode = 2;
+        for drive_file in drive_fetcher.get_all_files() {
+            drive_ids.insert(drive_file.id.clone().unwrap(), inode);
+            files.insert(inode, super::File::from_drive_file(inode, drive_file));
+
+            let node_id: NodeId = tree.insert(Node::new(inode), UnderNode(&root_id)).unwrap();
+            node_ids.insert(inode, node_id);
+
+            inode += 1;
+        }
+
+        // Reshape the file tree
+        for file in files.values() {
+            if file.drive_file.is_none() {
+                debug!("Found gcsf::File with no drive3::File. Skipping");
+                continue;
+            }
+
+            let parents = file.drive_file.clone().unwrap().parents;
+
+            if parents.is_none() {
+                debug!("Found gcsf::File with no parents. Skipping");
+                continue;
+            }
+
+            let parents = parents.unwrap();
+
+            debug!("Finding inode for parent id = {}", &parents[0]);
+            let parent_inode = drive_ids.get(&parents[0]).unwrap_or(&1);
+            let parent_node_id = node_ids.get(&parent_inode).unwrap();
+            let file_node_id = node_ids.get(&file.inode()).unwrap();
+
+            tree.move_node(file_node_id, ToParent(parent_node_id));
+        }
+
+        GCSF {
+            tree,
+            files,
+            node_ids,
+            drive_ids,
+            drive_fetcher,
+        }
+    }
+
+    fn new_root_file() -> super::File {
+        super::File {
             name: String::from("."),
             attr: FileAttr {
                 ino: 1,
@@ -49,20 +104,11 @@ impl<DF: DataFetcher> GCSF<DF> {
                 rdev: 0,
                 flags: 0,
             },
-        };
-
-        let root_inode = root.inode();
-        let root_id: NodeId = tree.insert(Node::new(root.inode()), AsRoot).unwrap();
-
-        GCSF {
-            tree,
-            files: hashmap!{root_inode => root},
-            ids: hashmap!{root_inode => root_id},
-            data_fetcher: DF::new(),
+            drive_file: None,
         }
     }
 
-    fn get_file_from_parent(&self, parent: Inode, name: &OsStr) -> Option<&File> {
+    fn get_file_from_parent(&self, parent: Inode, name: &OsStr) -> Option<&super::File> {
         let name = name.to_str().unwrap();
         self.tree
             .children(self.get_node_id(parent)?)
@@ -71,29 +117,29 @@ impl<DF: DataFetcher> GCSF<DF> {
             .find(|file| file.name == name)
     }
 
-    fn get_file_with_id(&self, id: &NodeId) -> Option<&File> {
+    fn get_file_with_id(&self, id: &NodeId) -> Option<&super::File> {
         match self.tree.get(id) {
             Ok(node) => self.files.get(node.data()),
             Err(_e) => None,
         }
     }
 
-    fn get_file(&self, ino: Inode) -> Option<&File> {
+    fn get_file(&self, ino: Inode) -> Option<&super::File> {
         self.files.get(&ino)
     }
 
-    fn get_mut_file(&mut self, ino: Inode) -> Option<&mut File> {
+    fn get_mut_file(&mut self, ino: Inode) -> Option<&mut super::File> {
         self.files.get_mut(&ino)
     }
 
     #[allow(dead_code)]
     fn get_node(&self, ino: Inode) -> Result<&Node<Inode>, NodeIdError> {
-        let node_id = self.ids.get(&ino).unwrap();
+        let node_id = self.node_ids.get(&ino).unwrap();
         self.tree.get(&node_id)
     }
 
     fn get_node_id(&self, ino: Inode) -> Option<&NodeId> {
-        self.ids.get(&ino)
+        self.node_ids.get(&ino)
     }
 
     fn contains(&self, ino: &Inode) -> bool {
@@ -104,8 +150,8 @@ impl<DF: DataFetcher> GCSF<DF> {
         let id = self.get_node_id(ino).ok_or("NodeId not found")?.clone();
         let _result = self.tree.remove_node(id, DropChildren);
         self.files.remove(&ino);
-        self.ids.remove(&ino);
-        self.data_fetcher.remove(ino);
+        self.node_ids.remove(&ino);
+        self.drive_fetcher.remove(ino);
 
         Ok(())
     }
@@ -119,9 +165,9 @@ impl<DF: DataFetcher> GCSF<DF> {
     }
 }
 
-impl<DF: DataFetcher> Filesystem for GCSF<DF> {
+impl Filesystem for GCSF {
     fn lookup(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
-        debug!("{:?}", self);
+        // debug!("{:?}", self);
         match self.get_file_from_parent(parent, name) {
             Some(ref file) => {
                 reply.entry(&TTL, &file.attr, 0);
@@ -153,7 +199,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         reply: ReplyData,
     ) {
         reply.data(
-            self.data_fetcher
+            self.drive_fetcher
                 .read(ino, offset as usize, size as usize)
                 .unwrap_or(&[]),
         );
@@ -170,7 +216,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         reply: ReplyWrite,
     ) {
         let offset: usize = cmp::max(offset, 0) as usize;
-        self.data_fetcher.write(ino, offset, data);
+        self.drive_fetcher.write(ino, offset, data);
 
         match self.get_mut_file(ino) {
             Some(ref mut file) => {
@@ -298,7 +344,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         }
 
         let ino = self.next_available_inode();
-        let file = File {
+        let file = super::File {
             name: name.to_str().unwrap().to_string(),
             attr: FileAttr {
                 ino: ino,
@@ -316,6 +362,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
                 rdev: 0,
                 flags: 0,
             },
+            drive_file: None,
         };
 
         reply.created(&TTL, &file.attr, 0, 0, 0);
@@ -325,7 +372,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
             .insert(Node::new(ino), UnderNode(&parent_id))
             .unwrap();
         self.files.insert(ino, file);
-        self.ids.insert(ino, file_id.clone());
+        self.node_ids.insert(ino, file_id.clone());
     }
 
     fn unlink(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
@@ -355,7 +402,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
         }
 
         let ino = self.next_available_inode();
-        let dir = File {
+        let dir = super::File {
             name: name.to_str().unwrap().to_string(),
             attr: FileAttr {
                 ino: ino,
@@ -373,6 +420,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
                 rdev: 0,
                 flags: 0,
             },
+            drive_file: None,
         };
 
         reply.entry(&TTL, &dir.attr, 0);
@@ -382,7 +430,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
             .insert(Node::new(ino), UnderNode(&parent_id))
             .unwrap();
         self.files.insert(ino, dir);
-        self.ids.insert(ino, dir_id.clone());
+        self.node_ids.insert(ino, dir_id.clone());
     }
 
     fn rmdir(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
@@ -401,12 +449,12 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
     }
 
     fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
-        self.data_fetcher.flush(ino);
+        self.drive_fetcher.flush(ino);
         reply.ok();
     }
 
     fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
-        let (size, capacity) = self.data_fetcher.size_and_capacity();
+        let (size, capacity) = self.drive_fetcher.size_and_capacity();
         let capacity = capacity.unwrap_or(std::i64::MAX as u64);
 
         reply.statfs(
@@ -422,7 +470,7 @@ impl<DF: DataFetcher> Filesystem for GCSF<DF> {
     }
 }
 
-impl<DF: DataFetcher> fmt::Debug for GCSF<DF> {
+impl fmt::Debug for GCSF {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "GCSF(\n")?;
 
@@ -441,7 +489,7 @@ impl<DF: DataFetcher> fmt::Debug for GCSF<DF> {
 
             let file = self.get_file_with_id(node_id).unwrap();
             // let preview_string = str::from_utf8(
-            //     self.data_fetcher.read(file.inode(), 0, 100).unwrap_or(&[]),
+            //     self.drive_fetcher.read(file.inode(), 0, 100).unwrap_or(&[]),
             // ).unwrap_or("binary file");
 
             write!(f, "{:3} => {}\n", file.inode(), file.name)?;

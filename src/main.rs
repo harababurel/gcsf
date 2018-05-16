@@ -20,7 +20,7 @@ fn mount_gcsf(mountpoint: &str) {
         .map(|o| o.as_ref())
         .collect::<Vec<&OsStr>>();
 
-    let fs: GCSF<GoogleDriveFetcher> = GCSF::new();
+    let fs: GCSF = GCSF::new();
     unsafe {
         match fuse::spawn_mount(fs, &mountpoint, &options) {
             Ok(_session) => {
