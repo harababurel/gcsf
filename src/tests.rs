@@ -1,12 +1,12 @@
-use id_tree::InsertBehavior::*;
-use id_tree::MoveBehavior::*;
-use id_tree::RemoveBehavior::*;
-use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyWrite, Request};
 use gcsf::File;
 use gcsf::fetcher::{DataFetcher, GoogleDriveFetcher, InMemoryFetcher};
 use gcsf::filesystem::GCSF;
+use id_tree::InsertBehavior::*;
+use id_tree::MoveBehavior::*;
+use id_tree::RemoveBehavior::*;
+use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
 use time::Timespec;
 
 type Inode = u64;

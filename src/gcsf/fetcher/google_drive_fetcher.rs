@@ -148,22 +148,26 @@ impl GoogleDriveFetcher {
         self.pending_writes.remove(&inode);
     }
 
-    pub fn get_all_files(&mut self) -> Vec<drive3::File> {
+    pub fn get_all_files(&mut self, parent_id: Option<&str>) -> Vec<drive3::File> {
         let mut all_files = Vec::new();
 
         let mut page_token: Option<String> = None;
         loop {
             let mut request = self.hub.files()
                 .list()
-                .param("fields", "nextPageToken,files(name,id,size,mimeType,parents)")
+                .param("fields", "nextPageToken,files(name,id,size,mimeType,owners,parents)")
                 .spaces("drive") // TODO: maybe add photos as well
-                .page_size(1000)
                 .corpora("user")
-                .q("'me' in owners")
+                .page_size(1000)
                 .add_scope(drive3::Scope::Full);
+            // .q("'me' in owners")
 
             if page_token.is_some() {
                 request = request.page_token(&page_token.unwrap());
+            }
+
+            if parent_id.is_some() {
+                request = request.q(&format!("'{}' in parents", parent_id.unwrap()));
             }
 
             let result = request.doit();

@@ -1,6 +1,6 @@
+use super::DataFetcher;
 use std::cmp;
 use std::collections::HashMap;
-use super::DataFetcher;
 
 type Inode = u64;
 

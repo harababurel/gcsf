@@ -41,11 +41,31 @@ impl File {
             flags: 0,
         };
 
+        let filename = drive_file
+            .name
+            .clone()
+            .unwrap()
+            .chars()
+            .filter(|c| File::is_posix(c))
+            .collect::<String>();
+        let owners: Vec<String> = drive_file
+            .owners
+            .clone()
+            .unwrap()
+            .into_iter()
+            .map(|owner| owner.email_address.unwrap())
+            .collect();
+
         File {
-            name: drive_file.name.clone().unwrap(),
+            name: format!("{} ({})", filename, owners.join(", ")),
             attr,
             drive_file: Some(drive_file),
         }
+    }
+
+    pub fn is_posix(c: &char) -> bool {
+        (&'a' <= c && c <= &'z') || (&'A' <= c && c <= &'Z') || (&'0' <= c && c <= &'9')
+            || c == &'.' || c == &'_' || c == &'-' || c == &' '
     }
 
     pub fn inode(&self) -> Inode {

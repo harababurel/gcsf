@@ -36,13 +36,25 @@ impl GCSF {
         let root_inode = root.inode();
         let root_id: NodeId = tree.insert(Node::new(root_inode), AsRoot).unwrap();
 
-        let mut files = hashmap!{root_inode => root};
-        let mut node_ids = hashmap!{root_inode => root_id.clone()};
+        let shared = GCSF::new_shared_with_me_file();
+        let shared_inode = shared.inode();
+        let shared_id: NodeId = tree.insert(Node::new(shared_inode), UnderNode(&root_id))
+            .unwrap();
+
+        let mut files = hashmap!{root_inode => root, shared_inode => shared};
+        let mut node_ids =
+            hashmap!{root_inode => root_id.clone(), shared_inode => shared_id.clone()};
         let mut drive_ids = HashMap::new();
         let mut drive_fetcher = GoogleDriveFetcher::new();
 
-        let mut inode = 2;
-        for drive_file in drive_fetcher.get_all_files() {
+        let mut inode = 3;
+        for drive_file in drive_fetcher.get_all_files(Some("root")) {
+            {
+                let parents = drive_file.parents.clone().unwrap();
+                let root_drive_id = parents[0].to_owned();
+                drive_ids.insert(root_drive_id, inode);
+            }
+
             drive_ids.insert(drive_file.id.clone().unwrap(), inode);
             files.insert(inode, super::File::from_drive_file(inode, drive_file));
 
@@ -53,28 +65,33 @@ impl GCSF {
         }
 
         // Reshape the file tree
-        for file in files.values() {
-            if file.drive_file.is_none() {
-                debug!("Found gcsf::File with no drive3::File. Skipping");
-                continue;
-            }
+        // for file in files.values() {
+        //     if file.drive_file.is_none() {
+        //         debug!("Found gcsf::File with no drive3::File. Skipping");
+        //         continue;
+        //     }
 
-            let parents = file.drive_file.clone().unwrap().parents;
+        //     let parents = file.drive_file.clone().unwrap().parents;
 
-            if parents.is_none() {
-                debug!("Found gcsf::File with no parents. Skipping");
-                continue;
-            }
+        //     let mut parent_inode: Inode = 1;
+        //     if parents.is_some() {
+        //         let parents = parents.unwrap();
+        //         // debug!("Finding inode for parent id = {}", &parents[0]);
+        //         parent_inode = match drive_ids.get(&parents[0]) {
+        //             Some(inode) => *inode,
+        //             _ => 2,
+        //         };
+        //     }
 
-            let parents = parents.unwrap();
+        // debug!(
+        //     "Found gcsf::File with no parents: {:?}. Adding to Shared with me dir",
+        //     file.drive_file.as_ref().unwrap().name
+        // );
 
-            debug!("Finding inode for parent id = {}", &parents[0]);
-            let parent_inode = drive_ids.get(&parents[0]).unwrap_or(&1);
-            let parent_node_id = node_ids.get(&parent_inode).unwrap();
-            let file_node_id = node_ids.get(&file.inode()).unwrap();
-
-            tree.move_node(file_node_id, ToParent(parent_node_id));
-        }
+        // let parent_node_id = node_ids.get(&parent_inode).unwrap();
+        // let file_node_id = node_ids.get(&file.inode()).unwrap();
+        // tree.move_node(file_node_id, ToParent(parent_node_id));
+        // }
 
         GCSF {
             tree,
@@ -90,6 +107,28 @@ impl GCSF {
             name: String::from("."),
             attr: FileAttr {
                 ino: 1,
+                size: 0,
+                blocks: 123,
+                atime: Timespec { sec: 0, nsec: 0 },
+                mtime: Timespec { sec: 0, nsec: 0 },
+                ctime: Timespec { sec: 0, nsec: 0 },
+                crtime: Timespec { sec: 0, nsec: 0 },
+                kind: FileType::Directory,
+                perm: 0o755,
+                nlink: 2,
+                uid: 0,
+                gid: 0,
+                rdev: 0,
+                flags: 0,
+            },
+            drive_file: None,
+        }
+    }
+    fn new_shared_with_me_file() -> super::File {
+        super::File {
+            name: String::from("Shared with me"),
+            attr: FileAttr {
+                ino: 2,
                 size: 0,
                 blocks: 123,
                 atime: Timespec { sec: 0, nsec: 0 },
