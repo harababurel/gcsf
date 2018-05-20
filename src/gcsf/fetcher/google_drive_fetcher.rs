@@ -148,6 +148,25 @@ impl GoogleDriveFetcher {
         self.pending_writes.remove(&inode);
     }
 
+    // The drive3::File id of the root "My Drive" directory
+    pub fn root_id(&mut self) -> String {
+        let result = self.hub
+            .files()
+            .list()
+            .param("fields", "files(parents)")
+            .spaces("drive")
+            .corpora("user")
+            .page_size(1)
+            .q("'root' in parents")
+            .add_scope(drive3::Scope::Full)
+            .doit();
+
+        let file = result.unwrap().1.files.unwrap()[0].clone();
+        let parents = file.parents.unwrap();
+
+        parents[0].clone()
+    }
+
     pub fn get_all_files(&mut self, parent_id: Option<&str>) -> Vec<drive3::File> {
         let mut all_files = Vec::new();
 

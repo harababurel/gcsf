@@ -8,7 +8,7 @@ use libc::{ENOENT, ENOTDIR, ENOTEMPTY};
 use std;
 use std::clone::Clone;
 use std::cmp;
-use std::collections::HashMap;
+use std::collections::{HashMap, LinkedList};
 use std::ffi::OsStr;
 use std::fmt;
 use time::Timespec;
@@ -48,20 +48,34 @@ impl GCSF {
         let mut drive_fetcher = GoogleDriveFetcher::new();
 
         let mut inode = 3;
-        for drive_file in drive_fetcher.get_all_files(Some("root")) {
-            {
-                let parents = drive_file.parents.clone().unwrap();
-                let root_drive_id = parents[0].to_owned();
-                drive_ids.insert(root_drive_id, inode);
+        let mut q: LinkedList<String> = LinkedList::new();
+        q.push_back(drive_fetcher.root_id());
+
+        while !q.is_empty() {
+            let parent_id = q.pop_front().unwrap();
+
+            for drive_file in drive_fetcher.get_all_files(Some(&parent_id)) {
+                let id = drive_file.id.clone().unwrap();
+
+                drive_ids.insert(id.clone(), inode);
+
+                let file = super::File::from_drive_file(inode, drive_file);
+                if file.kind() == FileType::Directory {
+                    q.push_back(id);
+                }
+                files.insert(inode, file);
+
+
+                let parent_inode = match drive_ids.get(&parent_id) {
+                    Some(inode) => *inode,
+                    _ => 1,
+                };
+                let parent_node_id = node_ids.get(&parent_inode).unwrap().clone();
+                let node_id: NodeId = tree.insert(Node::new(inode), UnderNode(&parent_node_id)).unwrap();
+                node_ids.insert(inode, node_id);
+
+                inode += 1;
             }
-
-            drive_ids.insert(drive_file.id.clone().unwrap(), inode);
-            files.insert(inode, super::File::from_drive_file(inode, drive_file));
-
-            let node_id: NodeId = tree.insert(Node::new(inode), UnderNode(&root_id)).unwrap();
-            node_ids.insert(inode, node_id);
-
-            inode += 1;
         }
 
         // Reshape the file tree
