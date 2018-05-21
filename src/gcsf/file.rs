@@ -82,4 +82,12 @@ impl File {
     pub fn kind(&self) -> FileType {
         self.attr.kind
     }
+
+    pub fn drive_id(&self) -> Option<String> {
+        if self.drive_file.is_none() {
+            return None;
+        }
+
+        self.drive_file.as_ref().unwrap().id.clone()
+    }
 }

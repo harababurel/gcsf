@@ -259,9 +259,11 @@ impl Filesystem for GCSF {
         size: u32,
         reply: ReplyData,
     ) {
+        let drive_id = self.get_file(ino).unwrap().drive_id().unwrap();
+
         reply.data(
             self.drive_fetcher
-                .read(ino, offset as usize, size as usize)
+                .read(&drive_id, offset as usize, size as usize)
                 .unwrap_or(&[]),
         );
     }
@@ -510,7 +512,8 @@ impl Filesystem for GCSF {
     }
 
     fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
-        self.drive_fetcher.flush(ino);
+        //TODO: uncomment this
+        // self.drive_fetcher.flush(ino);
         reply.ok();
     }
 

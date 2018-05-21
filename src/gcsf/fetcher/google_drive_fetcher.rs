@@ -1,9 +1,9 @@
 use super::DataFetcher;
-use lru_time_cache::LruCache;
 use drive3;
 use failure::{err_msg, Error};
 use hyper;
 use hyper_rustls;
+use lru_time_cache::LruCache;
 use oauth2;
 use serde_json;
 use std::cmp;
@@ -25,7 +25,7 @@ pub struct GoogleDriveFetcher {
     hub: GCDrive,
     buff: Vec<u8>,
     pending_writes: HashMap<Inode, Vec<PendingWrite>>,
-    cache: LruCache<Inode, Vec<u8>>,
+    cache: LruCache<String, Vec<u8>>,
 }
 
 struct PendingWrite {
@@ -87,8 +87,25 @@ impl GoogleDriveFetcher {
     }
 
     // Will still detect a file even if it is in Trash
-    fn file_exists(&self, name: &str) -> drive3::Result<()> {
-        self.get_file_id(name).and_then(|_| Ok(()))
+    fn file_exists(&self, drive_id: &str) -> drive3::Result<()> {
+        // self.get_file_id(name).and_then(|_| Ok(()))
+        let query = format!("id=\"{}\"", drive_id);
+        let (search_response, file_list) = self.hub
+            .files()
+            .list()
+            .spaces("drive")
+            .corpora("user")
+            .q(&query)
+            .page_size(1)
+            .add_scope(drive3::Scope::Full)
+            .doit()?;
+
+
+         match file_list.files.map(|files| !files.is_empty()){
+             Some(true) => Ok(()),
+             _ => Err(drive3::Error::FieldClash("no such file")),
+         }
+
     }
 
     fn get_file_id(&self, name: &str) -> drive3::Result<String> {
@@ -114,12 +131,12 @@ impl GoogleDriveFetcher {
         ))
     }
 
-    fn get_file_content(&self, name: &str) -> drive3::Result<Vec<u8>> {
-        let file_id = self.get_file_id(name)?;
+    fn get_file_content(&self, drive_id: &str) -> drive3::Result<Vec<u8>> {
+        // let file_id = self.get_file_id(name)?;
 
         let (mut response, _empty_file) = self.hub
             .files()
-            .get(&file_id)
+            .get(&drive_id)
             .supports_team_drives(false)
             .param("alt", "media")
             .add_scope(drive3::Scope::Full)
@@ -245,22 +262,22 @@ impl DataFetcher for GoogleDriveFetcher {
             hub,
             buff: Vec::new(),
             pending_writes: HashMap::new(),
-            cache: LruCache::<Inode, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
+            cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
         }
     }
 
-    fn read(&mut self, inode: Inode, offset: usize, size: usize) -> Option<&[u8]> {
-        if self.cache.contains_key(&inode) {
-            let data = self.cache.get(&inode).unwrap();
+    fn read(&mut self, drive_id: &str, offset: usize, size: usize) -> Option<&[u8]> {
+        if self.cache.contains_key(drive_id) {
+            let data = self.cache.get(drive_id).unwrap();
             self.buff = data[offset..cmp::min(data.len(), offset + size)].to_vec();
             return Some(&self.buff);
         }
 
-        let filename = format!("{}.txt", inode);
-        match self.get_file_content(&filename) {
+        // let filename = format!("{}.txt", inode);
+        match self.get_file_content(&drive_id) {
             Ok(data) => {
                 self.buff = data[offset..cmp::min(data.len(), offset + size)].to_vec();
-                self.cache.insert(inode, data.to_vec());
+                self.cache.insert(drive_id.to_string(), data.to_vec());
                 Some(&self.buff)
             }
             Err(e) => {
@@ -302,43 +319,44 @@ impl DataFetcher for GoogleDriveFetcher {
             .doit();
     }
 
-    fn flush(&mut self, inode: Inode) {
-        let filename = format!("{}.txt", inode);
+    fn flush(&mut self, drive_id: &str) {
 
-        if !self.pending_writes.contains_key(&inode) {
-            info!("flush() called but there are no pending writes on inode={}. nothing to do, moving on...", inode);
-            return;
-        }
+//         // let filename = format!("{}.txt", inode);
 
-        self.cache.remove(&inode);
+//         if !self.pending_writes.contains_key(drive_id) {
+//             info!("flush() called but there are no pending writes on drive_id={}. nothing to do, moving on...", drive_id);
+//             return;
+//         }
 
-        let existence = self.file_exists(&filename);
-        // debug!("existence: {:?}", existence);
+//         self.cache.remove(drive_id);
 
-        if existence.is_err() {
-            let mut data: Vec<u8> = Vec::new();
-            self.apply_pending_writes_on_data(inode, &mut data);
+//         let existence = self.file_exists(drive_id);
+//         // debug!("existence: {:?}", existence);
 
-            let dummy_file = DummyFile::new(&data);
-            let mut req = drive3::File::default();
-            req.name = Some(inode.to_string() + ".txt");
-            let _result = self.hub
-                .files()
-                .create(req)
-                .use_content_as_indexable_text(true)
-                .supports_team_drives(false)
-                .ignore_default_visibility(true)
-                .upload_resumable(dummy_file, "text/plain".parse().unwrap());
+//         if existence.is_err() {
+//             let mut data: Vec<u8> = Vec::new();
+//             self.apply_pending_writes_on_data(drive_id, &mut data);
 
-        // debug!("write result: {:#?}", result);
-        } else {
-            warn!("file already exists! should download + overwrite + upload");
-            let mut file_data = self.get_file_content(&filename).unwrap_or_default();
-            self.apply_pending_writes_on_data(inode, &mut file_data);
-            self.remove(inode); // delete the file from drive
-            self.write(inode, 0, &file_data); // create a single pending write containing the final state of the file
-            self.flush(inode); // flush that pending write on a freshly created file
-        }
+//             let dummy_file = DummyFile::new(&data);
+//             let mut req = drive3::File::default();
+//             req.id = Some(inode.to_string() + ".txt");
+//             let _result = self.hub
+//                 .files()
+//                 .create(req)
+//                 .use_content_as_indexable_text(true)
+//                 .supports_team_drives(false)
+//                 .ignore_default_visibility(true)
+//                 .upload_resumable(dummy_file, "text/plain".parse().unwrap());
+
+//         // debug!("write result: {:#?}", result);
+//         } else {
+//             warn!("file already exists! should download + overwrite + upload");
+//             let mut file_data = self.get_file_content(&filename).unwrap_or_default();
+//             self.apply_pending_writes_on_data(inode, &mut file_data);
+//             self.remove(inode); // delete the file from drive
+//             self.write(inode, 0, &file_data); // create a single pending write containing the final state of the file
+//             self.flush(inode); // flush that pending write on a freshly created file
+//         }
     }
 
     fn size_and_capacity(&mut self) -> (u64, Option<u64>) {
