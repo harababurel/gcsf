@@ -1,5 +1,5 @@
 use super::DataFetcher;
-use super::lru_time_cache::LruCache;
+use lru_time_cache::LruCache;
 use drive3;
 use failure::{err_msg, Error};
 use hyper;

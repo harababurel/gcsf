@@ -14,6 +14,7 @@ use std::fmt;
 use time::Timespec;
 
 use super::fetcher::{DataFetcher, GoogleDriveFetcher};
+use lru_time_cache::LruCache;
 
 pub type Inode = u64;
 pub type DriveId = String;
@@ -24,6 +25,8 @@ pub struct GCSF {
     node_ids: HashMap<Inode, NodeId>,
     drive_ids: HashMap<DriveId, Inode>,
     drive_fetcher: GoogleDriveFetcher,
+
+    statfs_cache: LruCache<String, u64>,
 }
 
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
@@ -65,13 +68,13 @@ impl GCSF {
                 }
                 files.insert(inode, file);
 
-
                 let parent_inode = match drive_ids.get(&parent_id) {
                     Some(inode) => *inode,
                     _ => 1,
                 };
                 let parent_node_id = node_ids.get(&parent_inode).unwrap().clone();
-                let node_id: NodeId = tree.insert(Node::new(inode), UnderNode(&parent_node_id)).unwrap();
+                let node_id: NodeId = tree.insert(Node::new(inode), UnderNode(&parent_node_id))
+                    .unwrap();
                 node_ids.insert(inode, node_id);
 
                 inode += 1;
@@ -113,6 +116,10 @@ impl GCSF {
             node_ids,
             drive_ids,
             drive_fetcher,
+            statfs_cache: LruCache::<String, u64>::with_expiry_duration_and_capacity(
+                std::time::Duration::from_secs(5),
+                2,
+            ),
         }
     }
 
@@ -507,8 +514,15 @@ impl Filesystem for GCSF {
     }
 
     fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
-        let (size, capacity) = self.drive_fetcher.size_and_capacity();
-        let capacity = capacity.unwrap_or(std::i64::MAX as u64);
+        if !self.statfs_cache.contains_key("size") || !self.statfs_cache.contains_key("capacity") {
+            let (size, capacity) = self.drive_fetcher.size_and_capacity();
+            let capacity = capacity.unwrap_or(std::i64::MAX as u64);
+            self.statfs_cache.insert("size".to_string(), size);
+            self.statfs_cache.insert("capacity".to_string(), capacity);
+        }
+
+        let size = self.statfs_cache.get("size").unwrap().to_owned();
+        let capacity = self.statfs_cache.get("capacity").unwrap().to_owned();
 
         reply.statfs(
             /* blocks:*/ capacity,

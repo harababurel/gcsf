@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time;
 
-use gcsf::{GoogleDriveFetcher, GCSF};
+use gcsf::GCSF;
 
 fn mount_gcsf(mountpoint: &str) {
     let options = ["-o", "fsname=GCSF", "-o", "allow_root"]

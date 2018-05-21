@@ -9,6 +9,7 @@ extern crate libc;
 extern crate log;
 #[macro_use]
 extern crate maplit;
+extern crate lru_time_cache;
 extern crate pretty_env_logger;
 extern crate serde;
 extern crate serde_json;
