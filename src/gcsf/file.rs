@@ -1,14 +1,23 @@
 use drive3;
 use fuse::{FileAttr, FileType};
+use id_tree::NodeId;
 use time::Timespec;
 
 type Inode = u64;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct File {
     pub name: String,
     pub attr: FileAttr,
     pub drive_file: Option<drive3::File>,
+}
+
+#[derive(Debug)]
+pub enum FileId {
+    Inode(Inode),
+    DriveId(String),
+    NodeId(NodeId),
+    ParentAndName { parent: Inode, name: String },
 }
 
 impl File {
