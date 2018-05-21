@@ -51,13 +51,18 @@ impl GCSF {
             let parent_id = queue.pop_front().unwrap();
 
             for drive_file in drive_fetcher.get_all_files(Some(&parent_id)) {
-                let file = File::from_drive_file(inode, drive_file);
+                let mut file = File::from_drive_file(inode, drive_file);
 
                 if file.kind() == FileType::Directory {
                     queue.push_back(file.drive_id().unwrap());
                 }
 
-                warn!("Parent ID is {:?}", FileId::DriveId(parent_id.clone()));
+                // TODO: this makes everything slow; find a better solution
+                if file.is_drive_document() {
+                    let size = drive_fetcher
+                        .get_file_size(file.drive_id().as_ref().unwrap(), file.mime_type());
+                    file.attr.size = size;
+                }
 
                 if manager.contains(FileId::DriveId(parent_id.clone())) {
                     manager.add_file(file, Some(FileId::DriveId(parent_id.clone())));
@@ -217,11 +222,19 @@ impl Filesystem for GCSF {
         size: u32,
         reply: ReplyData,
     ) {
-        match self.manager.get_drive_id(FileId::Inode(ino)) {
-            Some(drive_id) => {
+        match self.manager.get_file(FileId::Inode(ino)) {
+            Some(file) => {
+                let mime_type = file.drive_file.clone().and_then(|file| file.mime_type);
+                info!("mime_type: {:?}", &mime_type);
+
                 reply.data(
                     self.drive_fetcher
-                        .read(&drive_id, offset as usize, size as usize)
+                        .read(
+                            &file.drive_id().unwrap(),
+                            mime_type,
+                            offset as usize,
+                            size as usize,
+                        )
                         .unwrap_or(&[]),
                 );
             }

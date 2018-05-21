@@ -15,6 +15,8 @@ extern crate serde;
 extern crate serde_json;
 extern crate time;
 extern crate yup_oauth2 as oauth2;
+#[macro_use]
+extern crate lazy_static;
 
 mod gcsf;
 

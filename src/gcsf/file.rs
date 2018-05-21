@@ -1,6 +1,7 @@
 use drive3;
 use fuse::{FileAttr, FileType};
 use id_tree::NodeId;
+use std::collections::HashMap;
 use time::Timespec;
 
 type Inode = u64;
@@ -20,13 +21,21 @@ pub enum FileId {
     ParentAndName { parent: Inode, name: String },
 }
 
+lazy_static! {
+    static ref EXTENSIONS: HashMap<&'static str, &'static str> = hashmap!{
+            "application/vnd.google-apps.document" => ".docx",
+            "application/vnd.google-apps.presentation" => ".pptx",
+            "application/vnd.google-apps.spreadsheet" => ".xlsx",
+    };
+}
+
 impl File {
     pub fn from_drive_file(inode: Inode, drive_file: drive3::File) -> Self {
         let size = drive_file
             .size
             .clone()
             .map(|size| size.parse::<u64>().unwrap_or_default())
-            .unwrap_or(0);
+            .unwrap_or(10 * 1024 * 1024);
 
         let attr = FileAttr {
             ino: inode,
@@ -50,13 +59,7 @@ impl File {
             flags: 0,
         };
 
-        let filename = drive_file
-            .name
-            .clone()
-            .unwrap()
-            .chars()
-            .filter(|c| File::is_posix(c))
-            .collect::<String>();
+        let mut filename = drive_file.name.clone().unwrap();
         let owners: Vec<String> = drive_file
             .owners
             .clone()
@@ -65,9 +68,20 @@ impl File {
             .map(|owner| owner.email_address.unwrap())
             .collect();
 
+        let ext = drive_file
+            .mime_type
+            .clone()
+            .and_then(|t| EXTENSIONS.get::<str>(&t));
+        if ext.is_some() {
+            filename = format!("{}{}", filename, ext.unwrap());
+        }
+
         File {
             // name: format!("{} ({})", filename, owners.join(", ")),
-            name: filename,
+            name: filename
+                .chars()
+                .filter(|c| File::is_posix(c))
+                .collect::<String>(),
             attr,
             drive_file: Some(drive_file),
         }
@@ -84,6 +98,13 @@ impl File {
         //     || c == &'.' || c == &'_' || c == &'-' || c == &' '
     }
 
+    pub fn is_drive_document(&self) -> bool {
+        self.drive_file
+            .as_ref()
+            .and_then(|f| f.mime_type.clone())
+            .map(|t| EXTENSIONS.contains_key::<str>(&t)) == Some(true)
+    }
+
     pub fn inode(&self) -> Inode {
         self.attr.ino
     }
@@ -98,5 +119,13 @@ impl File {
         }
 
         self.drive_file.as_ref().unwrap().id.clone()
+    }
+
+    pub fn mime_type(&self) -> Option<String> {
+        if self.drive_file.is_none() {
+            return None;
+        }
+
+        self.drive_file.as_ref().unwrap().mime_type.clone()
     }
 }

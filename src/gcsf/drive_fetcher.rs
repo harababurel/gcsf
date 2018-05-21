@@ -33,6 +33,14 @@ struct PendingWrite {
     data: Vec<u8>,
 }
 
+lazy_static! {
+    static ref MIME_TYPES: HashMap<&'static str, &'static str> = hashmap!{
+        "application/vnd.google-apps.document" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.google-apps.presentation" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.google-apps.spreadsheet" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    };
+}
+
 impl GoogleDriveFetcher {
     fn read_client_secret(file: &str) -> Result<oauth2::ApplicationSecret, Error> {
         use std::fs::OpenOptions;
@@ -128,22 +136,55 @@ impl GoogleDriveFetcher {
         ))
     }
 
-    fn get_file_content(&self, drive_id: &str) -> drive3::Result<Vec<u8>> {
-        // let file_id = self.get_file_id(name)?;
+    pub fn get_file_size(&self, drive_id: &str, mime_type: Option<String>) -> u64 {
+        self.get_file_content(drive_id, mime_type).unwrap().len() as u64
+    }
 
-        let (mut response, _empty_file) = self.hub
-            .files()
-            .get(&drive_id)
-            .supports_team_drives(false)
-            .param("alt", "media")
-            .add_scope(drive3::Scope::Full)
-            .doit()?;
+    fn get_file_content(
+        &self,
+        drive_id: &str,
+        mime_type: Option<String>,
+    ) -> drive3::Result<Vec<u8>> {
+        let export_type: Option<&'static str> = mime_type
+            .and_then(|ref t| MIME_TYPES.get::<str>(&t))
+            .cloned();
+
+        let mut response = match export_type {
+            Some(t) => {
+                let mut response = self.hub
+                    .files()
+                    .export(drive_id, &t)
+                    .add_scope(drive3::Scope::Full)
+                    .doit()?;
+
+                debug!("response: {:?}", &response);
+                response
+            }
+            None => {
+                let (mut response, _empty_file) = self.hub
+                    .files()
+                    .get(&drive_id)
+                    .supports_team_drives(false)
+                    .param("alt", "media")
+                    .add_scope(drive3::Scope::Full)
+                    .doit()?;
+                response
+            }
+        };
 
         let mut content: Vec<u8> = Vec::new();
         let _result = response.read_to_end(&mut content);
 
         Ok(content)
     }
+
+    // fn export_file(&self, drive_id: &str, mime_type: &str) -> drive3::Result<Vec<u8>> {
+
+    //     let mut content: Vec<u8> = Vec::new();
+    //     let _result = response.read_to_end(&mut content);
+
+    //     Ok(content)
+    // }
 
     fn apply_pending_writes_on_data(&mut self, inode: Inode, data: &mut Vec<u8>) {
         self.pending_writes
@@ -261,17 +302,24 @@ impl GoogleDriveFetcher {
         }
     }
 
-    pub fn read(&mut self, drive_id: &str, offset: usize, size: usize) -> Option<&[u8]> {
+    pub fn read(
+        &mut self,
+        drive_id: &str,
+        mime_type: Option<String>,
+        offset: usize,
+        size: usize,
+    ) -> Option<&[u8]> {
         if self.cache.contains_key(drive_id) {
             let data = self.cache.get(drive_id).unwrap();
-            self.buff = data[offset..cmp::min(data.len(), offset + size)].to_vec();
+            self.buff =
+                data[cmp::min(data.len(), offset)..cmp::min(data.len(), offset + size)].to_vec();
             return Some(&self.buff);
         }
 
-        // let filename = format!("{}.txt", inode);
-        match self.get_file_content(&drive_id) {
+        match self.get_file_content(&drive_id, mime_type) {
             Ok(data) => {
-                self.buff = data[offset..cmp::min(data.len(), offset + size)].to_vec();
+                self.buff = data[cmp::min(data.len(), offset)..cmp::min(data.len(), offset + size)]
+                    .to_vec();
                 self.cache.insert(drive_id.to_string(), data.to_vec());
                 Some(&self.buff)
             }
