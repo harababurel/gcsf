@@ -145,6 +145,7 @@ impl GCSF {
             drive_file: None,
         }
     }
+
     fn new_shared_with_me_file() -> super::File {
         super::File {
             name: String::from("Shared with me"),

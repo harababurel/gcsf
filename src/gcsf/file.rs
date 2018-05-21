@@ -57,15 +57,22 @@ impl File {
             .collect();
 
         File {
-            name: format!("{} ({})", filename, owners.join(", ")),
+            // name: format!("{} ({})", filename, owners.join(", ")),
+            name: filename,
             attr,
             drive_file: Some(drive_file),
         }
     }
 
     pub fn is_posix(c: &char) -> bool {
-        (&'a' <= c && c <= &'z') || (&'A' <= c && c <= &'Z') || (&'0' <= c && c <= &'9')
-            || c == &'.' || c == &'_' || c == &'-' || c == &' '
+        // https://en.wikipedia.org/wiki/Filename
+        // @NTFS
+
+        let forbidden = String::from("*/:<>?\\|");
+        !forbidden.contains(*c)
+
+        // (&'a' <= c && c <= &'z') || (&'A' <= c && c <= &'Z') || (&'0' <= c && c <= &'9')
+        //     || c == &'.' || c == &'_' || c == &'-' || c == &' '
     }
 
     pub fn inode(&self) -> Inode {
