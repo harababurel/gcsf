@@ -1,3 +1,4 @@
+use GoogleDriveFetcher;
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
 use id_tree::InsertBehavior::*;
@@ -5,6 +6,7 @@ use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
 use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
 use libc::{ENOENT, ENOTDIR, ENOTEMPTY};
+use lru_time_cache::LruCache;
 use std;
 use std::clone::Clone;
 use std::cmp;
@@ -12,9 +14,6 @@ use std::collections::{HashMap, LinkedList};
 use std::ffi::OsStr;
 use std::fmt;
 use time::Timespec;
-
-use super::fetcher::{DataFetcher, GoogleDriveFetcher};
-use lru_time_cache::LruCache;
 
 pub type Inode = u64;
 pub type DriveId = String;
