@@ -102,7 +102,7 @@ impl FileManager {
                     .unwrap()
             }
             None => {
-                error!("Adding as root!!!");
+                info!("Adding file as root! This should only happen once.");
                 self.tree.insert(Node::new(file.inode()), AsRoot).unwrap()
             }
         };

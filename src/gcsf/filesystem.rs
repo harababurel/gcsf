@@ -58,11 +58,11 @@ impl GCSF {
                 }
 
                 // TODO: this makes everything slow; find a better solution
-                if file.is_drive_document() {
-                    let size = drive_fetcher
-                        .get_file_size(file.drive_id().as_ref().unwrap(), file.mime_type());
-                    file.attr.size = size;
-                }
+                // if file.is_drive_document() {
+                //     let size = drive_fetcher
+                //         .get_file_size(file.drive_id().as_ref().unwrap(), file.mime_type());
+                //     file.attr.size = size;
+                // }
 
                 if manager.contains(FileId::DriveId(parent_id.clone())) {
                     manager.add_file(file, Some(FileId::DriveId(parent_id.clone())));
@@ -488,26 +488,26 @@ impl Filesystem for GCSF {
     //     reply.ok();
     // }
 
-    // fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
-    //     if !self.statfs_cache.contains_key("size") || !self.statfs_cache.contains_key("capacity") {
-    //         let (size, capacity) = self.drive_fetcher.size_and_capacity();
-    //         let capacity = capacity.unwrap_or(std::i64::MAX as u64);
-    //         self.statfs_cache.insert("size".to_string(), size);
-    //         self.statfs_cache.insert("capacity".to_string(), capacity);
-    //     }
+    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+        if !self.statfs_cache.contains_key("size") || !self.statfs_cache.contains_key("capacity") {
+            let (size, capacity) = self.drive_fetcher.size_and_capacity();
+            let capacity = capacity.unwrap_or(std::i64::MAX as u64);
+            self.statfs_cache.insert("size".to_string(), size);
+            self.statfs_cache.insert("capacity".to_string(), capacity);
+        }
 
-    //     let size = self.statfs_cache.get("size").unwrap().to_owned();
-    //     let capacity = self.statfs_cache.get("capacity").unwrap().to_owned();
+        let size = self.statfs_cache.get("size").unwrap().to_owned();
+        let capacity = self.statfs_cache.get("capacity").unwrap().to_owned();
 
-    //     reply.statfs(
-    //         /* blocks:*/ capacity,
-    //         /* bfree: */ capacity - size,
-    //         /* bavail: */ capacity - size,
-    //         /* files: */ std::u64::MAX,
-    //         /* ffree: */ std::u64::MAX - self.files.len() as u64,
-    //         /* bsize: */ 1,
-    //         /* namelen: */ 1024,
-    //         /* frsize: */ 1,
-    //     );
-    // }
+        reply.statfs(
+            /* blocks:*/ capacity,
+            /* bfree: */ capacity - size,
+            /* bavail: */ capacity - size,
+            /* files: */ std::u64::MAX,
+            /* ffree: */ std::u64::MAX - self.manager.files.len() as u64,
+            /* bsize: */ 1,
+            /* namelen: */ 1024,
+            /* frsize: */ 1,
+        );
+    }
 }
