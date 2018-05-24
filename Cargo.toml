@@ -1,5 +1,6 @@
 [package]
 name = "gcsf"
+description = "Filesystem based on Google Drive"
 version = "0.1.0"
 authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
 license = "MIT"
