@@ -1,3 +1,9 @@
 
 /target
 **/*.rs.bk
+**/*.gz
+**/*.toc
+**/*.aux
+**/*.fdb_latexmk
+**/*.fls
+**/*.log
