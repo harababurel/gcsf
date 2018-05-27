@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time;
 
-use gcsf::{GoogleDriveFetcher, GCSF};
+use gcsf::GCSF;
 
 fn mount_gcsf(mountpoint: &str) {
     let options = ["-o", "fsname=GCSF", "-o", "allow_root"]
@@ -20,7 +20,7 @@ fn mount_gcsf(mountpoint: &str) {
         .map(|o| o.as_ref())
         .collect::<Vec<&OsStr>>();
 
-    let fs: GCSF<GoogleDriveFetcher> = GCSF::new();
+    let fs: GCSF = GCSF::new();
     unsafe {
         match fuse::spawn_mount(fs, &mountpoint, &options) {
             Ok(_session) => {

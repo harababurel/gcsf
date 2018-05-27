@@ -1,5 +1,6 @@
 [package]
 name = "gcsf"
+description = "Filesystem based on Google Drive"
 version = "0.1.0"
 authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
 license = "MIT"
@@ -10,6 +11,7 @@ failure = "0.1.1"
 fuse = "0.3.1"
 google-drive3 = "1.0.7+20171201"
 id_tree = "1.2.0"
+lazy_static = "1.0"
 libc = "0.2.40"
 log = "0.4.1"
 lru_time_cache = "0.8.0"

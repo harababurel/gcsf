@@ -1,5 +1,8 @@
-mod file;
-pub mod fetcher;
-pub mod filesystem;
+pub use self::drive_facade::DriveFacade;
+pub use self::file::{File, FileId};
+pub use self::file_manager::FileManager;
 
-pub use self::file::File;
+mod drive_facade;
+mod file;
+mod file_manager;
+pub mod filesystem;
