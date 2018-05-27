@@ -24,12 +24,12 @@ type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 pub struct DriveFacade {
     hub: GCDrive,
     buff: Vec<u8>,
-    pending_writes: HashMap<Inode, Vec<PendingWrite>>,
-    cache: LruCache<String, Vec<u8>>,
+    pending_writes: HashMap<DriveId, Vec<PendingWrite>>,
+    cache: LruCache<DriveId, Vec<u8>>,
 }
 
 struct PendingWrite {
-    inode: Inode,
+    id: DriveId,
     offset: usize,
     data: Vec<u8>,
 }
@@ -96,22 +96,17 @@ impl DriveFacade {
     }
 
     // Will still detect a file even if it is in Trash
-    fn file_exists(&self, drive_id: &str) -> drive3::Result<()> {
-        // self.get_file_id(name).and_then(|_| Ok(()))
-        let query = format!("id=\"{}\"", drive_id);
-        let (search_response, file_list) = self.hub
+    fn file_existance(&self, id: &DriveId) -> drive3::Result<()> {
+        let (_, file) = self.hub
             .files()
-            .list()
-            .spaces("drive")
-            .corpora("user")
-            .q(&query)
-            .page_size(1)
+            .get(&id)
             .add_scope(drive3::Scope::Full)
             .doit()?;
 
-        match file_list.files.map(|files| !files.is_empty()) {
-            Some(true) => Ok(()),
-            _ => Err(drive3::Error::FieldClash("no such file")),
+        if file.id == Some(id.to_string()) {
+            Ok(())
+        } else {
+            Err(drive3::Error::FieldClash("no such file"))
         }
     }
 
@@ -188,12 +183,12 @@ impl DriveFacade {
     //     Ok(content)
     // }
 
-    fn apply_pending_writes_on_data(&mut self, inode: Inode, data: &mut Vec<u8>) {
+    fn apply_pending_writes_on_data(&mut self, id: DriveId, data: &mut Vec<u8>) {
         self.pending_writes
-            .entry(inode)
+            .entry(id.clone())
             .or_insert(Vec::new())
             .iter()
-            .filter(|write| write.inode == inode)
+            .filter(|write| write.id == id)
             .for_each(|pending_write| {
                 info!("found a pending write! applying now");
                 let required_size = pending_write.offset + pending_write.data.len();
@@ -202,7 +197,7 @@ impl DriveFacade {
                 data[pending_write.offset..].copy_from_slice(&pending_write.data[..]);
             });
 
-        self.pending_writes.remove(&inode);
+        self.pending_writes.remove(&id);
     }
 
     // The drive3::File id of the root "My Drive" directory
@@ -220,7 +215,6 @@ impl DriveFacade {
 
         let file = result.unwrap().1.files.unwrap()[0].clone();
         let parents = file.parents.unwrap();
-
         parents[0].clone()
     }
 
@@ -231,20 +225,21 @@ impl DriveFacade {
         loop {
             let mut request = self.hub.files()
                 .list()
-                .param("fields", "nextPageToken,files(name,id,size,mimeType,owners,parents)")
+                .param("fields", "nextPageToken,files(name,id,size,mimeType,owners,parents,trashed)")
                 .spaces("drive") // TODO: maybe add photos as well
                 .corpora("user")
                 .page_size(1000)
                 .add_scope(drive3::Scope::Full);
-            // .q("'me' in owners")
 
             if page_token.is_some() {
                 request = request.page_token(&page_token.unwrap());
             }
 
+            let mut query = String::from("trashed = false");
             if parent_id.is_some() {
-                request = request.q(&format!("'{}' in parents", parent_id.unwrap()));
+                query = format!("{} and '{}' in parents", query, parent_id.unwrap());
             }
+            request = request.q(&query);
 
             let result = request.doit();
             if result.is_err() {
@@ -351,75 +346,62 @@ impl DriveFacade {
         }
     }
 
-    pub fn write(&mut self, inode: Inode, offset: usize, data: &[u8]) {
-        if !self.pending_writes.contains_key(&inode) {
-            self.pending_writes.insert(inode, Vec::new());
+    pub fn write(&mut self, id: DriveId, offset: usize, data: &[u8]) {
+        if !self.pending_writes.contains_key(&id) {
+            self.pending_writes.insert(id.clone(), Vec::new());
         }
 
+        let pending_write = PendingWrite {
+            id: id.clone(),
+            offset,
+            data: data.to_vec(),
+        };
+
         self.pending_writes
-            .entry(inode)
+            .entry(id.clone())
             .or_insert(Vec::new())
-            .push(PendingWrite {
-                inode,
-                offset,
-                data: data.to_vec(),
-            });
+            .push(pending_write);
     }
 
-    pub fn remove(&mut self, inode: Inode) {
-        let filename = format!("{}.txt", inode);
-        let file_id = self.get_file_id(&filename).unwrap_or_default();
-        let _result = self.hub
-            .files()
-            .delete(&file_id)
-            .supports_team_drives(false)
-            .add_scope(drive3::Scope::Full)
-            .doit();
+    // pub fn remove(&mut self, id: DriveId) {
+    //     let filename = format!("{}.txt", inode);
+    //     let file_id = self.get_file_id(&filename).unwrap_or_default();
+    //     let _result = self.hub
+    //         .files()
+    //         .delete(&file_id)
+    //         .supports_team_drives(false)
+    //         .add_scope(drive3::Scope::Full)
+    //         .doit();
 
-        let _result = self.hub
-            .files()
-            .empty_trash()
-            .add_scope(drive3::Scope::Full)
-            .doit();
+    //     let _result = self.hub
+    //         .files()
+    //         .empty_trash()
+    //         .add_scope(drive3::Scope::Full)
+    //         .doit();
+    // }
+
+    pub fn flush(&mut self, id: &DriveId) {
+        if !self.pending_writes.contains_key(id) {
+            info!("flush() called but there are no pending writes on drive_id={}. nothing to do, moving on...", id);
+            return;
+        }
+        self.cache.remove(id);
+
+        if self.file_existance(id).is_err() {
+            error!("flush(): file doesn't exist on drive!");
+            return;
+        }
+
+        let mut file_data = self.get_file_content(&id, None).unwrap_or_default();
+        self.apply_pending_writes_on_data(id.clone(), &mut file_data);
+        self.update_file_content(id.clone(), &file_data);
     }
 
-    pub fn flush(&mut self, drive_file: &drive3::File) {
-        //         // let filename = format!("{}.txt", inode);
-
-        //         if !self.pending_writes.contains_key(drive_id) {
-        //             info!("flush() called but there are no pending writes on drive_id={}. nothing to do, moving on...", drive_id);
-        //             return;
-        //         }
-
-        //         self.cache.remove(drive_id);
-
-        //         let existence = self.file_exists(drive_id);
-        //         // debug!("existence: {:?}", existence);
-
-        //         if existence.is_err() {
-        //             let mut data: Vec<u8> = Vec::new();
-        //             self.apply_pending_writes_on_data(drive_id, &mut data);
-
-        //             let dummy_file = DummyFile::new(&data);
-        //             let mut req = drive3::File::default();
-        //             req.id = Some(inode.to_string() + ".txt");
-        //             let _result = self.hub
-        //                 .files()
-        //                 .create(req)
-        //                 .use_content_as_indexable_text(true)
-        //                 .supports_team_drives(false)
-        //                 .ignore_default_visibility(true)
-        //                 .upload_resumable(dummy_file, "text/plain".parse().unwrap());
-
-        //         // debug!("write result: {:#?}", result);
-        //         } else {
-        //             warn!("file already exists! should download + overwrite + upload");
-        //             let mut file_data = self.get_file_content(&filename).unwrap_or_default();
-        //             self.apply_pending_writes_on_data(inode, &mut file_data);
-        //             self.remove(inode); // delete the file from drive
-        //             self.write(inode, 0, &file_data); // create a single pending write containing the final state of the file
-        //             self.flush(inode); // flush that pending write on a freshly created file
-        //         }
+    fn update_file_content(&mut self, id: DriveId, data: &[u8]) {
+        let result = self.hub
+            .files()
+            .update(drive3::File::default(), &id)
+            .upload_resumable(DummyFile::new(data), "text/plain".parse().unwrap());
     }
 
     pub fn size_and_capacity(&mut self) -> (u64, Option<u64>) {

@@ -111,7 +111,7 @@ impl Filesystem for GCSF {
         reply: ReplyWrite,
     ) {
         let offset: usize = cmp::max(offset, 0) as usize;
-        self.manager.df.write(ino, offset, data);
+        self.manager.write(FileId::Inode(ino), offset, data);
 
         match self.manager.get_mut_file(FileId::Inode(ino)) {
             Some(ref mut file) => {
@@ -366,14 +366,12 @@ impl Filesystem for GCSF {
     // }
 
     fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
-        let drive_file = self.manager
+        self.manager
             .get_file(FileId::Inode(ino))
-            .unwrap()
-            .drive_file
-            .as_ref()
-            .unwrap()
-            .clone();
-        self.manager.df.flush(&drive_file);
+            .and_then(|f| f.drive_id())
+            .map(|id| {
+                self.manager.df.flush(&id);
+            });
         reply.ok();
     }
 

@@ -229,6 +229,11 @@ impl FileManager {
             .and_then(|drive_id| self.drive_ids.insert(drive_id, file.inode()));
         self.files.insert(file.inode(), file);
     }
+
+    pub fn write(&mut self, id: FileId, offset: usize, data: &[u8]) {
+        let drive_id = self.get_drive_id(id).unwrap();
+        self.df.write(drive_id, offset, data);
+    }
 }
 
 impl fmt::Debug for FileManager {
