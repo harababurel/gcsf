@@ -4,6 +4,8 @@ use hyper;
 use hyper_rustls;
 use lru_time_cache::LruCache;
 use oauth2;
+use rand;
+use rand::Rng;
 use serde_json;
 use std::cmp;
 use std::collections::HashMap;
@@ -269,30 +271,9 @@ impl DriveFacade {
 
         let ttl = ::std::time::Duration::from_secs(5 * 60);
         let max_count = 100;
-        let mut hub = DriveFacade::create_drive().unwrap();
-
-        let result = hub.about()
-            .get()
-            .param("fields", "user")
-            .add_scope(drive3::Scope::Full)
-            .doit();
-
-        // TODO: find a way to set "Accept-Encoding: gzip"
-        // https://developers.google.com/drive/v3/web/performance
-        let user_agent = hub.user_agent(String::new());
-        hub.user_agent(format!("{} (gzip)", user_agent));
-
-        if result.is_ok() {
-            let user_details = result.unwrap().1.user.unwrap();
-            println!(
-                "Logged in as {} ({})",
-                user_details.display_name.unwrap(),
-                user_details.email_address.unwrap()
-            );
-        }
 
         DriveFacade {
-            hub,
+            hub: DriveFacade::create_drive().unwrap(),
             buff: Vec::new(),
             pending_writes: HashMap::new(),
             cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),

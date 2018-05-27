@@ -15,6 +15,7 @@ extern crate log;
 extern crate maplit;
 extern crate lru_time_cache;
 extern crate pretty_env_logger;
+extern crate rand;
 extern crate serde;
 extern crate serde_json;
 extern crate time;
