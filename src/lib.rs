@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 extern crate failure;
 extern crate fuse;
 extern crate google_drive3 as drive3;
@@ -20,7 +24,7 @@ extern crate lazy_static;
 
 mod gcsf;
 
-pub use gcsf::GoogleDriveFetcher;
+pub use gcsf::DriveFacade;
 pub use gcsf::filesystem::GCSF;
 
 #[cfg(test)]

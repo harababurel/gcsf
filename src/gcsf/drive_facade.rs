@@ -11,6 +11,7 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom};
 
 type Inode = u64;
+type DriveId = String;
 
 type GCClient = hyper::Client;
 type GCAuthenticator = oauth2::Authenticator<
@@ -20,7 +21,7 @@ type GCAuthenticator = oauth2::Authenticator<
 >;
 type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 
-pub struct GoogleDriveFetcher {
+pub struct DriveFacade {
     hub: GCDrive,
     buff: Vec<u8>,
     pending_writes: HashMap<Inode, Vec<PendingWrite>>,
@@ -41,7 +42,8 @@ lazy_static! {
     };
 }
 
-impl GoogleDriveFetcher {
+/// Deals with everything that involves communication with Google Drive.
+impl DriveFacade {
     fn read_client_secret(file: &str) -> Result<oauth2::ApplicationSecret, Error> {
         use std::fs::OpenOptions;
         use std::io::Read;
@@ -267,12 +269,12 @@ impl GoogleDriveFetcher {
         return all_files;
     }
 
-    pub fn new() -> GoogleDriveFetcher {
-        debug!("GoogleDriveFetcher::new()");
+    pub fn new() -> Self {
+        debug!("DriveFacade::new()");
 
         let ttl = ::std::time::Duration::from_secs(5 * 60);
         let max_count = 100;
-        let mut hub = GoogleDriveFetcher::create_drive().unwrap();
+        let mut hub = DriveFacade::create_drive().unwrap();
 
         let result = hub.about()
             .get()
@@ -294,7 +296,7 @@ impl GoogleDriveFetcher {
             );
         }
 
-        GoogleDriveFetcher {
+        DriveFacade {
             hub,
             buff: Vec::new(),
             pending_writes: HashMap::new(),
@@ -330,6 +332,25 @@ impl GoogleDriveFetcher {
         }
     }
 
+    pub fn create(&mut self, drive_file: &drive3::File) -> Option<DriveId> {
+        let dummy_file = DummyFile::new(&[]);
+        let result = self.hub
+            .files()
+            .create(drive_file.clone())
+            .use_content_as_indexable_text(true)
+            .supports_team_drives(false)
+            .ignore_default_visibility(true)
+            .upload(
+                dummy_file,
+                drive_file.mime_type.clone().unwrap().parse().unwrap(),
+            );
+
+        match result {
+            Ok((_, file)) => file.id,
+            Err(_) => None,
+        }
+    }
+
     pub fn write(&mut self, inode: Inode, offset: usize, data: &[u8]) {
         if !self.pending_writes.contains_key(&inode) {
             self.pending_writes.insert(inode, Vec::new());
@@ -362,8 +383,7 @@ impl GoogleDriveFetcher {
             .doit();
     }
 
-    fn flush(&mut self, drive_id: &str) {
-
+    pub fn flush(&mut self, drive_file: &drive3::File) {
         //         // let filename = format!("{}.txt", inode);
 
         //         if !self.pending_writes.contains_key(drive_id) {

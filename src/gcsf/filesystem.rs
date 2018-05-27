@@ -1,5 +1,5 @@
 use super::{File, FileId, FileManager};
-use GoogleDriveFetcher;
+use DriveFacade;
 use drive3;
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
@@ -22,8 +22,6 @@ pub type DriveId = String;
 
 pub struct GCSF {
     manager: FileManager,
-
-    drive_fetcher: GoogleDriveFetcher,
     statfs_cache: LruCache<String, u64>,
 }
 
@@ -31,160 +29,14 @@ const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
 impl GCSF {
     pub fn new() -> Self {
-        let mut drive_fetcher = GoogleDriveFetcher::new();
-        let mut manager = FileManager::new();
-
-        let mut root = GCSF::new_root_file();
-        root.drive_file.as_mut().unwrap().id = Some(drive_fetcher.root_id());
-
-        manager.add_file(root.clone(), None);
-        manager.add_file(
-            GCSF::new_shared_with_me_file(),
-            Some(FileId::Inode(root.inode())),
-        );
-
-        let mut inode = 3;
-        let mut queue: LinkedList<DriveId> = LinkedList::new();
-        queue.push_back(drive_fetcher.root_id());
-
-        while !queue.is_empty() {
-            let parent_id = queue.pop_front().unwrap();
-
-            for drive_file in drive_fetcher.get_all_files(Some(&parent_id)) {
-                let mut file = File::from_drive_file(inode, drive_file);
-
-                if file.kind() == FileType::Directory {
-                    queue.push_back(file.drive_id().unwrap());
-                }
-
-                // TODO: this makes everything slow; find a better solution
-                // if file.is_drive_document() {
-                //     let size = drive_fetcher
-                //         .get_file_size(file.drive_id().as_ref().unwrap(), file.mime_type());
-                //     file.attr.size = size;
-                // }
-
-                if manager.contains(FileId::DriveId(parent_id.clone())) {
-                    manager.add_file(file, Some(FileId::DriveId(parent_id.clone())));
-                } else {
-                    manager.add_file(file, None);
-                }
-
-                inode += 1;
-            }
-        }
-
         GCSF {
-            manager,
-            drive_fetcher,
+            manager: FileManager::with_drive_facade(DriveFacade::new()),
             statfs_cache: LruCache::<String, u64>::with_expiry_duration_and_capacity(
                 std::time::Duration::from_secs(5),
                 2,
             ),
         }
     }
-
-    fn new_root_file() -> File {
-        File {
-            name: String::from("."),
-            attr: FileAttr {
-                ino: 1,
-                size: 0,
-                blocks: 123,
-                atime: Timespec { sec: 0, nsec: 0 },
-                mtime: Timespec { sec: 0, nsec: 0 },
-                ctime: Timespec { sec: 0, nsec: 0 },
-                crtime: Timespec { sec: 0, nsec: 0 },
-                kind: FileType::Directory,
-                perm: 0o755,
-                nlink: 2,
-                uid: 0,
-                gid: 0,
-                rdev: 0,
-                flags: 0,
-            },
-            drive_file: Some(drive3::File::default()),
-        }
-    }
-
-    fn new_shared_with_me_file() -> File {
-        File {
-            name: String::from("Shared with me"),
-            attr: FileAttr {
-                ino: 2,
-                size: 0,
-                blocks: 123,
-                atime: Timespec { sec: 0, nsec: 0 },
-                mtime: Timespec { sec: 0, nsec: 0 },
-                ctime: Timespec { sec: 0, nsec: 0 },
-                crtime: Timespec { sec: 0, nsec: 0 },
-                kind: FileType::Directory,
-                perm: 0o755,
-                nlink: 2,
-                uid: 0,
-                gid: 0,
-                rdev: 0,
-                flags: 0,
-            },
-            drive_file: None,
-        }
-    }
-
-    // fn get_file_from_parent(&self, parent: Inode, name: &OsStr) -> Option<&File> {
-    //     let name = name.to_str().unwrap();
-    //     self.tree
-    //         .children(self.get_node_id(parent)?)
-    //         .unwrap()
-    //         .map(|child| self.get_file(*child.data()).unwrap())
-    //         .find(|file| file.name == name)
-    // }
-
-    // fn get_file_with_id(&self, id: &NodeId) -> Option<&File> {
-    //     match self.tree.get(id) {
-    //         Ok(node) => self.files.get(node.data()),
-    //         Err(_e) => None,
-    //     }
-    // }
-
-    // fn get_file(&self, ino: Inode) -> Option<&File> {
-    //     self.files.get(&ino)
-    // }
-
-    // fn get_mut_file(&mut self, ino: Inode) -> Option<&mut File> {
-    //     self.files.get_mut(&ino)
-    // }
-
-    // #[allow(dead_code)]
-    // fn get_node(&self, ino: Inode) -> Result<&Node<Inode>, NodeIdError> {
-    //     let node_id = self.node_ids.get(&ino).unwrap();
-    //     self.tree.get(&node_id)
-    // }
-
-    // fn get_node_id(&self, ino: Inode) -> Option<&NodeId> {
-    //     self.node_ids.get(&ino)
-    // }
-
-    // fn contains(&self, ino: &Inode) -> bool {
-    //     self.files.contains_key(&ino)
-    // }
-
-    // fn remove(&mut self, ino: Inode) -> Result<(), &str> {
-    //     let id = self.get_node_id(ino).ok_or("NodeId not found")?.clone();
-    //     let _result = self.tree.remove_node(id, DropChildren);
-    //     self.files.remove(&ino);
-    //     self.node_ids.remove(&ino);
-    //     self.drive_fetcher.remove(ino);
-
-    //     Ok(())
-    // }
-
-    // fn next_available_inode(&self) -> Inode {
-    //     (1..)
-    //         .filter(|inode| !self.contains(inode))
-    //         .take(1)
-    //         .next()
-    //         .unwrap()
-    // }
 }
 
 impl Filesystem for GCSF {
@@ -222,51 +74,55 @@ impl Filesystem for GCSF {
         size: u32,
         reply: ReplyData,
     ) {
-        match self.manager.get_file(FileId::Inode(ino)) {
-            Some(file) => {
-                let mime_type = file.drive_file.clone().and_then(|file| file.mime_type);
-                info!("mime_type: {:?}", &mime_type);
+        if !self.manager.contains(FileId::Inode(ino)) {
+            reply.error(ENOENT);
+            return;
+        }
 
-                reply.data(
-                    self.drive_fetcher
-                        .read(
-                            &file.drive_id().unwrap(),
-                            mime_type,
-                            offset as usize,
-                            size as usize,
-                        )
-                        .unwrap_or(&[]),
-                );
+        let (mime, id) = self.manager
+            .get_file(FileId::Inode(ino))
+            .map(|f| {
+                let mime = f.drive_file
+                    .as_ref()
+                    .and_then(|f| f.mime_type.as_ref())
+                    .cloned();
+                let id = f.drive_id().unwrap();
+
+                (mime, id)
+            })
+            .unwrap();
+
+        reply.data(
+            self.manager
+                .df
+                .read(&id, mime, offset as usize, size as usize)
+                .unwrap_or(&[]),
+        );
+    }
+
+    fn write(
+        &mut self,
+        _req: &Request,
+        ino: Inode,
+        _fh: u64,
+        offset: i64,
+        data: &[u8],
+        _flags: u32,
+        reply: ReplyWrite,
+    ) {
+        let offset: usize = cmp::max(offset, 0) as usize;
+        self.manager.df.write(ino, offset, data);
+
+        match self.manager.get_mut_file(FileId::Inode(ino)) {
+            Some(ref mut file) => {
+                file.attr.size = offset as u64 + data.len() as u64;
+                reply.written(data.len() as u32);
             }
             None => {
                 reply.error(ENOENT);
             }
         };
     }
-
-    // fn write(
-    //     &mut self,
-    //     _req: &Request,
-    //     ino: Inode,
-    //     _fh: u64,
-    //     offset: i64,
-    //     data: &[u8],
-    //     _flags: u32,
-    //     reply: ReplyWrite,
-    // ) {
-    //     let offset: usize = cmp::max(offset, 0) as usize;
-    //     self.drive_fetcher.write(ino, offset, data);
-
-    //     match self.get_mut_file(ino) {
-    //         Some(ref mut file) => {
-    //             file.attr.size = offset as u64 + data.len() as u64;
-    //             reply.written(data.len() as u32);
-    //         }
-    //         None => {
-    //             reply.error(ENOENT);
-    //         }
-    //     };
-    // }
 
     fn readdir(
         &mut self,
@@ -312,101 +168,115 @@ impl Filesystem for GCSF {
     //     reply.ok()
     // }
 
-    // fn setattr(
-    //     &mut self,
-    //     _req: &Request,
-    //     ino: Inode,
-    //     _mode: Option<u32>,
-    //     uid: Option<u32>,
-    //     gid: Option<u32>,
-    //     size: Option<u64>,
-    //     atime: Option<Timespec>,
-    //     mtime: Option<Timespec>,
-    //     _fh: Option<u64>,
-    //     crtime: Option<Timespec>,
-    //     chgtime: Option<Timespec>,
-    //     _bkuptime: Option<Timespec>,
-    //     flags: Option<u32>,
-    //     reply: ReplyAttr,
-    // ) {
-    //     if !self.files.contains_key(&ino) {
-    //         error!("create: could not find inode={} in the file tree", ino);
-    //         reply.error(ENOENT);
-    //         return;
-    //     }
+    fn setattr(
+        &mut self,
+        _req: &Request,
+        ino: Inode,
+        _mode: Option<u32>,
+        uid: Option<u32>,
+        gid: Option<u32>,
+        size: Option<u64>,
+        atime: Option<Timespec>,
+        mtime: Option<Timespec>,
+        _fh: Option<u64>,
+        crtime: Option<Timespec>,
+        chgtime: Option<Timespec>,
+        _bkuptime: Option<Timespec>,
+        flags: Option<u32>,
+        reply: ReplyAttr,
+    ) {
+        if !self.manager.contains(FileId::Inode(ino)) {
+            error!("setattr: could not find inode={} in the file tree", ino);
+            reply.error(ENOENT);
+            return;
+        }
 
-    //     let file = self.get_mut_file(ino).unwrap();
+        let file = self.manager.get_mut_file(FileId::Inode(ino)).unwrap();
 
-    //     let new_attr = FileAttr {
-    //         ino: file.attr.ino,
-    //         kind: file.attr.kind,
-    //         size: size.unwrap_or(file.attr.size),
-    //         blocks: file.attr.blocks,
-    //         atime: atime.unwrap_or(file.attr.atime),
-    //         mtime: mtime.unwrap_or(file.attr.mtime),
-    //         ctime: chgtime.unwrap_or(file.attr.ctime),
-    //         crtime: crtime.unwrap_or(file.attr.crtime),
-    //         perm: file.attr.perm,
-    //         nlink: file.attr.nlink,
-    //         uid: uid.unwrap_or(file.attr.uid),
-    //         gid: gid.unwrap_or(file.attr.gid),
-    //         rdev: file.attr.rdev,
-    //         flags: flags.unwrap_or(file.attr.flags),
-    //     };
+        let new_attr = FileAttr {
+            ino: file.attr.ino,
+            kind: file.attr.kind,
+            size: size.unwrap_or(file.attr.size),
+            blocks: file.attr.blocks,
+            atime: atime.unwrap_or(file.attr.atime),
+            mtime: mtime.unwrap_or(file.attr.mtime),
+            ctime: chgtime.unwrap_or(file.attr.ctime),
+            crtime: crtime.unwrap_or(file.attr.crtime),
+            perm: file.attr.perm,
+            nlink: file.attr.nlink,
+            uid: uid.unwrap_or(file.attr.uid),
+            gid: gid.unwrap_or(file.attr.gid),
+            rdev: file.attr.rdev,
+            flags: flags.unwrap_or(file.attr.flags),
+        };
 
-    //     file.attr = new_attr;
-    //     reply.attr(&TTL, &file.attr);
-    // }
+        file.attr = new_attr;
+        reply.attr(&TTL, &file.attr);
+    }
 
-    // fn create(
-    //     &mut self,
-    //     req: &Request,
-    //     parent: Inode,
-    //     name: &OsStr,
-    //     _mode: u32,
-    //     _flags: u32,
-    //     reply: ReplyCreate,
-    // ) {
-    //     if !self.files.contains_key(&parent) {
-    //         error!(
-    //             "create: could not find parent inode={} in the file tree",
-    //             parent
-    //         );
-    //         reply.error(ENOTDIR);
-    //         return;
-    //     }
+    fn create(
+        &mut self,
+        req: &Request,
+        parent: Inode,
+        name: &OsStr,
+        _mode: u32,
+        _flags: u32,
+        reply: ReplyCreate,
+    ) {
+        let filename = name.to_str().unwrap().to_string();
 
-    //     let ino = self.next_available_inode();
-    //     let file = File {
-    //         name: name.to_str().unwrap().to_string(),
-    //         attr: FileAttr {
-    //             ino: ino,
-    //             kind: FileType::RegularFile,
-    //             size: 0,
-    //             blocks: 123,
-    //             atime: Timespec::new(1, 0),
-    //             mtime: Timespec::new(1, 0),
-    //             ctime: Timespec::new(1, 0),
-    //             crtime: Timespec::new(1, 0),
-    //             perm: 0o744,
-    //             nlink: 0,
-    //             uid: req.uid(),
-    //             gid: req.gid(),
-    //             rdev: 0,
-    //             flags: 0,
-    //         },
-    //         drive_file: None,
-    //     };
+        // TODO: these two checks might not be necessary
+        if !self.manager.contains(FileId::Inode(parent)) {
+            error!(
+                "create: could not find parent inode={} in the file tree",
+                parent
+            );
+            reply.error(ENOTDIR);
+            return;
+        }
+        if self.manager.contains(FileId::ParentAndName {
+            parent,
+            name: filename.clone(),
+        }) {
+            error!(
+                "create: file {:?} of parent(inode={}) already exists",
+                name, parent
+            );
+            reply.error(ENOTDIR);
+            return;
+        }
 
-    //     reply.created(&TTL, &file.attr, 0, 0, 0);
+        let file = File {
+            name: filename.clone(),
+            attr: FileAttr {
+                ino: self.manager.next_available_inode(),
+                kind: FileType::RegularFile,
+                size: 0,
+                blocks: 123,
+                atime: Timespec::new(1, 0),
+                mtime: Timespec::new(1, 0),
+                ctime: Timespec::new(1, 0),
+                crtime: Timespec::new(1, 0),
+                perm: 0o744,
+                nlink: 0,
+                uid: req.uid(),
+                gid: req.gid(),
+                rdev: 0,
+                flags: 0,
+            },
+            drive_file: Some(drive3::File {
+                name: Some(filename.clone()),
+                mime_type: Some("text/plain.google-apps.folder".to_string()),
+                parents: Some(vec![
+                    self.manager.get_drive_id(FileId::Inode(parent)).unwrap(),
+                ]),
+                ..Default::default()
+            }),
+        };
 
-    //     let parent_id = self.get_node_id(parent).unwrap().clone();
-    //     let file_id: &NodeId = &self.tree
-    //         .insert(Node::new(ino), UnderNode(&parent_id))
-    //         .unwrap();
-    //     self.files.insert(ino, file);
-    //     self.node_ids.insert(ino, file_id.clone());
-    // }
+        reply.created(&TTL, &file.attr, 0, 0, 0);
+        self.manager.create_file(file, Some(FileId::Inode(parent)));
+    }
 
     // fn unlink(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
     //     let ino = self.get_file_from_parent(parent, name).unwrap().inode();
@@ -417,54 +287,68 @@ impl Filesystem for GCSF {
     //     };
     // }
 
-    // fn mkdir(
-    //     &mut self,
-    //     _req: &Request,
-    //     parent: Inode,
-    //     name: &OsStr,
-    //     _mode: u32,
-    //     reply: ReplyEntry,
-    // ) {
-    //     if !self.files.contains_key(&parent) {
-    //         error!(
-    //             "mkdir: could not find parent inode={} in the file tree",
-    //             parent
-    //         );
-    //         reply.error(ENOTDIR);
-    //         return;
-    //     }
+    fn mkdir(
+        &mut self,
+        _req: &Request,
+        parent: Inode,
+        name: &OsStr,
+        _mode: u32,
+        reply: ReplyEntry,
+    ) {
+        let dirname = name.to_str().unwrap().to_string();
 
-    //     let ino = self.next_available_inode();
-    //     let dir = File {
-    //         name: name.to_str().unwrap().to_string(),
-    //         attr: FileAttr {
-    //             ino: ino,
-    //             kind: FileType::Directory,
-    //             size: 0,
-    //             blocks: 123,
-    //             atime: Timespec::new(1, 0),
-    //             mtime: Timespec::new(1, 0),
-    //             ctime: Timespec::new(1, 0),
-    //             crtime: Timespec::new(1, 0),
-    //             perm: 0o644,
-    //             nlink: 0,
-    //             uid: 0,
-    //             gid: 0,
-    //             rdev: 0,
-    //             flags: 0,
-    //         },
-    //         drive_file: None,
-    //     };
+        // TODO: these two checks might not be necessary
+        if !self.manager.contains(FileId::Inode(parent)) {
+            error!(
+                "mkdir: could not find parent inode={} in the file tree",
+                parent
+            );
+            reply.error(ENOTDIR);
+            return;
+        }
+        if self.manager.contains(FileId::ParentAndName {
+            parent,
+            name: dirname.clone(),
+        }) {
+            error!(
+                "mkdir: file {:?} of parent(inode={}) already exists",
+                name, parent
+            );
+            reply.error(ENOTDIR);
+            return;
+        }
 
-    //     reply.entry(&TTL, &dir.attr, 0);
+        let dir = File {
+            name: dirname.clone(),
+            attr: FileAttr {
+                ino: self.manager.next_available_inode(),
+                kind: FileType::Directory,
+                size: 0,
+                blocks: 123,
+                atime: Timespec::new(1, 0),
+                mtime: Timespec::new(1, 0),
+                ctime: Timespec::new(1, 0),
+                crtime: Timespec::new(1, 0),
+                perm: 0o644,
+                nlink: 0,
+                uid: 0,
+                gid: 0,
+                rdev: 0,
+                flags: 0,
+            },
+            drive_file: Some(drive3::File {
+                name: Some(dirname.clone()),
+                mime_type: Some("application/vnd.google-apps.folder".to_string()),
+                parents: Some(vec![
+                    self.manager.get_drive_id(FileId::Inode(parent)).unwrap(),
+                ]),
+                ..Default::default()
+            }),
+        };
 
-    //     let parent_id = self.get_node_id(parent).unwrap().clone();
-    //     let dir_id: &NodeId = &self.tree
-    //         .insert(Node::new(ino), UnderNode(&parent_id))
-    //         .unwrap();
-    //     self.files.insert(ino, dir);
-    //     self.node_ids.insert(ino, dir_id.clone());
-    // }
+        reply.entry(&TTL, &dir.attr, 0);
+        self.manager.create_file(dir, Some(FileId::Inode(parent)));
+    }
 
     // fn rmdir(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
     //     let ino = self.get_file_from_parent(parent, name).unwrap().inode();
@@ -481,16 +365,21 @@ impl Filesystem for GCSF {
     //     };
     // }
 
-    // fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
-    //     let file = self.get_file(ino).unwrap().drive_file.as_ref();
-    //     // TODO: uncomment this
-    //     // self.drive_fetcher.flush(ino);
-    //     reply.ok();
-    // }
+    fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
+        let drive_file = self.manager
+            .get_file(FileId::Inode(ino))
+            .unwrap()
+            .drive_file
+            .as_ref()
+            .unwrap()
+            .clone();
+        self.manager.df.flush(&drive_file);
+        reply.ok();
+    }
 
     fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         if !self.statfs_cache.contains_key("size") || !self.statfs_cache.contains_key("capacity") {
-            let (size, capacity) = self.drive_fetcher.size_and_capacity();
+            let (size, capacity) = self.manager.df.size_and_capacity();
             let capacity = capacity.unwrap_or(std::i64::MAX as u64);
             self.statfs_cache.insert("size".to_string(), size);
             self.statfs_cache.insert("capacity".to_string(), capacity);

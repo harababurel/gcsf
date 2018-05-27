@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use time::Timespec;
 
 type Inode = u64;
+type DriveId = String;
 
 #[derive(Debug, Clone)]
 pub struct File {
@@ -93,9 +94,6 @@ impl File {
 
         let forbidden = String::from("*/:<>?\\|");
         !forbidden.contains(*c)
-
-        // (&'a' <= c && c <= &'z') || (&'A' <= c && c <= &'Z') || (&'0' <= c && c <= &'9')
-        //     || c == &'.' || c == &'_' || c == &'-' || c == &' '
     }
 
     pub fn is_drive_document(&self) -> bool {
@@ -119,6 +117,14 @@ impl File {
         }
 
         self.drive_file.as_ref().unwrap().id.clone()
+    }
+
+    pub fn set_drive_id(&mut self, id: Option<DriveId>) {
+        if self.drive_file.is_none() {
+            return;
+        }
+
+        self.drive_file.as_mut().unwrap().id = id;
     }
 
     pub fn mime_type(&self) -> Option<String> {
