@@ -1,7 +1,7 @@
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyWrite, Request};
+use gcsf::File;
 use gcsf::filesystem::GCSF;
-use gcsf::{File, GoogleDriveFetcher};
 use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
