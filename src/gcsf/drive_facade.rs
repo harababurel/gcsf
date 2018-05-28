@@ -28,6 +28,9 @@ pub struct DriveFacade {
     buff: Vec<u8>,
     pending_writes: HashMap<DriveId, Vec<PendingWrite>>,
     cache: LruCache<DriveId, Vec<u8>>,
+
+    // This is only stored once, effectively caching the root id.
+    root_id: Option<String>,
 }
 
 struct PendingWrite {
@@ -203,7 +206,7 @@ impl DriveFacade {
     }
 
     // The drive3::File id of the root "My Drive" directory
-    pub fn root_id(&mut self) -> String {
+    pub fn root_id(&mut self) -> &String {
         let result = self.hub
             .files()
             .list()
@@ -212,17 +215,21 @@ impl DriveFacade {
             .corpora("user")
             .page_size(1)
             .q("'root' in parents")
-            .add_scope(drive3::Scope::Full)
-            .doit();
+            .add_scope(drive3::Scope::Full);
 
-        let file = result.unwrap().1.files.unwrap()[0].clone();
-        let parents = file.parents.unwrap();
-        parents[0].clone()
+        self.root_id.get_or_insert_with(|| {
+            let file = result.doit().unwrap().1.files.unwrap()[0].clone();
+            let parents = file.parents.unwrap();
+            parents[0].clone()
+        })
     }
 
-    pub fn get_all_files(&mut self, parent_id: Option<&str>) -> Vec<drive3::File> {
+    pub fn get_all_files(
+        &mut self,
+        parent_id: Option<&str>,
+        trashed: Option<bool>,
+    ) -> Vec<drive3::File> {
         let mut all_files = Vec::new();
-
         let mut page_token: Option<String> = None;
         loop {
             let mut request = self.hub.files()
@@ -233,14 +240,19 @@ impl DriveFacade {
                 .page_size(1000)
                 .add_scope(drive3::Scope::Full);
 
-            if page_token.is_some() {
-                request = request.page_token(&page_token.unwrap());
+            if let Some(token) = page_token {
+                request = request.page_token(&token);
+            };
+
+            let mut query_chain: Vec<String> = Vec::new();
+            if let Some(id) = parent_id {
+                query_chain.push(format!("'{}' in parents", id));
+            }
+            if let Some(trash) = trashed {
+                query_chain.push(format!("trashed = {}", trash));
             }
 
-            let mut query = String::from("trashed = false");
-            if parent_id.is_some() {
-                query = format!("{} and '{}' in parents", query, parent_id.unwrap());
-            }
+            let query = query_chain.join(" and ");
             request = request.q(&query);
 
             let result = request.doit();
@@ -277,6 +289,7 @@ impl DriveFacade {
             buff: Vec::new(),
             pending_writes: HashMap::new(),
             cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
+            root_id: None,
         }
     }
 

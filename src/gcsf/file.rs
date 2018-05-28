@@ -111,6 +111,18 @@ impl File {
         self.attr.kind
     }
 
+    pub fn drive_parent(&self) -> Option<String> {
+        if self.drive_file.is_none() {
+            return None;
+        }
+
+        self.drive_file
+            .clone()
+            .unwrap()
+            .parents
+            .and_then(|parents| parents.iter().take(1).next().cloned())
+    }
+
     pub fn drive_id(&self) -> Option<String> {
         if self.drive_file.is_none() {
             return None;

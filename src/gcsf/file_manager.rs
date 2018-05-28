@@ -36,6 +36,7 @@ impl FileManager {
         };
 
         manager.populate();
+        manager.populate_trash();
         manager
     }
 
@@ -45,11 +46,11 @@ impl FileManager {
         self.add_file(root, None);
 
         let mut queue: LinkedList<DriveId> = LinkedList::new();
-        queue.push_back(self.df.root_id());
+        queue.push_back(self.df.root_id().clone());
 
         while !queue.is_empty() {
             let parent_id = queue.pop_front().unwrap();
-            for drive_file in self.df.get_all_files(Some(&parent_id)) {
+            for drive_file in self.df.get_all_files(Some(&parent_id), Some(false)) {
                 let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
 
                 if file.kind() == FileType::Directory {
@@ -72,9 +73,32 @@ impl FileManager {
         }
     }
 
+    fn populate_trash(&mut self) {
+        let root_id = self.df.root_id().clone();
+        let trash = self.new_special_dir("Trash");
+        self.add_file(trash.clone(), Some(FileId::DriveId(root_id)));
+
+        for drive_file in self.df.get_all_files(None, Some(true)) {
+            let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
+
+            debug!("{:#?}", &file);
+
+            // if file.kind() == FileType::Directory {
+            //     queue.push_back(file.drive_id().unwrap());
+            // }
+            let parent_id = file.drive_parent().unwrap();
+
+            // if self.contains(FileId::DriveId(parent_id.clone())) {
+            //     self.add_file(file, Some(FileId::DriveId(parent_id.clone())));
+            // } else {
+            self.add_file(file, Some(FileId::Inode(trash.inode())));
+            // }
+        }
+    }
+
     fn new_root_file(&mut self) -> File {
         let mut drive_file = drive3::File::default();
-        drive_file.id = Some(self.df.root_id());
+        drive_file.id = Some(self.df.root_id().clone());
 
         File {
             name: String::from("."),
@@ -98,9 +122,9 @@ impl FileManager {
         }
     }
 
-    fn new_shared_with_me_file(&mut self) -> File {
+    fn new_special_dir(&mut self, name: &str) -> File {
         File {
-            name: String::from("Shared with me"),
+            name: name.to_string(),
             attr: FileAttr {
                 ino: self.next_available_inode(),
                 size: 0,
