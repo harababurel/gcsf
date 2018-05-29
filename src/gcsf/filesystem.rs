@@ -1,5 +1,4 @@
 use super::{File, FileId, FileManager};
-use DriveFacade;
 use drive3;
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
@@ -16,6 +15,7 @@ use std::collections::{HashMap, LinkedList};
 use std::ffi::OsStr;
 use std::fmt;
 use time::Timespec;
+use DriveFacade;
 
 pub type Inode = u64;
 pub type DriveId = String;

@@ -1,5 +1,4 @@
 use super::{File, FileId};
-use DriveFacade;
 use drive3;
 use failure::Error;
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
@@ -13,6 +12,7 @@ use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fmt;
 use time::Timespec;
+use DriveFacade;
 
 pub type Inode = u64;
 pub type DriveId = String;
