@@ -330,10 +330,7 @@ impl DriveFacade {
             .use_content_as_indexable_text(true)
             .supports_team_drives(false)
             .ignore_default_visibility(true)
-            .upload(
-                dummy_file,
-                drive_file.mime_type.clone().unwrap().parse().unwrap(),
-            );
+            .upload(dummy_file, "text/plain".parse().unwrap());
 
         match result {
             Ok((_, file)) => file.id,

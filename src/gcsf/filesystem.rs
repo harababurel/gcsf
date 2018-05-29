@@ -266,7 +266,7 @@ impl Filesystem for GCSF {
             },
             drive_file: Some(drive3::File {
                 name: Some(filename.clone()),
-                mime_type: Some("application/octet-stream".to_string()),
+                mime_type: None,
                 parents: Some(vec![
                     self.manager.get_drive_id(FileId::Inode(parent)).unwrap(),
                 ]),
