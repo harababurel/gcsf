@@ -14,7 +14,7 @@ pub struct File {
     pub drive_file: Option<drive3::File>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FileId {
     Inode(Inode),
     DriveId(String),

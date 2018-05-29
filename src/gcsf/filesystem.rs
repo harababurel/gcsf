@@ -7,7 +7,7 @@ use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
 use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
-use libc::{ENOENT, ENOTDIR, ENOTEMPTY};
+use libc::{ENOENT, ENOTDIR, ENOTEMPTY, EREMOTEIO};
 use lru_time_cache::LruCache;
 use std;
 use std::clone::Clone;
@@ -44,7 +44,7 @@ impl Filesystem for GCSF {
         let name = name.to_str().unwrap().to_string();
         let id = FileId::ParentAndName { parent, name };
 
-        match self.manager.get_file(id) {
+        match self.manager.get_file(&id) {
             Some(ref file) => {
                 reply.entry(&TTL, &file.attr, 0);
             }
@@ -55,7 +55,7 @@ impl Filesystem for GCSF {
     }
 
     fn getattr(&mut self, _req: &Request, ino: Inode, reply: ReplyAttr) {
-        match self.manager.get_file(FileId::Inode(ino)) {
+        match self.manager.get_file(&FileId::Inode(ino)) {
             Some(file) => {
                 reply.attr(&TTL, &file.attr);
             }
@@ -74,13 +74,13 @@ impl Filesystem for GCSF {
         size: u32,
         reply: ReplyData,
     ) {
-        if !self.manager.contains(FileId::Inode(ino)) {
+        if !self.manager.contains(&FileId::Inode(ino)) {
             reply.error(ENOENT);
             return;
         }
 
         let (mime, id) = self.manager
-            .get_file(FileId::Inode(ino))
+            .get_file(&FileId::Inode(ino))
             .map(|f| {
                 let mime = f.drive_file
                     .as_ref()
@@ -133,7 +133,7 @@ impl Filesystem for GCSF {
         mut reply: ReplyDirectory,
     ) {
         let mut curr_offs = offset + 1;
-        match self.manager.get_children(FileId::Inode(ino)) {
+        match self.manager.get_children(&FileId::Inode(ino)) {
             Some(children) => {
                 for child in children.iter().skip(offset as usize) {
                     reply.add(child.inode(), curr_offs, child.kind(), &child.name);
@@ -185,7 +185,7 @@ impl Filesystem for GCSF {
         flags: Option<u32>,
         reply: ReplyAttr,
     ) {
-        if !self.manager.contains(FileId::Inode(ino)) {
+        if !self.manager.contains(&FileId::Inode(ino)) {
             error!("setattr: could not find inode={} in the file tree", ino);
             reply.error(ENOENT);
             return;
@@ -226,7 +226,7 @@ impl Filesystem for GCSF {
         let filename = name.to_str().unwrap().to_string();
 
         // TODO: these two checks might not be necessary
-        if !self.manager.contains(FileId::Inode(parent)) {
+        if !self.manager.contains(&FileId::Inode(parent)) {
             error!(
                 "create: could not find parent inode={} in the file tree",
                 parent
@@ -234,7 +234,7 @@ impl Filesystem for GCSF {
             reply.error(ENOTDIR);
             return;
         }
-        if self.manager.contains(FileId::ParentAndName {
+        if self.manager.contains(&FileId::ParentAndName {
             parent,
             name: filename.clone(),
         }) {
@@ -268,7 +268,7 @@ impl Filesystem for GCSF {
                 name: Some(filename.clone()),
                 mime_type: None,
                 parents: Some(vec![
-                    self.manager.get_drive_id(FileId::Inode(parent)).unwrap(),
+                    self.manager.get_drive_id(&FileId::Inode(parent)).unwrap(),
                 ]),
                 ..Default::default()
             }),
@@ -278,14 +278,19 @@ impl Filesystem for GCSF {
         self.manager.create_file(file, Some(FileId::Inode(parent)));
     }
 
-    // fn unlink(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
-    //     let ino = self.get_file_from_parent(parent, name).unwrap().inode();
-
-    //     match self.remove(ino) {
-    //         Ok(()) => reply.ok(),
-    //         Err(_e) => reply.error(ENOENT),
-    //     };
-    // }
+    fn unlink(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
+        match self.manager.delete(FileId::ParentAndName {
+            parent,
+            name: name.to_str().unwrap().to_string(),
+        }) {
+            Ok(response) => {
+                reply.ok();
+            }
+            Err(e) => {
+                reply.error(EREMOTEIO);
+            }
+        };
+    }
 
     fn mkdir(
         &mut self,
@@ -298,7 +303,7 @@ impl Filesystem for GCSF {
         let dirname = name.to_str().unwrap().to_string();
 
         // TODO: these two checks might not be necessary
-        if !self.manager.contains(FileId::Inode(parent)) {
+        if !self.manager.contains(&FileId::Inode(parent)) {
             error!(
                 "mkdir: could not find parent inode={} in the file tree",
                 parent
@@ -306,7 +311,7 @@ impl Filesystem for GCSF {
             reply.error(ENOTDIR);
             return;
         }
-        if self.manager.contains(FileId::ParentAndName {
+        if self.manager.contains(&FileId::ParentAndName {
             parent,
             name: dirname.clone(),
         }) {
@@ -340,7 +345,7 @@ impl Filesystem for GCSF {
                 name: Some(dirname.clone()),
                 mime_type: Some("application/vnd.google-apps.folder".to_string()),
                 parents: Some(vec![
-                    self.manager.get_drive_id(FileId::Inode(parent)).unwrap(),
+                    self.manager.get_drive_id(&FileId::Inode(parent)).unwrap(),
                 ]),
                 ..Default::default()
             }),
@@ -367,7 +372,7 @@ impl Filesystem for GCSF {
 
     fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
         self.manager
-            .get_file(FileId::Inode(ino))
+            .get_file(&FileId::Inode(ino))
             .and_then(|f| f.drive_id())
             .map(|id| {
                 self.manager.df.flush(&id);

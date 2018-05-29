@@ -1,6 +1,7 @@
 use drive3;
 use failure::{err_msg, Error};
 use hyper;
+use hyper::client::Response;
 use hyper_rustls;
 use lru_time_cache::LruCache;
 use mime_sniffer::MimeTypeSniffer;
@@ -353,6 +354,31 @@ impl DriveFacade {
             .entry(id.clone())
             .or_insert(Vec::new())
             .push(pending_write);
+    }
+
+    pub fn delete_permanently(&mut self, id: &DriveId) -> drive3::Result<Response> {
+        self.hub
+            .files()
+            .delete(&id)
+            .supports_team_drives(false)
+            .add_scope(drive3::Scope::Full)
+            .doit()
+    }
+
+    // This will fail: "The resource body includes fields which are not directly writable."
+    pub fn move_to_trash(&mut self, id: DriveId) {
+        let mut f = drive3::File::default();
+        f.id = Some(id.clone());
+        f.trashed = Some(true);
+        f.explicitly_trashed = Some(true);
+
+        let result = self.hub
+            .files()
+            .update(f, &id)
+            .add_scope(drive3::Scope::Full)
+            .upload(DummyFile::new(&[]), "text/plain".parse().unwrap());
+
+        debug!("{:#?}", &result);
     }
 
     // pub fn remove(&mut self, id: DriveId) {

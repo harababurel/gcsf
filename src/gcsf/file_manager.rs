@@ -1,8 +1,10 @@
 use super::{File, FileId};
 use DriveFacade;
 use drive3;
+use failure::Error;
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
+use hyper::client::Response;
 use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
@@ -14,6 +16,9 @@ use time::Timespec;
 
 pub type Inode = u64;
 pub type DriveId = String;
+
+const ROOT_INODE: Inode = 1;
+const TRASH_INODE: Inode = 2;
 
 pub struct FileManager {
     tree: Tree<Inode>,
@@ -64,7 +69,7 @@ impl FileManager {
                 //     file.attr.size = size;
                 // }
 
-                if self.contains(FileId::DriveId(parent_id.clone())) {
+                if self.contains(&FileId::DriveId(parent_id.clone())) {
                     self.add_file(file, Some(FileId::DriveId(parent_id.clone())));
                 } else {
                     self.add_file(file, None);
@@ -75,7 +80,7 @@ impl FileManager {
 
     fn populate_trash(&mut self) {
         let root_id = self.df.root_id().clone();
-        let trash = self.new_special_dir("Trash");
+        let trash = self.new_special_dir("Trash", Some(TRASH_INODE));
         self.add_file(trash.clone(), Some(FileId::DriveId(root_id)));
 
         for drive_file in self.df.get_all_files(None, Some(true)) {
@@ -103,7 +108,7 @@ impl FileManager {
         File {
             name: String::from("."),
             attr: FileAttr {
-                ino: self.next_available_inode(),
+                ino: ROOT_INODE,
                 size: 0,
                 blocks: 123,
                 atime: Timespec { sec: 0, nsec: 0 },
@@ -122,11 +127,11 @@ impl FileManager {
         }
     }
 
-    fn new_special_dir(&mut self, name: &str) -> File {
+    fn new_special_dir(&mut self, name: &str, preferred_inode: Option<Inode>) -> File {
         File {
             name: name.to_string(),
             attr: FileAttr {
-                ino: self.next_available_inode(),
+                ino: preferred_inode.unwrap_or(self.next_available_inode()),
                 size: 0,
                 blocks: 123,
                 atime: Timespec { sec: 0, nsec: 0 },
@@ -146,67 +151,67 @@ impl FileManager {
     }
 
     pub fn next_available_inode(&self) -> Inode {
-        (1..)
-            .filter(|inode| !self.contains(FileId::Inode(*inode)))
+        (3..)
+            .filter(|inode| !self.contains(&FileId::Inode(*inode)))
             .take(1)
             .next()
             .unwrap()
     }
 
-    pub fn contains(&self, file_id: FileId) -> bool {
+    pub fn contains(&self, file_id: &FileId) -> bool {
         match file_id {
             FileId::Inode(inode) => self.node_ids.contains_key(&inode),
-            FileId::DriveId(drive_id) => self.drive_ids.contains_key(&drive_id),
+            FileId::DriveId(drive_id) => self.drive_ids.contains_key(drive_id),
             FileId::NodeId(node_id) => self.tree.get(&node_id).is_ok(),
-            FileId::ParentAndName { parent, name } => {
-                self.get_file(FileId::ParentAndName { parent, name })
-                    .is_some()
-            }
+            pn @ FileId::ParentAndName { .. } => self.get_file(&pn).is_some(),
         }
     }
 
-    pub fn get_node_id(&self, file_id: FileId) -> Option<NodeId> {
+    pub fn get_node_id(&self, file_id: &FileId) -> Option<NodeId> {
         match file_id {
             FileId::Inode(inode) => self.node_ids.get(&inode).cloned(),
-            FileId::DriveId(drive_id) => self.get_node_id(FileId::Inode(self.get_inode(
-                FileId::DriveId(drive_id),
+            FileId::DriveId(drive_id) => self.get_node_id(&FileId::Inode(self.get_inode(
+                &FileId::DriveId(drive_id.to_string()),
             ).unwrap())),
-            FileId::NodeId(node_id) => Some(node_id),
-            FileId::ParentAndName { parent, name } => {
-                let inode = self.get_inode(FileId::ParentAndName { parent, name })?;
-                self.get_node_id(FileId::Inode(inode))
+            FileId::NodeId(node_id) => Some(node_id.clone()),
+            ref pn @ FileId::ParentAndName { .. } => {
+                let inode = self.get_inode(&pn)?;
+                self.get_node_id(&FileId::Inode(inode))
             }
         }
     }
 
-    pub fn get_drive_id(&self, id: FileId) -> Option<DriveId> {
+    pub fn get_drive_id(&self, id: &FileId) -> Option<DriveId> {
         self.get_file(id)?.drive_id()
     }
 
-    pub fn get_inode(&self, id: FileId) -> Option<Inode> {
+    pub fn get_inode(&self, id: &FileId) -> Option<Inode> {
         // debug!("get_inode({:?})", &id);
         match id {
-            FileId::Inode(inode) => Some(inode),
-            FileId::DriveId(drive_id) => self.drive_ids.get(&drive_id).cloned(),
+            FileId::Inode(inode) => Some(*inode),
+            FileId::DriveId(drive_id) => self.drive_ids.get(drive_id).cloned(),
             FileId::NodeId(node_id) => self.tree
                 .get(&node_id)
                 .map(|node| node.data())
                 .ok()
                 .cloned(),
-            FileId::ParentAndName { parent, name } => self.get_children(FileId::Inode(parent))?
+            FileId::ParentAndName {
+                ref parent,
+                ref name,
+            } => self.get_children(&FileId::Inode(*parent))?
                 .into_iter()
-                .find(|child| child.name == name)
+                .find(|child| child.name == *name)
                 .map(|child| child.inode()),
         }
     }
 
-    pub fn get_children(&self, id: FileId) -> Option<Vec<&File>> {
+    pub fn get_children(&self, id: &FileId) -> Option<Vec<&File>> {
         // debug!("get_children({:?})", &id);
-        let node_id = self.get_node_id(id)?;
+        let node_id = self.get_node_id(&id)?;
         let children: Vec<&File> = self.tree
             .children(&node_id)
             .unwrap()
-            .map(|child| self.get_file(FileId::Inode(*child.data())))
+            .map(|child| self.get_file(&FileId::Inode(*child.data())))
             .filter(Option::is_some)
             .map(Option::unwrap)
             .collect();
@@ -214,14 +219,14 @@ impl FileManager {
         Some(children)
     }
 
-    pub fn get_file(&self, id: FileId) -> Option<&File> {
+    pub fn get_file(&self, id: &FileId) -> Option<&File> {
         // debug!("get_file({:?})", &id);
         let inode = self.get_inode(id)?;
         self.files.get(&inode)
     }
 
     pub fn get_mut_file(&mut self, id: FileId) -> Option<&mut File> {
-        let inode = self.get_inode(id)?;
+        let inode = self.get_inode(&id)?;
         self.files.get_mut(&inode)
     }
 
@@ -233,11 +238,11 @@ impl FileManager {
     }
 
     /// Adds a file to the local file tree. Does not communicate with Drive.
-    pub fn add_file(&mut self, file: File, parent: Option<FileId>) {
+    fn add_file(&mut self, file: File, parent: Option<FileId>) {
         let node_id = match parent {
             Some(inode) => {
                 info!("add file to parent inode = {:?}", inode);
-                let parent_id = self.get_node_id(inode).unwrap();
+                let parent_id = self.get_node_id(&inode).unwrap();
                 self.tree
                     .insert(Node::new(file.inode()), UnderNode(&parent_id))
                     .unwrap()
@@ -254,8 +259,30 @@ impl FileManager {
         self.files.insert(file.inode(), file);
     }
 
+    pub fn delete(&mut self, id: FileId) -> drive3::Result<Response> {
+        let node_id = self.get_node_id(&id).unwrap();
+        let inode = self.get_inode(&id).unwrap();
+        let drive_id = self.get_drive_id(&id).unwrap();
+        let trash_id = self.get_node_id(&FileId::Inode(TRASH_INODE)).unwrap();
+
+        self.tree.remove_node(node_id, DropChildren);
+        self.files.remove(&inode);
+        self.node_ids.remove(&inode);
+        self.drive_ids.remove(&drive_id);
+        self.df.delete_permanently(&drive_id)
+    }
+
+    pub fn move_file_to_trash(&mut self, id: FileId) {
+        let node_id = self.get_node_id(&id).unwrap();
+        let drive_id = self.get_drive_id(&id).unwrap();
+        let trash_id = self.get_node_id(&FileId::Inode(TRASH_INODE)).unwrap();
+
+        self.tree.move_node(&node_id, ToParent(&trash_id));
+        self.df.move_to_trash(drive_id);
+    }
+
     pub fn write(&mut self, id: FileId, offset: usize, data: &[u8]) {
-        let drive_id = self.get_drive_id(id).unwrap();
+        let drive_id = self.get_drive_id(&id).unwrap();
         self.df.write(drive_id, offset, data);
     }
 }
@@ -277,7 +304,7 @@ impl fmt::Debug for FileManager {
                 write!(f, "\t")?;
             }
 
-            let file = self.get_file(FileId::NodeId(node_id.clone())).unwrap();
+            let file = self.get_file(&FileId::NodeId(node_id.clone())).unwrap();
             write!(f, "{:3} => {}\n", file.inode(), file.name)?;
 
             self.tree.children_ids(node_id).unwrap().for_each(|id| {
