@@ -3,6 +3,7 @@ use failure::{err_msg, Error};
 use hyper;
 use hyper_rustls;
 use lru_time_cache::LruCache;
+use mime_sniffer::MimeTypeSniffer;
 use oauth2;
 use rand;
 use rand::Rng;
@@ -392,10 +393,16 @@ impl DriveFacade {
     }
 
     fn update_file_content(&mut self, id: DriveId, data: &[u8]) {
+        let mime_guess = data.sniff_mime_type().unwrap_or("application/octet-stream");
+        debug!(
+            "Updating file content for drive_id={}. Mime type guess based on content: {}",
+            &id, &mime_guess
+        );
+
         let result = self.hub
             .files()
             .update(drive3::File::default(), &id)
-            .upload_resumable(DummyFile::new(data), "text/plain".parse().unwrap());
+            .upload_resumable(DummyFile::new(data), mime_guess.parse().unwrap());
     }
 
     pub fn size_and_capacity(&mut self) -> (u64, Option<u64>) {

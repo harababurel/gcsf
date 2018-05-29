@@ -9,6 +9,7 @@ extern crate hyper;
 extern crate hyper_rustls;
 extern crate id_tree;
 extern crate libc;
+extern crate mime_sniffer;
 #[macro_use]
 extern crate log;
 #[macro_use]
