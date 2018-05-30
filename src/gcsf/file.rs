@@ -38,7 +38,7 @@ impl File {
             .map(|size| size.parse::<u64>().unwrap_or_default())
             .unwrap_or(10 * 1024 * 1024);
 
-        let attr = FileAttr {
+        let mut attr = FileAttr {
             ino: inode,
             size,
             blocks: 1,
@@ -59,6 +59,10 @@ impl File {
             rdev: 0,
             flags: 0,
         };
+
+        if attr.kind == FileType::Directory {
+            attr.size = 4096;
+        }
 
         let mut filename = drive_file.name.clone().unwrap();
         // let owners: Vec<String> = drive_file

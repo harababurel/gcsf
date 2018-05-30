@@ -97,8 +97,8 @@ impl FileManager {
             name: String::from("."),
             attr: FileAttr {
                 ino: ROOT_INODE,
-                size: 0,
-                blocks: 123,
+                size: 4096,
+                blocks: 1,
                 atime: Timespec { sec: 0, nsec: 0 },
                 mtime: Timespec { sec: 0, nsec: 0 },
                 ctime: Timespec { sec: 0, nsec: 0 },
@@ -120,8 +120,8 @@ impl FileManager {
             name: name.to_string(),
             attr: FileAttr {
                 ino: preferred_inode.unwrap_or(self.next_available_inode()),
-                size: 0,
-                blocks: 123,
+                size: 4096,
+                blocks: 1,
                 atime: Timespec { sec: 0, nsec: 0 },
                 mtime: Timespec { sec: 0, nsec: 0 },
                 ctime: Timespec { sec: 0, nsec: 0 },
