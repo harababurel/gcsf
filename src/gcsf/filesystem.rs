@@ -14,6 +14,9 @@ use DriveFacade;
 pub type Inode = u64;
 pub type DriveId = String;
 
+pub struct NullFS;
+impl Filesystem for NullFS {}
+
 pub struct GCSF {
     manager: FileManager,
     statfs_cache: LruCache<String, u64>,

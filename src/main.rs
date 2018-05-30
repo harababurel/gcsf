@@ -12,13 +12,27 @@ use std::sync::Arc;
 use std::thread;
 use std::time;
 
-use gcsf::GCSF;
+use gcsf::{NullFS, GCSF};
 
 fn mount_gcsf(mountpoint: &str) {
     let options = ["-o", "fsname=GCSF", "-o", "allow_root"]
         .iter()
         .map(|o| o.as_ref())
         .collect::<Vec<&OsStr>>();
+
+    let nullfs = NullFS {};
+    unsafe {
+        match fuse::spawn_mount(nullfs, &mountpoint, &options) {
+            Ok(session) => {
+                debug!("Test mount of NullFS successful. Will mount GCSF next.");
+                drop(session);
+            }
+            Err(e) => {
+                error!("Could not mount to {}: {}", &mountpoint, e);
+                return;
+            }
+        };
+    }
 
     let fs: GCSF = GCSF::new();
     unsafe {

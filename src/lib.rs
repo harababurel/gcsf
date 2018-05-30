@@ -24,7 +24,7 @@ extern crate lazy_static;
 
 mod gcsf;
 
-pub use gcsf::filesystem::GCSF;
+pub use gcsf::filesystem::{NullFS, GCSF};
 pub use gcsf::DriveFacade;
 
 #[cfg(test)]
