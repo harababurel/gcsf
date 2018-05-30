@@ -308,6 +308,8 @@ impl FileManager {
         let drive_id = self.get_drive_id(&id).unwrap();
         let parent_id = self.get_drive_id(&FileId::Inode(new_parent)).unwrap();
 
+        debug!("parent_id: {}", &parent_id);
+
         self.df
             .move_to(&drive_id, &parent_id, &new_name)
             .map_err(|_| err_msg("Could not move on drive"))?;

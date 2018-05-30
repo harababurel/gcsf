@@ -148,6 +148,7 @@ impl DriveFacade {
         let response = self.hub
             .files()
             .get(id)
+            .param("fields", "id,name,parents,mimeType")
             .add_scope(drive3::Scope::Full)
             .doit();
         response.map(|(response, file)| file)
@@ -380,26 +381,30 @@ impl DriveFacade {
         parent: &DriveId,
         new_name: &str,
     ) -> drive3::Result<(Response, drive3::File)> {
-        let file_content = self.get_file_content(id, None)?;
-        let dummy_file = DummyFile::new(&file_content);
+        let data = self.get_file_content(id, None)?;
+        let dummy_file = DummyFile::new(&data);
 
-        let mut file = drive3::File::default();
-        file.name = Some(new_name.to_string());
-
-        let current_parents = self.get_file_metadata(id)?
+        let metadata = self.get_file_metadata(id)?;
+        let mime_type = metadata.mime_type.unwrap_or(
+            data.sniff_mime_type()
+                .unwrap_or("application/octet-stream")
+                .to_string(),
+        );
+        let current_parents = metadata
             .parents
             .unwrap_or(vec![String::from("root")])
             .join(",");
 
-        debug!("file_content: {:?}", &file_content);
         debug!("current_parents: {:?}", &current_parents);
 
+        let mut file = drive3::File::default();
+        file.name = Some(new_name.to_string());
         self.hub
             .files()
             .update(file, id)
             .remove_parents(&current_parents)
             .add_parents(parent)
-            .upload_resumable(dummy_file, "text/plain".parse().unwrap())
+            .upload_resumable(dummy_file, mime_type.parse().unwrap())
     }
 
     // This will fail: "The resource body includes fields which are not directly writable."
