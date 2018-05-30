@@ -15,8 +15,16 @@ use std::time;
 use gcsf::{NullFS, GCSF};
 
 fn mount_gcsf(mountpoint: &str) {
-    let options = ["-o", "fsname=GCSF", "-o", "allow_root"]
-        .iter()
+    let options = [
+        "-o",
+        "fsname=GCSF",
+        "-o",
+        "allow_root",
+        "-o",
+        "big_writes",
+        "-o",
+        "max_write=131072",
+    ].iter()
         .map(|o| o.as_ref())
         .collect::<Vec<&OsStr>>();
 
