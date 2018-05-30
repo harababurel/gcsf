@@ -266,11 +266,13 @@ impl FileManager {
         let drive_id = self.get_drive_id(&id).unwrap();
         let trash_id = self.get_node_id(&FileId::Inode(TRASH_INODE)).unwrap();
 
+        let result = self.df.delete_permanently(&drive_id);
         self.tree.remove_node(node_id, DropChildren);
         self.files.remove(&inode);
         self.node_ids.remove(&inode);
         self.drive_ids.remove(&drive_id);
-        self.df.delete_permanently(&drive_id)
+
+        result
     }
 
     pub fn move_file_to_trash(&mut self, id: FileId) {

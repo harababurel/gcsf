@@ -298,6 +298,8 @@ impl Filesystem for GCSF {
         };
     }
 
+    fn forget(&mut self, _req: &Request, _ino: u64, _nlookup: u64) {}
+
     fn mkdir(
         &mut self,
         _req: &Request,
