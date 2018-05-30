@@ -86,7 +86,7 @@ impl DriveFacade {
             )),
             // <MemoryStorage as Default>::default(),
             oauth2::DiskTokenStorage::new(&String::from("/tmp/gcsf_token.json")).unwrap(),
-            Some(oauth2::FlowType::InstalledRedirect(8080)),
+            Some(oauth2::FlowType::InstalledInteractive),
         );
 
         Ok(auth)
