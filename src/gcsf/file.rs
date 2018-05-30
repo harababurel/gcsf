@@ -61,13 +61,13 @@ impl File {
         };
 
         let mut filename = drive_file.name.clone().unwrap();
-        let owners: Vec<String> = drive_file
-            .owners
-            .clone()
-            .unwrap()
-            .into_iter()
-            .map(|owner| owner.email_address.unwrap())
-            .collect();
+        // let owners: Vec<String> = drive_file
+        //     .owners
+        //     .clone()
+        //     .unwrap()
+        //     .into_iter()
+        //     .map(|owner| owner.email_address.unwrap())
+        //     .collect();
 
         let ext = drive_file
             .mime_type

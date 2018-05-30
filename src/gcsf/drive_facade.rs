@@ -6,8 +6,6 @@ use hyper_rustls;
 use lru_time_cache::LruCache;
 use mime_sniffer::MimeTypeSniffer;
 use oauth2;
-use rand;
-use rand::Rng;
 use serde_json;
 use std::cmp;
 use std::collections::HashMap;
@@ -151,7 +149,7 @@ impl DriveFacade {
             .param("fields", "id,name,parents,mimeType")
             .add_scope(drive3::Scope::Full)
             .doit();
-        response.map(|(response, file)| file)
+        response.map(|(_response, file)| file)
     }
 
     fn get_file_content(
@@ -408,19 +406,17 @@ impl DriveFacade {
     }
 
     // This will fail: "The resource body includes fields which are not directly writable."
-    pub fn move_to_trash(&mut self, id: DriveId) {
+    pub fn move_to_trash(&mut self, id: DriveId) -> drive3::Result<(Response, drive3::File)> {
         let mut f = drive3::File::default();
         f.id = Some(id.clone());
         f.trashed = Some(true);
         f.explicitly_trashed = Some(true);
 
-        let result = self.hub
+        self.hub
             .files()
             .update(f, &id)
             .add_scope(drive3::Scope::Full)
-            .upload(DummyFile::new(&[]), "text/plain".parse().unwrap());
-
-        debug!("{:#?}", &result);
+            .upload(DummyFile::new(&[]), "text/plain".parse().unwrap())
     }
 
     // pub fn remove(&mut self, id: DriveId) {
@@ -440,34 +436,41 @@ impl DriveFacade {
     //         .doit();
     // }
 
-    pub fn flush(&mut self, id: &DriveId) {
+    pub fn flush(&mut self, id: &DriveId) -> Result<(), Error> {
         if !self.pending_writes.contains_key(id) {
             info!("flush() called but there are no pending writes on drive_id={}. nothing to do, moving on...", id);
-            return;
+            return Ok(());
         }
         self.cache.remove(id);
 
         if self.file_existance(id).is_err() {
             error!("flush(): file doesn't exist on drive!");
-            return;
+            return Err(err_msg("flush(): file doesn't exist on drive!"));
         }
 
         let mut file_data = self.get_file_content(&id, None).unwrap_or_default();
         self.apply_pending_writes_on_data(id.clone(), &mut file_data);
-        self.update_file_content(id.clone(), &file_data);
+        self.update_file_content(id.clone(), &file_data)
+            .map_err(|_| err_msg(format!("Could not update file content for {:?}", id)))?;
+
+        Ok(())
     }
 
-    fn update_file_content(&mut self, id: DriveId, data: &[u8]) {
+    fn update_file_content(
+        &mut self,
+        id: DriveId,
+        data: &[u8],
+    ) -> drive3::Result<(Response, drive3::File)> {
         let mime_guess = data.sniff_mime_type().unwrap_or("application/octet-stream");
         debug!(
             "Updating file content for drive_id={}. Mime type guess based on content: {}",
             &id, &mime_guess
         );
 
-        let result = self.hub
+        self.hub
             .files()
             .update(drive3::File::default(), &id)
-            .upload_resumable(DummyFile::new(data), mime_guess.parse().unwrap());
+            .upload_resumable(DummyFile::new(data), mime_guess.parse().unwrap())
     }
 
     pub fn size_and_capacity(&mut self) -> (u64, Option<u64>) {

@@ -1,17 +1,14 @@
 use super::{File, FileId};
 use drive3;
 use failure::{err_msg, Error};
-use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
-           ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
-use hyper::client::Response;
+use fuse::{FileAttr, FileType};
 use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
-use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
+use id_tree::{Node, NodeId, Tree, TreeBuilder};
 use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fmt;
-use std::io;
 use time::Timespec;
 use DriveFacade;
 
@@ -88,17 +85,7 @@ impl FileManager {
             let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
 
             debug!("{:#?}", &file);
-
-            // if file.kind() == FileType::Directory {
-            //     queue.push_back(file.drive_id().unwrap());
-            // }
-            let parent_id = file.drive_parent().unwrap();
-
-            // if self.contains(FileId::DriveId(parent_id.clone())) {
-            //     self.add_file(file, Some(FileId::DriveId(parent_id.clone())));
-            // } else {
             self.add_file(file, Some(FileId::Inode(trash.inode())));
-            // }
         }
     }
 
@@ -260,28 +247,36 @@ impl FileManager {
         self.files.insert(file.inode(), file);
     }
 
-    pub fn delete(&mut self, id: FileId) -> drive3::Result<Response> {
+    pub fn delete(&mut self, id: FileId) -> Result<(), Error> {
         let node_id = self.get_node_id(&id).unwrap();
         let inode = self.get_inode(&id).unwrap();
         let drive_id = self.get_drive_id(&id).unwrap();
-        let trash_id = self.get_node_id(&FileId::Inode(TRASH_INODE)).unwrap();
 
-        let result = self.df.delete_permanently(&drive_id);
-        self.tree.remove_node(node_id, DropChildren);
+        self.tree.remove_node(node_id, DropChildren)?;
         self.files.remove(&inode);
         self.node_ids.remove(&inode);
         self.drive_ids.remove(&drive_id);
 
-        result
+        match self.df.delete_permanently(&drive_id) {
+            Ok(response) => {
+                debug!("{:?}", response);
+                Ok(())
+            }
+            Err(e) => Err(err_msg(format!("{}", e))),
+        }
     }
 
-    pub fn move_file_to_trash(&mut self, id: FileId) {
+    pub fn move_file_to_trash(&mut self, id: FileId) -> Result<(), Error> {
         let node_id = self.get_node_id(&id).unwrap();
         let drive_id = self.get_drive_id(&id).unwrap();
         let trash_id = self.get_node_id(&FileId::Inode(TRASH_INODE)).unwrap();
 
-        self.tree.move_node(&node_id, ToParent(&trash_id));
-        self.df.move_to_trash(drive_id);
+        self.tree.move_node(&node_id, ToParent(&trash_id))?;
+        self.df
+            .move_to_trash(drive_id)
+            .map_err(|_| err_msg("asdf"))?;
+
+        Ok(())
     }
 
     pub fn rename(

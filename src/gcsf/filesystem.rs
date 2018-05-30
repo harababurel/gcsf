@@ -2,18 +2,12 @@ use super::{File, FileId, FileManager};
 use drive3;
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
-use id_tree::InsertBehavior::*;
-use id_tree::MoveBehavior::*;
-use id_tree::RemoveBehavior::*;
-use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
-use libc::{ENOENT, ENOTDIR, ENOTEMPTY, EREMOTEIO};
+use libc::{ENOENT, ENOTDIR, EREMOTEIO};
 use lru_time_cache::LruCache;
 use std;
 use std::clone::Clone;
 use std::cmp;
-use std::collections::{HashMap, LinkedList};
 use std::ffi::OsStr;
-use std::fmt;
 use time::Timespec;
 use DriveFacade;
 
@@ -290,9 +284,11 @@ impl Filesystem for GCSF {
             name: name.to_str().unwrap().to_string(),
         }) {
             Ok(response) => {
+                debug!("{:?}", response);
                 reply.ok();
             }
             Err(e) => {
+                error!("{:?}", e);
                 reply.error(EREMOTEIO);
             }
         };
@@ -369,9 +365,11 @@ impl Filesystem for GCSF {
             name: name.to_str().unwrap().to_string(),
         }) {
             Ok(response) => {
+                debug!("{:?}", response);
                 reply.ok();
             }
             Err(e) => {
+                error!("{:?}", e);
                 reply.error(EREMOTEIO);
             }
         };
@@ -381,10 +379,13 @@ impl Filesystem for GCSF {
         self.manager
             .get_file(&FileId::Inode(ino))
             .and_then(|f| f.drive_id())
-            .map(|id| {
-                self.manager.df.flush(&id);
+            .map(|id| match self.manager.df.flush(&id) {
+                Ok(()) => reply.ok(),
+                Err(e) => {
+                    error!("{:?}", e);
+                    reply.error(EREMOTEIO);
+                }
             });
-        reply.ok();
     }
 
     fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
