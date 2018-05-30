@@ -113,7 +113,7 @@ impl Filesystem for GCSF {
         let offset: usize = cmp::max(offset, 0) as usize;
         self.manager.write(FileId::Inode(ino), offset, data);
 
-        match self.manager.get_mut_file(FileId::Inode(ino)) {
+        match self.manager.get_mut_file(&FileId::Inode(ino)) {
             Some(ref mut file) => {
                 file.attr.size = offset as u64 + data.len() as u64;
                 reply.written(data.len() as u32);
@@ -147,26 +147,32 @@ impl Filesystem for GCSF {
         };
     }
 
-    // fn rename(
-    //     &mut self,
-    //     _req: &Request,
-    //     parent: Inode,
-    //     name: &OsStr,
-    //     new_parent: u64,
-    //     new_name: &OsStr,
-    //     reply: ReplyEmpty,
-    // ) {
-    //     let file_inode = self.get_file_from_parent(parent, name).unwrap().inode();
+    fn rename(
+        &mut self,
+        _req: &Request,
+        parent: Inode,
+        name: &OsStr,
+        new_parent: Inode,
+        new_name: &OsStr,
+        reply: ReplyEmpty,
+    ) {
+        let name = name.to_str().unwrap().to_string();
+        let new_name = new_name.to_str().unwrap().to_string();
 
-    //     // TODO: is to_owned() safe?
-    //     let file_id = self.get_node_id(file_inode).unwrap().to_owned();
-    //     let new_parent_id = self.get_node_id(new_parent).unwrap().to_owned();
-
-    //     let _result = self.tree.move_node(&file_id, ToParent(&new_parent_id));
-    //     self.get_mut_file(file_inode).unwrap().name = new_name.to_str().unwrap().to_string();
-
-    //     reply.ok()
-    // }
+        match self.manager.rename(
+            &FileId::ParentAndName { parent, name },
+            new_parent,
+            new_name,
+        ) {
+            Ok(_) => {
+                reply.ok();
+            }
+            Err(e) => {
+                error!("{}", e);
+                reply.error(ENOENT);
+            }
+        };
+    }
 
     fn setattr(
         &mut self,
@@ -191,7 +197,7 @@ impl Filesystem for GCSF {
             return;
         }
 
-        let file = self.manager.get_mut_file(FileId::Inode(ino)).unwrap();
+        let file = self.manager.get_mut_file(&FileId::Inode(ino)).unwrap();
 
         let new_attr = FileAttr {
             ino: file.attr.ino,
@@ -355,20 +361,19 @@ impl Filesystem for GCSF {
         self.manager.create_file(dir, Some(FileId::Inode(parent)));
     }
 
-    // fn rmdir(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
-    //     let ino = self.get_file_from_parent(parent, name).unwrap().inode();
-    //     let id = self.get_node_id(ino).unwrap().clone();
-
-    //     if self.tree.children(&id).unwrap().next().is_some() {
-    //         reply.error(ENOTEMPTY);
-    //         return;
-    //     }
-
-    //     match self.remove(ino) {
-    //         Ok(()) => reply.ok(),
-    //         Err(_e) => reply.error(ENOENT),
-    //     };
-    // }
+    fn rmdir(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
+        match self.manager.delete(FileId::ParentAndName {
+            parent,
+            name: name.to_str().unwrap().to_string(),
+        }) {
+            Ok(response) => {
+                reply.ok();
+            }
+            Err(e) => {
+                reply.error(EREMOTEIO);
+            }
+        };
+    }
 
     fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
         self.manager

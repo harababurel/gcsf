@@ -1,6 +1,6 @@
 use super::{File, FileId};
 use drive3;
-use failure::Error;
+use failure::{err_msg, Error};
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
 use hyper::client::Response;
@@ -11,6 +11,7 @@ use id_tree::{Node, NodeId, NodeIdError, Tree, TreeBuilder};
 use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fmt;
+use std::io;
 use time::Timespec;
 use DriveFacade;
 
@@ -225,7 +226,7 @@ impl FileManager {
         self.files.get(&inode)
     }
 
-    pub fn get_mut_file(&mut self, id: FileId) -> Option<&mut File> {
+    pub fn get_mut_file(&mut self, id: &FileId) -> Option<&mut File> {
         let inode = self.get_inode(&id)?;
         self.files.get_mut(&inode)
     }
@@ -279,6 +280,39 @@ impl FileManager {
 
         self.tree.move_node(&node_id, ToParent(&trash_id));
         self.df.move_to_trash(drive_id);
+    }
+
+    pub fn rename(
+        &mut self,
+        id: &FileId,
+        new_parent: Inode,
+        new_name: String,
+    ) -> Result<(), Error> {
+        // Identify the file by its inode instead of (parent, name) because both the parent and
+        // name will probably change in this method.
+        let id = FileId::Inode(self.get_inode(id)
+            .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?);
+
+        let current_node = self.get_node_id(&id)
+            .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
+        let target_node = self.get_node_id(&FileId::Inode(new_parent))
+            .ok_or(err_msg("Target node doesn't exist"))?;
+
+        self.tree.move_node(&current_node, ToParent(&target_node))?;
+
+        {
+            let file = self.get_mut_file(&id).ok_or(err_msg("File doesn't exist"))?;
+            file.name = new_name.clone();
+        }
+
+        let drive_id = self.get_drive_id(&id).unwrap();
+        let parent_id = self.get_drive_id(&FileId::Inode(new_parent)).unwrap();
+
+        self.df
+            .move_to(&drive_id, &parent_id, &new_name)
+            .map_err(|_| err_msg("Could not move on drive"))?;
+
+        Ok(())
     }
 
     pub fn write(&mut self, id: FileId, offset: usize, data: &[u8]) {

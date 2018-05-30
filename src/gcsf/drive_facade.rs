@@ -144,6 +144,15 @@ impl DriveFacade {
         self.get_file_content(drive_id, mime_type).unwrap().len() as u64
     }
 
+    fn get_file_metadata(&self, id: &str) -> Result<drive3::File, drive3::Error> {
+        let response = self.hub
+            .files()
+            .get(id)
+            .add_scope(drive3::Scope::Full)
+            .doit();
+        response.map(|(response, file)| file)
+    }
+
     fn get_file_content(
         &self,
         drive_id: &str,
@@ -363,6 +372,34 @@ impl DriveFacade {
             .supports_team_drives(false)
             .add_scope(drive3::Scope::Full)
             .doit()
+    }
+
+    pub fn move_to(
+        &mut self,
+        id: &DriveId,
+        parent: &DriveId,
+        new_name: &str,
+    ) -> drive3::Result<(Response, drive3::File)> {
+        let file_content = self.get_file_content(id, None)?;
+        let dummy_file = DummyFile::new(&file_content);
+
+        let mut file = drive3::File::default();
+        file.name = Some(new_name.to_string());
+
+        let current_parents = self.get_file_metadata(id)?
+            .parents
+            .unwrap_or(vec![String::from("root")])
+            .join(",");
+
+        debug!("file_content: {:?}", &file_content);
+        debug!("current_parents: {:?}", &current_parents);
+
+        self.hub
+            .files()
+            .update(file, id)
+            .remove_parents(&current_parents)
+            .add_parents(parent)
+            .upload_resumable(dummy_file, "text/plain".parse().unwrap())
     }
 
     // This will fail: "The resource body includes fields which are not directly writable."
