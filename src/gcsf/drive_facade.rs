@@ -348,10 +348,6 @@ impl DriveFacade {
     }
 
     pub fn write(&mut self, id: DriveId, offset: usize, data: &[u8]) {
-        if !self.pending_writes.contains_key(&id) {
-            self.pending_writes.insert(id.clone(), Vec::new());
-        }
-
         let pending_write = PendingWrite {
             id: id.clone(),
             offset,
@@ -360,7 +356,7 @@ impl DriveFacade {
 
         self.pending_writes
             .entry(id.clone())
-            .or_insert(Vec::new())
+            .or_insert(Vec::with_capacity(3000))
             .push(pending_write);
     }
 
