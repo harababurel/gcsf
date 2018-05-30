@@ -3,7 +3,15 @@
 \usepackage{datetime}
 \usepackage{url}
 \usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{xparse}
+
 \graphicspath{ {./images/} }
+
+\NewDocumentCommand{\codeword}{v}{%
+\texttt{\textcolor{blue}{#1}}%
+}
 
 \newdateformat{monthyeardate}{%
   \monthname[\THEMONTH] \THEYEAR}
