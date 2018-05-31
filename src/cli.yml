@@ -1,0 +1,21 @@
+name: GCSF
+version: "0.1.0"
+author: Sergiu Puscas <srg.pscs@gmail.com>
+about: Filesystem based on Google Drive
+subcommands:
+  - mount:
+    name: "mount"
+    about: "Mount the filesystem"
+    args:
+      - mountpoint:
+          value_name: /path/to/mount/directory
+          help: path to mount directory
+          takes_value: true
+          required: true
+  - logout:
+    name: "logout"
+    about: "Logout (delete credentials file)"
+after_help: "Note: this is a work in progress. It might cause data loss. Use with caution."
+settings:
+  - SubcommandRequiredElseHelp
+  - ColorAuto

@@ -1,3 +1,5 @@
+#[macro_use]
+extern crate clap;
 extern crate ctrlc;
 extern crate fuse;
 extern crate gcsf;
@@ -5,8 +7,9 @@ extern crate gcsf;
 extern crate log;
 extern crate pretty_env_logger;
 
-use std::env;
+use clap::App;
 use std::ffi::OsStr;
+use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -68,12 +71,25 @@ fn mount_gcsf(mountpoint: &str) {
 fn main() {
     pretty_env_logger::init();
 
-    let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        println!("Usage: {} /path/to/mountpoint", &args[0]);
-        return;
+    let yaml = load_yaml!("cli.yml");
+    let matches = App::from_yaml(yaml).get_matches();
+
+    debug!("{:#?}", &matches);
+
+    if let Some(_matches) = matches.subcommand_matches("logout") {
+        let filename = "/tmp/gcsf_token.json";
+        match fs::remove_file(filename) {
+            Ok(_) => {
+                println!("Successfully removed {}", filename);
+            }
+            Err(e) => {
+                println!("Could not remove {}: {}", filename, e);
+            }
+        };
     }
 
-    let mountpoint = &args[1];
-    mount_gcsf(mountpoint);
+    if let Some(matches) = matches.subcommand_matches("mount") {
+        let mountpoint = matches.value_of("mountpoint").unwrap();
+        mount_gcsf(mountpoint);
+    }
 }
