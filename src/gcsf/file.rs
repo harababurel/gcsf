@@ -24,9 +24,9 @@ pub enum FileId {
 
 lazy_static! {
     static ref EXTENSIONS: HashMap<&'static str, &'static str> = hashmap!{
-            "application/vnd.google-apps.document" => ".docx",
-            "application/vnd.google-apps.presentation" => ".pptx",
-            "application/vnd.google-apps.spreadsheet" => ".xlsx",
+            "application/vnd.google-apps.document" => "#.odt",
+            "application/vnd.google-apps.presentation" => "#.odp",
+            "application/vnd.google-apps.spreadsheet" => "#.ods",
     };
 }
 
