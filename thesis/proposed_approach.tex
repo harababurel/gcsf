@@ -8,8 +8,34 @@ If successful, it will drastically diminish the issues described in \ref{power_u
 
 \section{Summary}
 
-In essence, Google Drive is nothing more than a remote storage system. All the operations that a user might want to execute on a local storage system (e.g. copying files, creating and organising directories, reading and writing data) have an equivalent on Google Drive.
+In essence, Google Drive is nothing more than a remote storage system. All the operations that a user might want to execute on a local storage system (e.g. copying files, creating and organising directories, reading and writing data) have an equivalent operation on Google Drive.
 
 Disk-based storage devices are organized by the operating system using a filesystem in order to keep track of all the data they contain. This happens behind the scences. Users can interact with the storage device using system calls. Some of the more popular ones are \codeword{read}, \codeword{write}, \codeword{close}, \codeword{wait}, \codeword{exec}, \codeword{fork}, \codeword{exit}, \codeword{kill}. Note that not all of these deal with file storage. Some of them are a proxy which expose different functionalities of the operating system.
 
 An interesing concept comes to mind: why not model a Google Drive account in such a way that it behaves identically to a traditional filesystem? The only difference would be that instead of storing and reading data from a local disk, it would interact with Google's servers.
+
+\section{GCSF}
+
+GCSF does exactly that. It is a virtual filesystem on top of Google Drive. It allows users to mount their Drive account locally and interact with it as with a regular disk partition. This is achieved using the FUSE (Filesystem in Userspace) interface\footnote{\url{https://github.com/libfuse/libfuse}}.
+
+\section{FUSE}
+
+FUSE is made up of two components:
+\begin{itemize}
+  \item the \textit{fuse} kernel module
+  \item the \textit{libfuse} userspace library
+\end{itemize}
+
+FUSE filesystems are usually implemented as regular applications that interact with the \textit{libfuse} library. This library provides two interfaces that are useful when defining the behavior of the filesystem.
+
+First, there is the high-level interface. The filesystem receives incoming requests from the kernel, which are provided as methods that work with high-level concepts such as file names and paths. Second, there is the low-level interface. The kernel requests are provided to the filesystem using methods that mainly use inodes for identifying files.
+
+In both cases there is a specific set of methods that the \textit{libfuse} library provides. GCSF uses the latter.
+
+\subsection{High-level interface}
+
+\lstinputlisting[language=C, caption=High-level FUSE interface, frame=single]{fuse.h}
+
+\subsection{Low-level interface}
+
+\lstinputlisting[language=C, caption=Low-level FUSE interface, frame=single]{fuse_lowlevel.h}
