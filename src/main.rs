@@ -8,6 +8,7 @@ extern crate log;
 extern crate pretty_env_logger;
 
 use clap::App;
+use std::env;
 use std::ffi::OsStr;
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,6 +17,9 @@ use std::thread;
 use std::time;
 
 use gcsf::{NullFS, GCSF};
+
+const DEFAULT_LOG: &str =
+    "hyper::client=error,rustls::client_hs=error,hyper::http=error,hyper::net=error,debug";
 
 fn mount_gcsf(mountpoint: &str) {
     let options = [
@@ -69,7 +73,10 @@ fn mount_gcsf(mountpoint: &str) {
 }
 
 fn main() {
-    pretty_env_logger::init();
+    pretty_env_logger::formatted_builder()
+        .unwrap()
+        .parse(&env::var("RUST_LOG").unwrap_or(DEFAULT_LOG.to_string()))
+        .init();
 
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
