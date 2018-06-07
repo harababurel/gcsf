@@ -40,7 +40,7 @@ impl GCSF {
 
 impl Filesystem for GCSF {
     fn lookup(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
-        self.manager.sync();
+        // self.manager.sync();
 
         let name = name.to_str().unwrap().to_string();
         let id = FileId::ParentAndName { parent, name };
@@ -56,7 +56,7 @@ impl Filesystem for GCSF {
     }
 
     fn getattr(&mut self, _req: &Request, ino: Inode, reply: ReplyAttr) {
-        self.manager.sync();
+        // self.manager.sync();
 
         match self.manager.get_file(&FileId::Inode(ino)) {
             Some(file) => {

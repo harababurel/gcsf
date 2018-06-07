@@ -76,10 +76,11 @@ impl FileManager {
         manager
     }
 
-    pub fn sync(&mut self) {
+    pub fn sync(&mut self) -> Result<(), Error> {
         if SystemTime::now().duration_since(self.last_sync).unwrap() < self.sync_interval {
-            // warn!("Not enough time has passed since last sync. Will do nothing.");
-            return;
+            return Err(err_msg(
+                "Not enough time has passed since last sync. Will do nothing.",
+            ));
         }
 
         warn!("Checking for changes and possibly applying them.");
@@ -97,8 +98,19 @@ impl FileManager {
 
             if let Some(true) = change.removed {
                 self.delete_locally(&id);
+                continue;
             }
+
+            let new_parent = {
+                let mut f = self.get_mut_file(&id).unwrap();
+                *f = File::from_drive_file(f.inode(), change.file.unwrap().clone());
+                FileId::DriveId(f.drive_parent().unwrap())
+            };
+
+            self.move_locally(&id, &new_parent);
         }
+
+        Ok(())
     }
 
     // Recursively adds all files and directories shown in "My Drive".
@@ -303,6 +315,16 @@ impl FileManager {
         file.drive_id()
             .and_then(|drive_id| self.drive_ids.insert(drive_id, file.inode()));
         self.files.insert(file.inode(), file);
+    }
+
+    pub fn move_locally(&mut self, id: &FileId, new_parent: &FileId) -> Result<(), Error> {
+        let current_node = self.get_node_id(&id)
+            .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
+        let target_node = self.get_node_id(&new_parent)
+            .ok_or(err_msg("Target node doesn't exist"))?;
+
+        self.tree.move_node(&current_node, ToParent(&target_node))?;
+        Ok(())
     }
 
     pub fn delete_locally(&mut self, id: &FileId) -> Result<(), Error> {
