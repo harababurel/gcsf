@@ -29,9 +29,9 @@ const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 impl GCSF {
     pub fn new() -> Self {
         GCSF {
-            manager: FileManager::with_drive_facade(Duration::from_secs(10), DriveFacade::new()),
+            manager: FileManager::with_drive_facade(Duration::from_secs(1), DriveFacade::new()),
             statfs_cache: LruCache::<String, u64>::with_expiry_duration_and_capacity(
-                Duration::from_secs(5),
+                Duration::from_secs(10),
                 2,
             ),
         }
@@ -40,6 +40,8 @@ impl GCSF {
 
 impl Filesystem for GCSF {
     fn lookup(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
+        self.manager.sync();
+
         let name = name.to_str().unwrap().to_string();
         let id = FileId::ParentAndName { parent, name };
 
@@ -54,6 +56,8 @@ impl Filesystem for GCSF {
     }
 
     fn getattr(&mut self, _req: &Request, ino: Inode, reply: ReplyAttr) {
+        self.manager.sync();
+
         match self.manager.get_file(&FileId::Inode(ino)) {
             Some(file) => {
                 reply.attr(&TTL, &file.attr);
@@ -286,7 +290,7 @@ impl Filesystem for GCSF {
     }
 
     fn unlink(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
-        match self.manager.delete(FileId::ParentAndName {
+        match self.manager.delete(&FileId::ParentAndName {
             parent,
             name: name.to_str().unwrap().to_string(),
         }) {
@@ -367,7 +371,7 @@ impl Filesystem for GCSF {
     }
 
     fn rmdir(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
-        match self.manager.delete(FileId::ParentAndName {
+        match self.manager.delete(&FileId::ParentAndName {
             parent,
             name: name.to_str().unwrap().to_string(),
         }) {

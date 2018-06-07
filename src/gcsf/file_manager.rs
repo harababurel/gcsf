@@ -77,10 +77,27 @@ impl FileManager {
     }
 
     pub fn sync(&mut self) {
-        if SystemTime::now().duration_since(self.last_sync).unwrap() > self.sync_interval {
-            warn!("Checking for changes and possibly applying them");
-            self.df.get_all_changes();
-            self.last_sync = SystemTime::now();
+        if SystemTime::now().duration_since(self.last_sync).unwrap() < self.sync_interval {
+            // warn!("Not enough time has passed since last sync. Will do nothing.");
+            return;
+        }
+
+        warn!("Checking for changes and possibly applying them.");
+        self.last_sync = SystemTime::now();
+
+        for change in self.df.get_all_changes() {
+            debug!("Found a change from time {:?}", &change.time);
+
+            let id = FileId::DriveId(change.file_id.unwrap());
+
+            if !self.contains(&id) {
+                error!("No such file.");
+                continue;
+            }
+
+            if let Some(true) = change.removed {
+                self.delete_locally(&id);
+            }
         }
     }
 
@@ -288,16 +305,23 @@ impl FileManager {
         self.files.insert(file.inode(), file);
     }
 
-    pub fn delete(&mut self, id: FileId) -> Result<(), Error> {
-        let node_id = self.get_node_id(&id).unwrap();
-        let inode = self.get_inode(&id).unwrap();
-        let drive_id = self.get_drive_id(&id).unwrap();
+    pub fn delete_locally(&mut self, id: &FileId) -> Result<(), Error> {
+        let node_id = self.get_node_id(id).unwrap();
+        let inode = self.get_inode(id).unwrap();
+        let drive_id = self.get_drive_id(id).unwrap();
 
         self.tree.remove_node(node_id, DropChildren)?;
         self.files.remove(&inode);
         self.node_ids.remove(&inode);
         self.drive_ids.remove(&drive_id);
 
+        Ok(())
+    }
+
+    pub fn delete(&mut self, id: &FileId) -> Result<(), Error> {
+        self.delete_locally(id)?;
+
+        let drive_id = self.get_drive_id(id).unwrap();
         match self.df.delete_permanently(&drive_id) {
             Ok(response) => {
                 debug!("{:?}", response);

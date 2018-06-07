@@ -30,6 +30,7 @@ pub struct DriveFacade {
     buff: Vec<u8>,
     pending_writes: HashMap<DriveId, Vec<PendingWrite>>,
     cache: LruCache<DriveId, Vec<u8>>,
+    changes_token: Option<String>,
 
     // This is only stored once, effectively caching the root id.
     root_id: Option<String>,
@@ -237,29 +238,58 @@ impl DriveFacade {
     }
 
     fn get_start_page_token(&mut self) -> Option<String> {
-        let result = self.hub.changes().get_start_page_token().doit();
-
+        let result = self.hub
+            .changes()
+            .get_start_page_token()
+            .add_scope(drive3::Scope::Full)
+            .doit();
         result.unwrap().1.start_page_token
+    }
+
+    fn changes_token(&mut self) -> Option<&String> {
+        if self.changes_token.is_none() {
+            self.changes_token = self.get_start_page_token();
+        }
+
+        self.changes_token.as_ref()
     }
 
     pub fn get_all_changes(&mut self) -> Vec<drive3::Change> {
         let mut all_changes = Vec::new();
-        let mut page_token = self.get_start_page_token();
 
-        while page_token.is_some() {
-            let mut response = self.hub
+        loop {
+            let token = self.changes_token().cloned().unwrap();
+            let result = self.hub
                 .changes()
-                .list(page_token.as_ref().unwrap())
+                .list(&token)
+                .param("fields", "kind,newStartPageToken,changes(kind,type,time,removed,fileId,file(name,id,size,mimeType,owners,parents,trashed))")
                 .spaces("drive")
+                .restrict_to_my_drive(true)
+                .include_removed(true)
                 .page_size(1000)
+                .add_scope(drive3::Scope::Full)
                 .doit();
 
-            debug!("{:#?}", response);
+            if result.is_err() {
+                error!("{:#?}", result);
+                break;
+            }
+            debug!("{:#?}", &result);
 
-            let changelist = response.unwrap().1;
+            let changelist = result.unwrap().1;
+            match changelist.changes {
+                Some(changes) => {
+                    debug!("extended with {} changes", changes.len());
+                    all_changes.extend(changes);
+                }
+                _ => warn!("changelist does not contain any changes!"),
+            };
 
-            page_token = changelist.next_page_token;
-            all_changes.extend(changelist.changes.unwrap());
+            self.changes_token = changelist.next_page_token;
+            if self.changes_token.is_none() {
+                self.changes_token = changelist.new_start_page_token;
+                break;
+            }
         }
 
         all_changes
@@ -331,6 +361,7 @@ impl DriveFacade {
             pending_writes: HashMap::new(),
             cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
             root_id: None,
+            changes_token: None,
         }
     }
 
