@@ -12,6 +12,8 @@ use std::collections::HashMap;
 use std::io;
 use std::io::{Read, Seek, SeekFrom};
 
+const PAGE_SIZE: u32 = 1000;
+
 type Inode = u64;
 type DriveId = String;
 
@@ -24,7 +26,7 @@ type GCAuthenticator = oauth2::Authenticator<
 type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 
 pub struct DriveFacade {
-    hub: GCDrive,
+    pub hub: GCDrive,
     buff: Vec<u8>,
     pending_writes: HashMap<DriveId, Vec<PendingWrite>>,
     cache: LruCache<DriveId, Vec<u8>>,
@@ -232,6 +234,35 @@ impl DriveFacade {
             let parents = file.parents.unwrap();
             parents[0].clone()
         })
+    }
+
+    fn get_start_page_token(&mut self) -> Option<String> {
+        let result = self.hub.changes().get_start_page_token().doit();
+
+        result.unwrap().1.start_page_token
+    }
+
+    pub fn get_all_changes(&mut self) -> Vec<drive3::Change> {
+        let mut all_changes = Vec::new();
+        let mut page_token = self.get_start_page_token();
+
+        while page_token.is_some() {
+            let mut response = self.hub
+                .changes()
+                .list(page_token.as_ref().unwrap())
+                .spaces("drive")
+                .page_size(1000)
+                .doit();
+
+            debug!("{:#?}", response);
+
+            let changelist = response.unwrap().1;
+
+            page_token = changelist.next_page_token;
+            all_changes.extend(changelist.changes.unwrap());
+        }
+
+        all_changes
     }
 
     pub fn get_all_files(

@@ -8,6 +8,8 @@ use std;
 use std::clone::Clone;
 use std::cmp;
 use std::ffi::OsStr;
+// use std::thread;
+use std::time::Duration;
 use time::Timespec;
 use DriveFacade;
 
@@ -27,9 +29,9 @@ const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 impl GCSF {
     pub fn new() -> Self {
         GCSF {
-            manager: FileManager::with_drive_facade(DriveFacade::new()),
+            manager: FileManager::with_drive_facade(Duration::from_secs(10), DriveFacade::new()),
             statfs_cache: LruCache::<String, u64>::with_expiry_duration_and_capacity(
-                std::time::Duration::from_secs(5),
+                Duration::from_secs(5),
                 2,
             ),
         }
@@ -129,6 +131,8 @@ impl Filesystem for GCSF {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
+        self.manager.sync();
+
         let mut curr_offs = offset + 1;
         match self.manager.get_children(&FileId::Inode(ino)) {
             Some(children) => {

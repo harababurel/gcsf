@@ -1,5 +1,7 @@
 use super::{File, FileId};
 use drive3;
+// use rand;
+// use rand::Rng;
 use failure::{err_msg, Error};
 use fuse::{FileAttr, FileType};
 use id_tree::InsertBehavior::*;
@@ -9,6 +11,8 @@ use id_tree::{Node, NodeId, Tree, TreeBuilder};
 use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fmt;
+// use std::thread;
+use std::time::{Duration, SystemTime};
 use time::Timespec;
 use DriveFacade;
 
@@ -24,23 +28,60 @@ pub struct FileManager {
     pub node_ids: HashMap<Inode, NodeId>,
     pub drive_ids: HashMap<DriveId, Inode>,
     pub df: DriveFacade,
+    pub last_sync: SystemTime,
+    pub sync_interval: Duration,
 }
 
 /// Deals with everything that involves local file managing. In turn, uses a DriveFacade in order
 /// to ensure consistency between the local and remote (drive) state.
 impl FileManager {
-    pub fn with_drive_facade(df: DriveFacade) -> Self {
+    pub fn with_drive_facade(sync_interval: Duration, df: DriveFacade) -> Self {
         let mut manager = FileManager {
             tree: TreeBuilder::new().with_node_capacity(500).build(),
             files: HashMap::new(),
             node_ids: HashMap::new(),
             drive_ids: HashMap::new(),
+            last_sync: SystemTime::now(),
+            sync_interval,
             df,
         };
+
+        // loop {
+        //     use drive3::Channel;
+        //     let mut req = Channel::default();
+        //     req.type_ = Some("webhook".to_string());
+        //     req.id = Some(
+        //         rand::thread_rng()
+        //             .gen_ascii_chars()
+        //             .take(10)
+        //             .collect::<String>(),
+        //     );
+        //     req.address = Some("https://sergiu.ml:8081".to_string());
+        //     let response = manager
+        //         .df
+        //         .hub
+        //         .files()
+        //         .watch(req, "1YexDx8o2Y2ajT2lDOnbF-iGczdgRMM9v")
+        //         .supports_team_drives(false)
+        //         .acknowledge_abuse(false)
+        //         .doit();
+
+        //     warn!("{:#?}", response);
+
+        //     thread::sleep_ms(5000);
+        // }
 
         manager.populate();
         manager.populate_trash();
         manager
+    }
+
+    pub fn sync(&mut self) {
+        if SystemTime::now().duration_since(self.last_sync).unwrap() > self.sync_interval {
+            warn!("Checking for changes and possibly applying them");
+            self.df.get_all_changes();
+            self.last_sync = SystemTime::now();
+        }
     }
 
     // Recursively adds all files and directories shown in "My Drive".
