@@ -86,7 +86,7 @@ impl FileManager {
         warn!("Checking for changes and possibly applying them.");
         self.last_sync = SystemTime::now();
 
-        for change in self.df.get_all_changes() {
+        for change in self.df.get_all_changes()? {
             debug!("Processing a change from {:?}", &change.time);
             let id = FileId::DriveId(change.file_id.unwrap());
 
@@ -129,12 +129,12 @@ impl FileManager {
     }
 
     // Recursively adds all files and directories shown in "My Drive".
-    fn populate(&mut self) {
-        let root = self.new_root_file();
+    fn populate(&mut self) -> Result<(), Error> {
+        let root = self.new_root_file()?;
         self.add_file(root, None);
 
         let mut queue: LinkedList<DriveId> = LinkedList::new();
-        queue.push_back(self.df.root_id().clone());
+        queue.push_back(self.df.root_id()?.to_string());
 
         while !queue.is_empty() {
             let parent_id = queue.pop_front().unwrap();
@@ -159,12 +159,14 @@ impl FileManager {
                 }
             }
         }
+
+        Ok(())
     }
 
-    fn populate_trash(&mut self) {
-        let root_id = self.df.root_id().clone();
+    fn populate_trash(&mut self) -> Result<(), Error> {
+        let root_id = self.df.root_id()?.to_string();
         let trash = self.new_special_dir("Trash", Some(TRASH_INODE));
-        self.add_file(trash.clone(), Some(FileId::DriveId(root_id)));
+        self.add_file(trash.clone(), Some(FileId::DriveId(root_id.to_string())));
 
         for drive_file in self.df.get_all_files(None, Some(true)) {
             let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
@@ -172,13 +174,17 @@ impl FileManager {
             debug!("{:#?}", &file);
             self.add_file(file, Some(FileId::Inode(trash.inode())));
         }
+
+        Ok(())
     }
 
-    fn new_root_file(&mut self) -> File {
+    fn new_root_file(&mut self) -> Result<File, Error> {
         let mut drive_file = drive3::File::default();
-        drive_file.id = Some(self.df.root_id().clone());
 
-        File {
+        let root_id = self.df.root_id()?;
+        drive_file.id = Some(root_id.to_string());
+
+        Ok(File {
             name: String::from("."),
             attr: FileAttr {
                 ino: ROOT_INODE,
@@ -197,7 +203,7 @@ impl FileManager {
                 flags: 0,
             },
             drive_file: Some(drive_file),
-        }
+        })
     }
 
     fn new_special_dir(&mut self, name: &str, preferred_inode: Option<Inode>) -> File {
@@ -304,10 +310,12 @@ impl FileManager {
     }
 
     /// Creates a file on Drive and adds it to the local file tree.
-    pub fn create_file(&mut self, mut file: File, parent: Option<FileId>) {
-        let drive_id = self.df.create(file.drive_file.as_ref().unwrap());
+    pub fn create_file(&mut self, mut file: File, parent: Option<FileId>) -> Result<(), Error> {
+        let drive_id = self.df.create(file.drive_file.as_ref().unwrap())?;
         file.set_drive_id(drive_id);
         self.add_file(file, parent);
+
+        Ok(())
     }
 
     /// Adds a file to the local file tree. Does not communicate with Drive.

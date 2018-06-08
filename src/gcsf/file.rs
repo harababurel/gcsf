@@ -135,12 +135,12 @@ impl File {
         self.drive_file.as_ref().unwrap().id.clone()
     }
 
-    pub fn set_drive_id(&mut self, id: Option<DriveId>) {
+    pub fn set_drive_id(&mut self, id: DriveId) {
         if self.drive_file.is_none() {
             return;
         }
 
-        self.drive_file.as_mut().unwrap().id = id;
+        self.drive_file.as_mut().unwrap().id = Some(id);
     }
 
     pub fn mime_type(&self) -> Option<String> {
