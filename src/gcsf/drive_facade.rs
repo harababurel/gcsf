@@ -266,6 +266,8 @@ impl DriveFacade {
                 .spaces("drive")
                 .restrict_to_my_drive(true)
                 .include_removed(true)
+                .supports_team_drives(false)
+                .include_team_drive_items(false)
                 .page_size(1000)
                 .add_scope(drive3::Scope::Full)
                 .doit();

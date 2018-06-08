@@ -92,7 +92,9 @@ impl FileManager {
             let id = FileId::DriveId(change.file_id.unwrap());
 
             if !self.contains(&id) {
-                error!("No such file.");
+                let f = File::from_drive_file(self.next_available_inode(), change.file.unwrap());
+                let parent = f.drive_parent().unwrap();
+                self.add_file(f, Some(FileId::DriveId(parent)));
                 continue;
             }
 
@@ -341,9 +343,9 @@ impl FileManager {
     }
 
     pub fn delete(&mut self, id: &FileId) -> Result<(), Error> {
-        self.delete_locally(id)?;
+        let drive_id = self.get_drive_id(id).ok_or(err_msg("No such file"))?;
 
-        let drive_id = self.get_drive_id(id).unwrap();
+        self.delete_locally(id)?;
         match self.df.delete_permanently(&drive_id) {
             Ok(response) => {
                 debug!("{:?}", response);

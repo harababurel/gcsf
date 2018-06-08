@@ -29,7 +29,7 @@ const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 impl GCSF {
     pub fn new() -> Self {
         GCSF {
-            manager: FileManager::with_drive_facade(Duration::from_secs(1), DriveFacade::new()),
+            manager: FileManager::with_drive_facade(Duration::from_secs(10), DriveFacade::new()),
             statfs_cache: LruCache::<String, u64>::with_expiry_duration_and_capacity(
                 Duration::from_secs(10),
                 2,
