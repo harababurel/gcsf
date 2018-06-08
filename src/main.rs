@@ -81,8 +81,6 @@ fn main() {
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    debug!("{:#?}", &matches);
-
     if let Some(_matches) = matches.subcommand_matches("logout") {
         let filename = "/tmp/gcsf_token.json";
         match fs::remove_file(filename) {
