@@ -243,7 +243,11 @@ impl DriveFacade {
             .get_start_page_token()
             .add_scope(drive3::Scope::Full)
             .doit();
-        result.unwrap().1.start_page_token
+
+        match result {
+            Ok(r) => r.1.start_page_token,
+            Err(_e) => None,
+        }
     }
 
     fn changes_token(&mut self) -> Option<&String> {

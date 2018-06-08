@@ -87,10 +87,10 @@ impl FileManager {
         self.last_sync = SystemTime::now();
 
         for change in self.df.get_all_changes() {
-            debug!("Found a change from time {:?}", &change.time);
-
+            debug!("Processing a change from {:?}", &change.time);
             let id = FileId::DriveId(change.file_id.unwrap());
 
+            // New file. Create it locally
             if !self.contains(&id) {
                 let f = File::from_drive_file(self.next_available_inode(), change.file.unwrap());
                 let parent = f.drive_parent().unwrap();
@@ -98,17 +98,30 @@ impl FileManager {
                 continue;
             }
 
-            if let Some(true) = change.removed {
-                self.delete_locally(&id);
+            // Trashed file. Move it to trash locally
+            if Some(true) == change.file.as_ref().unwrap().trashed {
+                let result = self.move_file_to_trash(&id, false);
+                if result.is_err() {
+                    error!("Could not move to trash: {:?}", result)
+                }
                 continue;
             }
 
+            // Removed file. Remove it locally.
+            if let Some(true) = change.removed {
+                let result = self.delete_locally(&id);
+                if result.is_err() {
+                    error!("Could not delete locally: {:?}", result)
+                }
+                continue;
+            }
+
+            // Anything else: reconstruct the file locally and move it under its parent.
             let new_parent = {
                 let mut f = self.get_mut_file(&id).unwrap();
                 *f = File::from_drive_file(f.inode(), change.file.unwrap().clone());
                 FileId::DriveId(f.drive_parent().unwrap())
             };
-
             self.move_locally(&id, &new_parent);
         }
 
@@ -355,15 +368,22 @@ impl FileManager {
         }
     }
 
-    pub fn move_file_to_trash(&mut self, id: FileId) -> Result<(), Error> {
-        let node_id = self.get_node_id(&id).unwrap();
-        let drive_id = self.get_drive_id(&id).unwrap();
-        let trash_id = self.get_node_id(&FileId::Inode(TRASH_INODE)).unwrap();
+    pub fn move_file_to_trash(&mut self, id: &FileId, also_on_drive: bool) -> Result<(), Error> {
+        debug!("Moving {:?} to trash.", &id);
+        let node_id = self.get_node_id(id)
+            .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
+        let drive_id = self.get_drive_id(id)
+            .ok_or(err_msg(format!("Cannot find drive_id of {:?}", &id)))?;
+        let trash_id = self.get_node_id(&FileId::Inode(TRASH_INODE))
+            .ok_or(err_msg("Cannot find node_id of Trash dir"))?;
 
         self.tree.move_node(&node_id, ToParent(&trash_id))?;
-        self.df
-            .move_to_trash(drive_id)
-            .map_err(|_| err_msg("asdf"))?;
+
+        if also_on_drive {
+            self.df
+                .move_to_trash(drive_id)
+                .map_err(|_| err_msg("asdf"))?;
+        }
 
         Ok(())
     }

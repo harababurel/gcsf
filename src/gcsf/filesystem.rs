@@ -57,7 +57,6 @@ impl Filesystem for GCSF {
 
     fn getattr(&mut self, _req: &Request, ino: Inode, reply: ReplyAttr) {
         // self.manager.sync();
-
         match self.manager.get_file(&FileId::Inode(ino)) {
             Some(file) => {
                 reply.attr(&TTL, &file.attr);
@@ -290,10 +289,17 @@ impl Filesystem for GCSF {
     }
 
     fn unlink(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
-        match self.manager.delete(&FileId::ParentAndName {
+        let id = FileId::ParentAndName {
             parent,
             name: name.to_str().unwrap().to_string(),
-        }) {
+        };
+
+        if !self.manager.contains(&id) {
+            reply.error(ENOENT);
+            return;
+        }
+
+        match self.manager.delete(&id) {
             Ok(response) => {
                 debug!("{:?}", response);
                 reply.ok();
