@@ -20,15 +20,17 @@ GCSF does exactly that. It is a virtual filesystem on top of Google Drive. It al
 
 \section{FUSE}
 
+FUSE (\textbf{F}ilesystem in \textbf{Use}rspace) is a project that allows users to create virtual filesystems in the user level. Internally, it delegates tasks to a kernel module. As so, users do not have to interact with the kernel directly. FUSE is a popular choice for esoteric filesystems which do not store data themselves. A few notable examples are \emph{sshfs}\footnote{\url{https://github.com/libfuse/sshfs}}, which mounts a remote filesystem using SFTP\footnote{\url{https://tools.ietf.org/html/draft-moonesamy-secsh-filexfer-00}}, and \emph{WikipediaFS}\footnote{\url{http://wikipediafs.sourceforge.net/}} which allows users to view and edit articles locally.
+
 FUSE is made up of two components:
 \begin{itemize}
   \item the \textit{fuse} kernel module
   \item the \textit{libfuse} userspace library
 \end{itemize}
 
-FUSE filesystems are usually implemented as regular applications that interact with the \textit{libfuse} library. This library provides two interfaces that are useful when defining the behavior of the filesystem.
+FUSE filesystems are usually implemented as regular applications that interact with the \textit{libfuse} library. This library provides two interfaces that are useful for defining the behavior of the filesystem. In both cases, the filesystem receives incoming requests from the kernel, which are provided as calls to methods defined in the interface.
 
-First, there is the high-level interface. The filesystem receives incoming requests from the kernel, which are provided as methods that work with high-level concepts such as file names and paths. Second, there is the low-level interface. The kernel requests are provided to the filesystem using methods that mainly use inodes for identifying files.
+First, there is the high-level interface. It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface. Files are identified using low level concepts such as inodes\cite{tanenbaum}.
 
 In both cases there is a specific set of methods that the \textit{libfuse} library provides. GCSF uses the latter.
 
