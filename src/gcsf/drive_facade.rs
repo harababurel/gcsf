@@ -225,7 +225,7 @@ impl DriveFacade {
             return Ok(self.root_id.as_ref().unwrap());
         }
 
-        let files = self.hub
+        let parent = self.hub
             .files()
             .list()
             .param("fields", "files(parents)")
@@ -237,13 +237,26 @@ impl DriveFacade {
             .doit()
             .map_err(|e| err_msg(e.description().to_owned()))?
             .1
-            .files;
+            .files
+            .ok_or(err_msg("No files received"))?
+            .into_iter()
+            .take(1)
+            .next()
+            .ok_or(err_msg(
+                "No files on drive. Can't deduce drive id for 'My Drive'",
+            ))?
+            .parents
+            .ok_or(err_msg(
+                "Probed file has no parents. Can't deduce drive id for 'My Drive'",
+            ))?
+            .into_iter()
+            .take(1)
+            .next()
+            .ok_or(err_msg(
+                "No files on drive. Can't deduce drive id for 'My Drive'",
+            ))?;
 
-        let file = files.unwrap()[0].clone();
-        let parents = file.parents.unwrap();
-
-        self.root_id = Some(parents[0].clone());
-
+        self.root_id = Some(parent);
         Ok(self.root_id.as_ref().unwrap())
     }
 
@@ -518,8 +531,7 @@ impl DriveFacade {
         }
         self.cache.remove(id);
 
-        if let Ok(true) = self.contains(id) {
-            error!("flush(): file doesn't exist on drive!");
+        if let Ok(false) = self.contains(id) {
             return Err(err_msg("flush(): file doesn't exist on drive!"));
         }
 

@@ -134,7 +134,7 @@ impl FileManager {
         self.add_file(root, None);
 
         let mut queue: LinkedList<DriveId> = LinkedList::new();
-        queue.push_back(self.df.root_id()?.to_string());
+        queue.push_back(self.df.root_id().unwrap_or(&"root".to_string()).to_string());
 
         while !queue.is_empty() {
             let parent_id = queue.pop_front().unwrap();
@@ -181,7 +181,8 @@ impl FileManager {
     fn new_root_file(&mut self) -> Result<File, Error> {
         let mut drive_file = drive3::File::default();
 
-        let root_id = self.df.root_id()?;
+        let fallback_id = String::from("root");
+        let root_id = self.df.root_id().unwrap_or(&fallback_id);
         drive_file.id = Some(root_id.to_string());
 
         Ok(File {
