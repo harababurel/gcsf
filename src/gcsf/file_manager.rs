@@ -89,17 +89,25 @@ impl FileManager {
         for change in self.df.get_all_changes()? {
             debug!("Processing a change from {:?}", &change.time);
             let id = FileId::DriveId(change.file_id.unwrap());
+            let drive_f = change.file;
 
             // New file. Create it locally
-            if !self.contains(&id) {
-                let f = File::from_drive_file(self.next_available_inode(), change.file.unwrap());
+            debug!("New file. Create it locally");
+            if drive_f.is_some() && !self.contains(&id)  {
+                let f = File::from_drive_file(self.next_available_inode(), drive_f.unwrap());
+
+                debug!("newly created file: {:#?}", &f);
+
                 let parent = f.drive_parent().unwrap();
+                debug!("drive parent: {:#?}", &parent);
                 self.add_file(f, Some(FileId::DriveId(parent)));
+                debug!("self.add_file() finished");
                 continue;
             }
 
             // Trashed file. Move it to trash locally
-            if Some(true) == change.file.as_ref().unwrap().trashed {
+            debug!("Trashed file. Move it to trash locally");
+            if drive_f.is_some() && Some(true) == drive_f.as_ref().unwrap().trashed {
                 let result = self.move_file_to_trash(&id, false);
                 if result.is_err() {
                     error!("Could not move to trash: {:?}", result)
@@ -108,6 +116,7 @@ impl FileManager {
             }
 
             // Removed file. Remove it locally.
+            debug!("Removed file. Remove it locally.");
             if let Some(true) = change.removed {
                 let result = self.delete_locally(&id);
                 if result.is_err() {
@@ -117,9 +126,10 @@ impl FileManager {
             }
 
             // Anything else: reconstruct the file locally and move it under its parent.
+            debug!("Anything else: reconstruct the file locally and move it under its parent.");
             let new_parent = {
                 let mut f = self.get_mut_file(&id).unwrap();
-                *f = File::from_drive_file(f.inode(), change.file.unwrap().clone());
+                *f = File::from_drive_file(f.inode(), drive_f.unwrap().clone());
                 FileId::DriveId(f.drive_parent().unwrap())
             };
             self.move_locally(&id, &new_parent);
@@ -425,10 +435,7 @@ impl FileManager {
 
         debug!("parent_id: {}", &parent_id);
 
-        self.df
-            .move_to(&drive_id, &parent_id, &new_name)
-            .map_err(|_| err_msg("Could not move on drive"))?;
-
+        self.df.move_to(&drive_id, &parent_id, &new_name)?;
         Ok(())
     }
 

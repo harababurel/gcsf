@@ -295,7 +295,8 @@ impl DriveFacade {
                 .param("fields", "kind,newStartPageToken,changes(kind,type,time,removed,fileId,file(name,id,size,mimeType,owners,parents,trashed))")
                 .spaces("drive")
                 .restrict_to_my_drive(true)
-                .include_removed(true)
+                // Whether to include changes indicating that items have been removed from the list of changes, for example by deletion or loss of access. (Default: true)
+                .include_removed(false) // ^wtf?
                 .supports_team_drives(false)
                 .include_team_drive_items(false)
                 .page_size(1000)
@@ -490,7 +491,7 @@ impl DriveFacade {
             .remove_parents(&current_parents)
             .add_parents(parent)
             .upload_resumable(dummy_file, mime_type.parse().unwrap())
-            .map_err(|e| err_msg(e.description().to_owned()))
+            .map_err(|e| err_msg(format!("{}", e)))
     }
 
     // This will fail: "The resource body includes fields which are not directly writable."
