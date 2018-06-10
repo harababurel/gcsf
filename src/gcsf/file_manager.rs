@@ -22,6 +22,18 @@ pub type DriveId = String;
 const ROOT_INODE: Inode = 1;
 const TRASH_INODE: Inode = 2;
 
+macro_rules! unwrap_or_continue {
+    ($res:expr) => {
+        match $res {
+            Some(val) => val,
+            None => {
+                warn!("unwrap_or_continue!(): skipped.");
+                continue;
+            }
+        }
+    };
+}
+
 pub struct FileManager {
     tree: Tree<Inode>,
     pub files: HashMap<Inode, File>,
@@ -71,8 +83,14 @@ impl FileManager {
         //     thread::sleep_ms(5000);
         // }
 
-        manager.populate();
-        manager.populate_trash();
+        if let Err(e) = manager.populate() {
+            error!("Could not populate filesystem: {}", e);
+        }
+
+        if let Err(e) = manager.populate_trash() {
+            error!("Could not populate trash dir: {}", e);
+        }
+
         manager
     }
 
@@ -86,15 +104,19 @@ impl FileManager {
         warn!("Checking for changes and possibly applying them.");
         self.last_sync = SystemTime::now();
 
-        for change in self.df.get_all_changes()? {
+        for change in self.df
+            .get_all_changes()?
+            .into_iter()
+            .filter(|change| (&change).file.is_some())
+        {
             debug!("Processing a change from {:?}", &change.time);
             let id = FileId::DriveId(change.file_id.unwrap());
-            let drive_f = change.file;
+            let drive_f = change.file.unwrap();
 
             // New file. Create it locally
-            debug!("New file. Create it locally");
-            if drive_f.is_some() && !self.contains(&id)  {
-                let f = File::from_drive_file(self.next_available_inode(), drive_f.unwrap());
+            if !self.contains(&id) {
+                debug!("New file. Create it locally");
+                let f = File::from_drive_file(self.next_available_inode(), drive_f.clone());
 
                 debug!("newly created file: {:#?}", &f);
 
@@ -102,12 +124,11 @@ impl FileManager {
                 debug!("drive parent: {:#?}", &parent);
                 self.add_file(f, Some(FileId::DriveId(parent)));
                 debug!("self.add_file() finished");
-                continue;
             }
 
             // Trashed file. Move it to trash locally
-            debug!("Trashed file. Move it to trash locally");
-            if drive_f.is_some() && Some(true) == drive_f.as_ref().unwrap().trashed {
+            if Some(true) == drive_f.trashed {
+                debug!("Trashed file. Move it to trash locally");
                 let result = self.move_file_to_trash(&id, false);
                 if result.is_err() {
                     error!("Could not move to trash: {:?}", result)
@@ -116,8 +137,8 @@ impl FileManager {
             }
 
             // Removed file. Remove it locally.
-            debug!("Removed file. Remove it locally.");
             if let Some(true) = change.removed {
+                debug!("Removed file. Remove it locally.");
                 let result = self.delete_locally(&id);
                 if result.is_err() {
                     error!("Could not delete locally: {:?}", result)
@@ -128,11 +149,14 @@ impl FileManager {
             // Anything else: reconstruct the file locally and move it under its parent.
             debug!("Anything else: reconstruct the file locally and move it under its parent.");
             let new_parent = {
-                let mut f = self.get_mut_file(&id).unwrap();
-                *f = File::from_drive_file(f.inode(), drive_f.unwrap().clone());
+                let mut f = unwrap_or_continue!(self.get_mut_file(&id));
+                *f = File::from_drive_file(f.inode(), drive_f.clone());
                 FileId::DriveId(f.drive_parent().unwrap())
             };
-            self.move_locally(&id, &new_parent);
+            let result = self.move_locally(&id, &new_parent);
+            if result.is_err() {
+                error!("Could not move locally: {:?}", result)
+            }
         }
 
         Ok(())
@@ -333,7 +357,17 @@ impl FileManager {
     fn add_file(&mut self, file: File, parent: Option<FileId>) {
         let node_id = match parent {
             Some(inode) => {
-                info!("add file to parent inode = {:?}", inode);
+                {
+                    match self.get_file(&inode).map(|ref file| &file.name) {
+                        Some(parent_name) => {
+                            info!("Added \"{}/{}\"", parent_name, &file.name);
+                        }
+                        None => {
+                            info!("Added \"???/{}\"", &file.name);
+                        }
+                    };
+                }
+
                 let parent_id = self.get_node_id(&inode).unwrap();
                 self.tree
                     .insert(Node::new(file.inode()), UnderNode(&parent_id))

@@ -134,7 +134,9 @@ impl Filesystem for GCSF {
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
-        self.manager.sync();
+        if let Err(e) = self.manager.sync() {
+            error!("Could not perform sync: {}", e);
+        }
 
         let mut curr_offs = offset + 1;
         match self.manager.get_children(&FileId::Inode(ino)) {
@@ -284,8 +286,16 @@ impl Filesystem for GCSF {
             }),
         };
 
-        reply.created(&TTL, &file.attr, 0, 0, 0);
-        self.manager.create_file(file, Some(FileId::Inode(parent)));
+        let attr = file.attr.clone();
+        match self.manager.create_file(file, Some(FileId::Inode(parent))) {
+            Ok(()) => {
+                reply.created(&TTL, &attr, 0, 0, 0);
+            }
+            Err(e) => {
+                error!("create: {}", e);
+                reply.error(EREMOTEIO);
+            }
+        }
     }
 
     fn unlink(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
@@ -372,8 +382,16 @@ impl Filesystem for GCSF {
             }),
         };
 
-        reply.entry(&TTL, &dir.attr, 0);
-        self.manager.create_file(dir, Some(FileId::Inode(parent)));
+        let attr = dir.attr.clone();
+        match self.manager.create_file(dir, Some(FileId::Inode(parent))) {
+            Ok(()) => {
+                reply.entry(&TTL, &attr, 0);
+            }
+            Err(e) => {
+                error!("mkdir: {}", e);
+                reply.error(EREMOTEIO);
+            }
+        }
     }
 
     fn rmdir(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
