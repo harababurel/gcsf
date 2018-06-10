@@ -58,31 +58,6 @@ impl FileManager {
             df,
         };
 
-        // loop {
-        //     use drive3::Channel;
-        //     let mut req = Channel::default();
-        //     req.type_ = Some("webhook".to_string());
-        //     req.id = Some(
-        //         rand::thread_rng()
-        //             .gen_ascii_chars()
-        //             .take(10)
-        //             .collect::<String>(),
-        //     );
-        //     req.address = Some("https://sergiu.ml:8081".to_string());
-        //     let response = manager
-        //         .df
-        //         .hub
-        //         .files()
-        //         .watch(req, "1YexDx8o2Y2ajT2lDOnbF-iGczdgRMM9v")
-        //         .supports_team_drives(false)
-        //         .acknowledge_abuse(false)
-        //         .doit();
-
-        //     warn!("{:#?}", response);
-
-        //     thread::sleep_ms(5000);
-        // }
-
         if let Err(e) = manager.populate() {
             error!("Could not populate filesystem: {}", e);
         }
@@ -171,8 +146,12 @@ impl FileManager {
         queue.push_back(self.df.root_id().unwrap_or(&"root".to_string()).to_string());
 
         while !queue.is_empty() {
-            let parent_id = queue.pop_front().unwrap();
-            for drive_file in self.df.get_all_files(Some(&parent_id), Some(false)) {
+            let mut parents = Vec::new();
+            while !queue.is_empty() {
+                parents.push(queue.pop_front().unwrap());
+            }
+
+            for drive_file in self.df.get_all_files(Some(parents), Some(false)) {
                 let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
 
                 if file.kind() == FileType::Directory {
@@ -186,8 +165,9 @@ impl FileManager {
                 //     file.attr.size = size;
                 // }
 
-                if self.contains(&FileId::DriveId(parent_id.clone())) {
-                    self.add_file(file, Some(FileId::DriveId(parent_id.clone())));
+                let file_parent = file.drive_parent().unwrap();
+                if self.contains(&FileId::DriveId(file_parent.clone())) {
+                    self.add_file(file, Some(FileId::DriveId(file_parent.clone())));
                 } else {
                     self.add_file(file, None);
                 }

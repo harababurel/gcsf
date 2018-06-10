@@ -305,10 +305,7 @@ impl DriveFacade {
                 .map_err(|e| err_msg(e.description().to_owned()))?;
 
             match changelist.changes {
-                Some(changes) => {
-                    debug!("extended with {} changes", changes.len());
-                    all_changes.extend(changes);
-                }
+                Some(changes) => all_changes.extend(changes),
                 _ => warn!("changelist does not contain any changes!"),
             };
 
@@ -324,7 +321,7 @@ impl DriveFacade {
 
     pub fn get_all_files(
         &mut self,
-        parent_id: Option<&str>,
+        parents: Option<Vec<DriveId>>,
         trashed: Option<bool>,
     ) -> Vec<drive3::File> {
         let mut all_files = Vec::new();
@@ -343,14 +340,21 @@ impl DriveFacade {
             };
 
             let mut query_chain: Vec<String> = Vec::new();
-            if let Some(id) = parent_id {
-                query_chain.push(format!("'{}' in parents", id));
+            if let Some(ref p) = parents {
+                let q = p.into_iter()
+                    .map(|id| format!("'{}' in parents", id))
+                    .collect::<Vec<_>>()
+                    .join(" or ");
+
+                query_chain.push(format!("({})", q));
             }
             if let Some(trash) = trashed {
                 query_chain.push(format!("trashed = {}", trash));
             }
 
             let query = query_chain.join(" and ");
+
+            debug!("query: {}", &query);
             request = request.q(&query);
 
             let result = request.doit();
@@ -361,10 +365,7 @@ impl DriveFacade {
 
             let filelist = result.unwrap().1;
             match filelist.files {
-                Some(files) => {
-                    debug!("extended with {} files", files.len());
-                    all_files.extend(files);
-                }
+                Some(files) => all_files.extend(files),
                 _ => warn!("Filelist does not contain any files!"),
             };
 
