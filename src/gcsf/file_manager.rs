@@ -92,12 +92,11 @@ impl FileManager {
             if !self.contains(&id) {
                 debug!("New file. Create it locally");
                 let f = File::from_drive_file(self.next_available_inode(), drive_f.clone());
-
                 debug!("newly created file: {:#?}", &f);
 
                 let parent = f.drive_parent().unwrap();
                 debug!("drive parent: {:#?}", &parent);
-                self.add_file(f, Some(FileId::DriveId(parent)));
+                self.add_file(f, Some(FileId::DriveId(parent)))?;
                 debug!("self.add_file() finished");
             }
 
@@ -140,7 +139,7 @@ impl FileManager {
     // Recursively adds all files and directories shown in "My Drive".
     fn populate(&mut self) -> Result<(), Error> {
         let root = self.new_root_file()?;
-        self.add_file(root, None);
+        self.add_file(root, None)?;
 
         let mut queue: LinkedList<DriveId> = LinkedList::new();
         queue.push_back(self.df.root_id().unwrap_or(&"root".to_string()).to_string());
@@ -151,7 +150,7 @@ impl FileManager {
                 parents.push(queue.pop_front().unwrap());
             }
 
-            for drive_file in self.df.get_all_files(Some(parents), Some(false)) {
+            for drive_file in self.df.get_all_files(Some(parents), Some(false))? {
                 let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
 
                 if file.kind() == FileType::Directory {
@@ -167,9 +166,9 @@ impl FileManager {
 
                 let file_parent = file.drive_parent().unwrap();
                 if self.contains(&FileId::DriveId(file_parent.clone())) {
-                    self.add_file(file, Some(FileId::DriveId(file_parent.clone())));
+                    self.add_file(file, Some(FileId::DriveId(file_parent.clone())))?;
                 } else {
-                    self.add_file(file, None);
+                    self.add_file(file, None)?;
                 }
             }
         }
@@ -180,13 +179,11 @@ impl FileManager {
     fn populate_trash(&mut self) -> Result<(), Error> {
         let root_id = self.df.root_id()?.to_string();
         let trash = self.new_special_dir("Trash", Some(TRASH_INODE));
-        self.add_file(trash.clone(), Some(FileId::DriveId(root_id.to_string())));
+        self.add_file(trash.clone(), Some(FileId::DriveId(root_id.to_string())))?;
 
-        for drive_file in self.df.get_all_files(None, Some(true)) {
+        for drive_file in self.df.get_all_files(None, Some(true))? {
             let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
-
-            debug!("{:#?}", &file);
-            self.add_file(file, Some(FileId::Inode(trash.inode())));
+            self.add_file(file, Some(FileId::Inode(trash.inode())))?;
         }
 
         Ok(())
@@ -328,13 +325,13 @@ impl FileManager {
     pub fn create_file(&mut self, mut file: File, parent: Option<FileId>) -> Result<(), Error> {
         let drive_id = self.df.create(file.drive_file.as_ref().unwrap())?;
         file.set_drive_id(drive_id);
-        self.add_file(file, parent);
+        self.add_file(file, parent)?;
 
         Ok(())
     }
 
     /// Adds a file to the local file tree. Does not communicate with Drive.
-    fn add_file(&mut self, file: File, parent: Option<FileId>) {
+    fn add_file(&mut self, file: File, parent: Option<FileId>) -> Result<(), Error> {
         let node_id = match parent {
             Some(inode) => {
                 {
@@ -348,14 +345,15 @@ impl FileManager {
                     };
                 }
 
-                let parent_id = self.get_node_id(&inode).unwrap();
+                let parent_id = self.get_node_id(&inode).ok_or(err_msg(
+                    "FileManager::add_file() could not find parent by inode",
+                ))?;
                 self.tree
-                    .insert(Node::new(file.inode()), UnderNode(&parent_id))
-                    .unwrap()
+                    .insert(Node::new(file.inode()), UnderNode(&parent_id))?
             }
             None => {
                 info!("Adding file as root! This should only happen once.");
-                self.tree.insert(Node::new(file.inode()), AsRoot).unwrap()
+                self.tree.insert(Node::new(file.inode()), AsRoot)?
             }
         };
 
@@ -363,6 +361,8 @@ impl FileManager {
         file.drive_id()
             .and_then(|drive_id| self.drive_ids.insert(drive_id, file.inode()));
         self.files.insert(file.inode(), file);
+
+        Ok(())
     }
 
     pub fn move_locally(&mut self, id: &FileId, new_parent: &FileId) -> Result<(), Error> {
@@ -444,11 +444,15 @@ impl FileManager {
             file.name = new_name.clone();
         }
 
-        let drive_id = self.get_drive_id(&id).unwrap();
-        let parent_id = self.get_drive_id(&FileId::Inode(new_parent)).unwrap();
+        let drive_id = self.get_drive_id(&id)
+            .ok_or(err_msg(format!("Cannot find drive_id of {:?}", &id)))?;
+        let parent_id = self.get_drive_id(&FileId::Inode(new_parent))
+            .ok_or(err_msg(format!(
+                "Cannot find drive_id of {:?}",
+                &FileId::Inode(new_parent)
+            )))?;
 
         debug!("parent_id: {}", &parent_id);
-
         self.df.move_to(&drive_id, &parent_id, &new_name)?;
         Ok(())
     }

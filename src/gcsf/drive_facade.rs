@@ -9,7 +9,6 @@ use oauth2;
 use serde_json;
 use std::cmp;
 use std::collections::HashMap;
-use std::error::Error as ErrorTrait;
 use std::io;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -112,7 +111,7 @@ impl DriveFacade {
 
         match response {
             Ok((_, file)) => Ok(file.id == Some(id.to_string())),
-            Err(e) => Err(err_msg(e.description().to_owned())),
+            Err(e) => Err(err_msg(format!("{}", e))),
         }
     }
 
@@ -151,7 +150,7 @@ impl DriveFacade {
             .add_scope(drive3::Scope::Full)
             .doit()
             .map(|(_response, file)| file)
-            .map_err(|e| err_msg(e.description().to_owned()))
+            .map_err(|e| err_msg(format!("{}", e)))
     }
 
     fn get_file_content(
@@ -170,7 +169,7 @@ impl DriveFacade {
                     .export(drive_id, &t)
                     .add_scope(drive3::Scope::Full)
                     .doit()
-                    .map_err(|e| err_msg(e.description().to_owned()))?;
+                    .map_err(|e| err_msg(format!("{}", e)))?;
 
                 debug!("response: {:?}", &response);
                 response
@@ -183,7 +182,7 @@ impl DriveFacade {
                     .param("alt", "media")
                     .add_scope(drive3::Scope::Full)
                     .doit()
-                    .map_err(|e| err_msg(e.description().to_owned()))?;
+                    .map_err(|e| err_msg(format!("{}", e)))?;
                 response
             }
         };
@@ -235,7 +234,7 @@ impl DriveFacade {
             .q("'root' in parents")
             .add_scope(drive3::Scope::Full)
             .doit()
-            .map_err(|e| err_msg(e.description().to_owned()))?
+            .map_err(|e| err_msg(format!("{}", e)))?
             .1
             .files
             .ok_or(err_msg("No files received"))?
@@ -266,7 +265,7 @@ impl DriveFacade {
             .get_start_page_token()
             .add_scope(drive3::Scope::Full)
             .doit()
-            .map_err(|e| err_msg(e.description().to_owned()))
+            .map_err(|e| err_msg(format!("{}", e)))
             .map(|result| {
                 result.1.start_page_token.unwrap_or(
                     err_msg(
@@ -302,11 +301,11 @@ impl DriveFacade {
                 .page_size(1000)
                 .add_scope(drive3::Scope::Full)
                 .doit()
-                .map_err(|e| err_msg(e.description().to_owned()))?;
+                .map_err(|e| err_msg(format!("{}", e)))?;
 
             match changelist.changes {
                 Some(changes) => all_changes.extend(changes),
-                _ => warn!("changelist does not contain any changes!"),
+                _ => warn!("Changelist does not contain any changes!"),
             };
 
             self.changes_token = changelist.next_page_token;
@@ -323,7 +322,7 @@ impl DriveFacade {
         &mut self,
         parents: Option<Vec<DriveId>>,
         trashed: Option<bool>,
-    ) -> Vec<drive3::File> {
+    ) -> Result<Vec<drive3::File>, Error> {
         let mut all_files = Vec::new();
         let mut page_token: Option<String> = None;
         loop {
@@ -353,17 +352,11 @@ impl DriveFacade {
             }
 
             let query = query_chain.join(" and ");
+            let (_, filelist) = request
+                .q(&query)
+                .doit()
+                .map_err(|e| err_msg(format!("{}", e)))?;
 
-            debug!("query: {}", &query);
-            request = request.q(&query);
-
-            let result = request.doit();
-            if result.is_err() {
-                error!("{:#?}", result);
-                break;
-            }
-
-            let filelist = result.unwrap().1;
             match filelist.files {
                 Some(files) => all_files.extend(files),
                 _ => warn!("Filelist does not contain any files!"),
@@ -374,7 +367,7 @@ impl DriveFacade {
                 break;
             }
         }
-        return all_files;
+        return Ok(all_files);
     }
 
     pub fn new() -> Self {
@@ -430,7 +423,7 @@ impl DriveFacade {
             .supports_team_drives(false)
             .ignore_default_visibility(true)
             .upload(dummy_file, "text/plain".parse().unwrap())
-            .map_err(|e| err_msg(e.description().to_owned()))
+            .map_err(|e| err_msg(format!("{}", e)))
             .map(|(_, file)| {
                 file.id.unwrap_or(
                     err_msg("Received file from drive but it has no drive id.").to_string(),
@@ -459,7 +452,7 @@ impl DriveFacade {
             .add_scope(drive3::Scope::Full)
             .doit()
             .map(|response| response.status.is_success())
-            .map_err(|e| err_msg(e.description().to_owned()))
+            .map_err(|e| err_msg(format!("{}", e)))
     }
 
     pub fn move_to(
@@ -492,7 +485,7 @@ impl DriveFacade {
             .remove_parents(&current_parents)
             .add_parents(parent)
             .upload_resumable(dummy_file, mime_type.parse().unwrap())
-            .map_err(|e| err_msg(format!("{}", e)))
+            .map_err(|e| err_msg(format!("DriveFacade::move_to() {}", e)))
     }
 
     // This will fail: "The resource body includes fields which are not directly writable."
