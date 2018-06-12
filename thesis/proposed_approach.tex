@@ -269,7 +269,6 @@ let result = hub.files().delete(...).doit();
 
 But the \codeword{update} call is different. Instead of exposing a public \codeword{doit()} method which does all the work, it exposes two alternatives:
 
-
 \begin{lstlisting}[language=Rust, caption=Setting file attributes, frame=single]
 fn upload<RS>(
   self,
@@ -286,3 +285,15 @@ fn upload_resumable<RS>(
 
 This means that there is no way to update a file's metadata without also providing new content. GCSF works around this by first downloading the current file content and then reuploading it exactly as it is, along with the new metadata. This is extremely wasteful and should be addressed in a future release of the library.
 
+\subsection{Remote changes}
+
+GCSF aims to achieve data consistency in two directions: any change applied locally should also be applied on Drive, and any change applied remotely should also be reflected locally. Remote changes are detected using the \codeword{changes.list} endpoint. GCSF follows the following polling policy:
+
+\begin{itemize}
+  \item It should ask for remote changes and apply them locally right before serving user requests.
+  \item It should not do this everytime. There should be a user-defined cooldown period between syncs.
+\end{itemize}
+
+This generally works. Files added/removed/modified on the web or mobile client are picked up by GCSF after a short while. No wasteful network traffic is generated, as would be the case with regular polling. The delay perceived by the user is present but not significant as it only occurs every once in a while.
+
+But there is a problem. The API seems to make up its own mind and only return the requested changes when it wants. Sometimes, this happens almost instantly. On other occasions, the user has to manually intervene and remount the filesystem in order to preserve its consistency. This can lead to problems which impair user experience.
