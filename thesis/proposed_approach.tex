@@ -285,7 +285,7 @@ fn upload_resumable<RS>(
 
 This means that there is no way to update a file's metadata without also providing new content. GCSF works around this by first downloading the current file content and then reuploading it exactly as it is, along with the new metadata. This is extremely wasteful and should be addressed in a future release of the library.
 
-\subsection{Remote changes}
+\subsection{Detecting remote changes}
 
 GCSF aims to achieve data consistency in two directions: any change applied locally should also be applied on Drive, and any change applied remotely should also be reflected locally. Remote changes are detected using the \codeword{changes.list} endpoint. GCSF follows the following polling policy:
 
