@@ -110,6 +110,37 @@ $ file "/tmp/Some document#.odt"
 
 \section{Implementation} \label{implementation}
 
+\subsection{Rust}
+
+Rust is a relatively new systems programming language\footnote{\url{https://www.rust-lang.org/en-US/}} sponsored by the Mozilla Foundation. According to \emph{The Rust Programming Language} book\cite{trpl},
+
+\begin{quote}
+Rust is a programming language that helps you write faster, more reliable software. High-level ergonomics and low-level control are often at odds with each other in programming language design; Rust stands to challenge that. Through balancing powerful technical capacity and a great developer experience, Rust gives you the option to control low-level details (such as memory usage) without all the hassle traditionally associated with such control.
+\end{quote}
+
+From this description, Rust seems like a good fit for this type of project. However, there are a few specific reasons why I chose it instead of a different language:
+
+\begin{enumerate}
+  \item Performance. Rust is in many cases on par with C/C++ in terms of performance. Compared to interpreted languages like Python or Ruby, this is a clear advantage.
+  \item Type safety. Any code that may lead to undefined behavior in Rust must be explicitly wrapped within an \codeword{unsafe { }} block, making it the programmer's responsibility to make sure that the code is correct. GCSF does not contain unsafe blocks.
+  \item Memory safety.
+    \begin{itemize}
+      \item \emph{No null pointer dereferences}. Rust does not have the concept of a \codeword{NULL} pointer. Instead, it uses a construct borrowed from the functional world (\codeword{Option<T>}) which encourages the programmer to always check the existence of a packed value.
+      \item \emph{No dangling pointers}. Instead of using a garbage collector, Rust has a set of rules that define when and how allocated memory is freed. All of these rules are enforced at compile time, thus eliminating an entire category of runtime errors. The rules are:
+      \begin{enumerate}
+        \item Any value has a single owner at any given time.
+        \item References can not outlive the objects they point to.
+        \item At any point, there can be at most one mutable reference \emph{or} any number of immutable (read-only) references to a value.
+      \end{enumerate}
+      \item \emph{No buffer overruns}
+    \end{itemize}
+  \item Easy integration of third-party libraries using the \codeword{cargo} package manager and the official package registry\footnote{\url{http://crates.io}}.
+  \item Support for the functional paradigm. Rust uses many functional concepts, \emph{closures} and \emph{iterators} being the most popular ones.
+  \item Community and growth. According to the \emph{stackoverflow Developer Survey}\footnote{\url{https://insights.stackoverflow.com/survey/2018#most-loved-dreaded-and-wanted}}, developers have chosen Rust as the most loved programming language for three years in a row.
+\end{enumerate}
+
+Some of the points stated above are discussed in more depth in Jim Blandy's book \emph{Why Rust?}\cite{why_rust}.
+
 \subsection{FUSE}
 
 FUSE (\textbf{F}ilesystem in \textbf{Use}rspace) is a project that allows users to create virtual filesystems in the user level. Internally, it delegates tasks to a kernel module. As so, users do not have to interact with the kernel directly. FUSE is a popular choice for esoteric filesystems which do not store data themselves. A few notable examples are \emph{sshfs}\footnote{\url{https://github.com/libfuse/sshfs}}, which mounts a remote filesystem using SFTP\footnote{\url{https://tools.ietf.org/html/draft-moonesamy-secsh-filexfer-00}}, and \emph{WikipediaFS}\footnote{\url{http://wikipediafs.sourceforge.net/}} which allows users to view and edit articles locally.
