@@ -12,11 +12,101 @@ In essence, Google Drive is nothing more than a remote storage system. All the o
 
 Disk-based storage devices are organized by the operating system using a filesystem in order to keep track of all the data they contain. This happens behind the scences. Users can interact with the storage device using system calls. Some of the more popular ones are \codeword{read}, \codeword{write}, \codeword{close}, \codeword{wait}, \codeword{exec}, \codeword{fork}, \codeword{exit}, \codeword{kill}. Note that not all of these deal with file storage. Some of them are a proxy which expose different functionalities of the operating system.
 
-An interesing concept comes to mind: why not model a Google Drive account in such a way that it behaves identically to a traditional filesystem? The only difference would be that instead of storing and reading data from a local disk, it would interact with Google's servers.
-
-\section{GCSF}
+An interesting concept comes to mind: why not model a Google Drive account in such a way that it behaves identically to a traditional filesystem? The only difference would be that instead of storing and reading data from a local disk, it would interact with Google's servers.
 
 GCSF does exactly that. It is a virtual filesystem on top of Google Drive. It allows users to mount their Drive account locally and interact with it as with a regular disk partition. This is achieved using the FUSE (Filesystem in Userspace) interface\footnote{\url{https://github.com/libfuse/libfuse}}, as described in \ref{implementation}.
+
+\section{Usage}
+
+Before delving into implementation details, I present a brief overview of how GCSF works from the user perspective.
+
+GCSF consists of a single binary. When executed with no arguments, it prints a help menu as seen in \ref{gcsf_help_menu}. Users can choose to mount the filesystem to a local directory. GCSF points to an authentication URL (\ref{gcsf_mount}) that must be accessed in order to obtain the right credentials for Google Drive (fig.~\ref{fig:drive_auth}). Upon completing the authentication process, GCSF mounts the filesystem and populates it with all files and directories contained in the \emph{My Drive} directory on Google Drive. This can be observed using tools such as \codeword{df} (\ref{df_output}) and \codeword{mount} (\ref{mount_output}).
+
+\begin{lstlisting}[caption=GCSF help menu, frame=single, label=gcsf_help_menu]
+$ gcsf
+GCSF 0.1.1
+Sergiu Puscas <srg.pscs@gmail.com>
+Filesystem based on Google Drive
+
+USAGE:
+    gcsf <SUBCOMMAND>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+SUBCOMMANDS:
+    help      Prints this message or the help of the given subcommand(s)
+    logout    Delete credentials file
+    mount     Mount the filesystem
+\end{lstlisting}
+
+\begin{lstlisting}[caption=GCSF mount, frame=single, label=gcsf_mount]
+$ gcsf mount /mnt/gcsf
+Please direct your browser to https://accounts.google.com/o/oauth2/[...], follow the instructions and enter the code displayed here:
+\end{lstlisting}
+
+\begin{figure}[bpt]
+\caption{Google Drive authentication}
+\label{fig:drive_auth}
+\centering
+\includegraphics[width=\textwidth]{gcsf_auth}
+\end{figure}
+
+\begin{lstlisting}[caption=List of mounted filesystems, frame=single, label=df_output]
+$ df -h
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p5   64G   45G   17G  74% /
+/dev/nvme0n1p6  644G  559G   53G  92% /home
+/dev/nvme0n1p1  256M   73M  184M  29% /boot
+GCSF             15G   11G  4.6G  70% /mnt/gcsf
+\end{lstlisting}
+
+\begin{lstlisting}[caption=Output of mount, frame=single, label=mount_output]
+$ mount | grep GCSF
+GCSF on /mnt/gcsf type fuse (rw,nosuid,nodev,relatime,user_id=1000,group_id=100,allow_other)
+\end{lstlisting}
+
+
+Now the mount directory can be accessed using a file explorer such as \emph{Ranger} (fig.~\ref{fig:ranger}) or \emph{Thunar} (fig.~\ref{fig:thunar}). Command line programs such as \codeword{ls} work as well (fig.~\ref{fig:ls}). From this point onward, the mount directory can be treated as a regular local directory apart from a few exceptions.
+
+\begin{figure}[tbp]
+\caption{Ranger window}
+\label{fig:ranger}
+\centering
+\includegraphics[width=\textwidth]{ranger}
+\end{figure}
+
+\begin{figure}[tbp]
+\caption{Thunar window}
+\label{fig:thunar}
+\centering
+\includegraphics[width=\textwidth]{thunar}
+\end{figure}
+
+\begin{figure}[tbp]
+\caption{Output of ls}
+\label{fig:ls}
+\centering
+\includegraphics[width=\textwidth]{ls}
+\end{figure}
+
+\subsection{Exceptions}
+
+As can be seen in fig.~\ref{fig:ls}, some files have a \codeword{#} symbol attached at the end of their name. This is the case for special Google Drive files, including spreadsheets, docs and slides. Since their file format and size is undefined at this point, GCSF reports the maximum file size supported for these types of files. When such a file is accessed by a user, GCSF chooses the most appropriate filetype and exports the file from Drive. It also adds the appropriate extension to the file name and updates its real size (\ref{gcsf_export}).
+
+\begin{lstlisting}[caption=Exporting Google Drive documents, frame=single, label=gcsf_export]
+$ ls "Some document#.odt"
+.rwxr-xr-x 10M root  1 Jan  1970 Some document#.odt
+$ cp "Some document#.odt" /tmp
+$ ls "/tmp/Some document#.odt"
+.rwxr-xr-x 8.8k sergiu 12 Jun 18:30 /tmp/Some document#.odt
+$ file "/tmp/Some document#.odt"
+/tmp/Some document#.odt: OpenDocument Text
+\end{lstlisting}
+
+
+
 
 \section{Implementation} \label{implementation}
 
@@ -46,3 +136,45 @@ First, there is the high-level interface. It uses high-level concepts such as fi
 A Rust implementation of the original FUSE library is available through the \emph{fuse}\footnote{\url{https://crates.io/crates/fuse}} crate. GCSF implements the \codeword{Filesystem} trait defined below.
 
 \lstinputlisting[language=Rust, caption=Rust FUSE interface, frame=single]{fuse.rs}
+
+\subsection{Drive API}
+
+Google provides a REST API for interacting with Drive\footnote{\url{https://developers.google.com/drive/api/v3/about-sdk}}. It also provides official client libraries for multiple programming languages: Java, Javascript, .NET, Objective-C, PHP and Python. There are also early-stage libraries for Dart, Go, Node.js and Ruby.
+
+Unfortunately, Rust is not officially supported. There is however a set of unofficial libraries\footnote{\url{https://github.com/Byron/google-apis-rs}}  programatically generated by Sebastian Thiel\footnote{\url{https://github.com/Byron}}. Although imperfect, they are good enough for the scope of this project.
+
+\subsection{Architecture}
+
+The heart of the application is the \codeword{GCSF} struct. This implements the \codeword{fuse::Filesystem} trait, essentially making it a mountable filesystem. Internally, a \codeword{FileManager} is used for bookkeeping. The \codeword{FileManager} provides all the required functionality for dealing with local files and directories. It keeps track of the file hierarchy, inodes, metadata and performs regular syncs. In order to apply changes remotely on Drive, it uses a \codeword{DriveFacade} linked to the user's account.
+
+These abstractions create a distinct separation of responsibilities. For instance, anything that requires network communication is performed by the \codeword{DriveFacade}. Information about any file can be obtained by simply querying the \codeword{FileManager}. (Un)mounting the file system and responding to system calls is done by \codeword{GCSF}.
+
+\subsection{Caching and laziness}
+
+Because internet connections tend to be slow and imperfect, GCSF aims reduce unnecessary network requests. The main way of achieving this is by caching file contents. Because the content of a given file is unlikely to be modified right after being accessed, it can be stored locally for a small amount of time for faster access. This can be observed by measuring the execution time of successive read operations on the same file (\ref{file_caching}). From a technical standpoint, this feature involves the use of an LRU cache, which is incidentally a remarkably popular programming interview question. Similarly, the reported filesystem capacity and usage values are also cached for a small amount of time.
+
+The second strategy for reducing network requests consists of only uploading new data when necessary. In a UNIX environment, the action of copying a single file might involve a large number of system calls. For instance, the file might have to first be created (using a \codeword{create} call), then have its attributes filled in (using a \codeword{setattr} call), then have its data written (using potentially many \codeword{write} calls with different offsets) and finally be \codeword{flush}ed. Uploading every small change that comes with each individual \codeword{write} call does not make a lot of sense. For this reason, GCSF decides to be lazy and simply store the \codeword{PendingWrite}s in memory. The operations are only performed when a \codeword{flush} call is encountered, and the new file content is uploaded as a whole afterwards.
+
+
+\begin{lstlisting}[caption=File caching, frame=single, label=file_caching]
+$ time file "/mnt/gcsf/LaTeX Guide.pdf"
+LaTeX Guide.pdf: PDF document, version 1.5
+
+real    0m2.751s
+user    0m0.005s
+sys     0m0.005s
+$ time file "/mnt/gcsf/LaTeX Guide.pdf"
+LaTeX Guide.pdf: PDF document, version 1.5
+
+real    0m0.023s
+user    0m0.017s
+sys     0m0.001s
+\end{lstlisting}
+
+
+\begin{figure}[bpt]
+\caption{GCSF Class Diagram}
+\label{fig:gcsf_class_diagram}
+\centering
+\includegraphics[width=\linewidth]{class_diagram}
+\end{figure}
