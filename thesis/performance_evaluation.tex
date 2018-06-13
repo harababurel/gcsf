@@ -77,7 +77,7 @@ It seems that there is an inconsistency between the documentation and the applic
 gdrivefs.errors.AuthorizationFailureError: Could not do auth-exchange (this was either a legitimate error, or the auth-exchange was attempted when not necessary): [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed (_ssl.c:726)
 \end{lstlisting}
 
-This is strange. After researching the problem, we find a relevant open issue on this subject\footnote{\url{https://github.com/dsoprea/GDriveFS/issues/195}}. According to user \emph{blitz313}\footnote{\url{https://github.com/blitz313}}, the root cause is one of the dependencies. Manual installation of package \codeword{httplib2-0.10.3} (instead of the required version \codeword{0.8}) seems to solve this problem and we can finally mount the filesystem:
+This is strange. After researching the problem, we find a relevant open issue on this subject\cite{gdrivefs_ssl_handshake_error}. According to user \emph{blitz313}, the root cause is one of the dependencies. Manual installation of package \codeword{httplib2-0.10.3} (instead of the required version \codeword{0.8}) seems to solve this problem and we can finally mount the filesystem:
 
 \begin{lstlisting}[caption=GDriveFS filesystem mount]
 (gdrivefs) $ gdfstool mount /tmp/credentials /mnt/gdrivefs

@@ -14,7 +14,7 @@ Disk-based storage devices are organized by the operating system using a filesys
 
 An interesting concept comes to mind: why not model a Google Drive account in such a way that it behaves identically to a traditional filesystem? The only difference would be that instead of storing and reading data from a local disk, it would interact with Google's servers.
 
-GCSF does exactly that. It is a virtual filesystem on top of Google Drive. It allows users to mount their Drive account locally and interact with it as with a regular disk partition. This is achieved using the FUSE (Filesystem in Userspace) interface\footnote{\url{https://github.com/libfuse/libfuse}}, as described in \ref{implementation}.
+GCSF does exactly that. It is a virtual filesystem on top of Google Drive. It allows users to mount their Drive account locally and interact with it as with a regular disk partition. This is achieved using the FUSE (Filesystem in Userspace) interface\cite{libfuse}, as described in \ref{implementation}.
 
 \section{Usage}
 
@@ -112,7 +112,7 @@ $ file "/tmp/Some document#.odt"
 
 \subsection{Rust}
 
-Rust is a relatively new systems programming language\footnote{\url{https://www.rust-lang.org/en-US/}} sponsored by the Mozilla Foundation. According to \emph{The Rust Programming Language} book\cite{trpl},
+Rust is a relatively new systems programming language\cite{rust_website} sponsored by the Mozilla Foundation. According to \emph{The Rust Programming Language} book\cite{trpl},
 
 \begin{quote}
 Rust is a programming language that helps you write faster, more reliable software. High-level ergonomics and low-level control are often at odds with each other in programming language design; Rust stands to challenge that. Through balancing powerful technical capacity and a great developer experience, Rust gives you the option to control low-level details (such as memory usage) without all the hassle traditionally associated with such control.
@@ -134,16 +134,16 @@ From this description, Rust seems like a good fit for this type of project. Howe
       \end{enumerate}
       \item \emph{No buffer overruns}
     \end{itemize}
-  \item Easy integration of third-party libraries using the \codeword{cargo} package manager and the official package registry\footnote{\url{http://crates.io}}.
+  \item Easy integration of third-party libraries using the \codeword{cargo} package manager and the official package registry\cite{crates_io}.
   \item Support for the functional paradigm. Rust uses many functional concepts, \emph{closures} and \emph{iterators} being the most popular ones.
-  \item Community and growth. According to the \emph{stackoverflow Developer Survey}\footnote{\url{https://insights.stackoverflow.com/survey/2018#most-loved-dreaded-and-wanted}}, developers have chosen Rust as the most loved programming language for three years in a row.
+  \item Community and growth. According to the \emph{stackoverflow Developer Survey}\cite{stack_overflow_most_loved}, developers have chosen Rust as the most loved programming language for three years in a row.
 \end{enumerate}
 
 Some of the points stated above are discussed in more depth in Jim Blandy's book \emph{Why Rust?}\cite{why_rust}.
 
 \subsection{FUSE}
 
-FUSE (\textbf{F}ilesystem in \textbf{Use}rspace) is a project that allows users to create virtual filesystems in the user level. Internally, it delegates tasks to a kernel module. As so, users do not have to interact with the kernel directly. FUSE is a popular choice for esoteric filesystems which do not store data themselves. A few notable examples are \emph{sshfs}\footnote{\url{https://github.com/libfuse/sshfs}}, which mounts a remote filesystem using SFTP\footnote{\url{https://tools.ietf.org/html/draft-moonesamy-secsh-filexfer-00}}, and \emph{WikipediaFS}\footnote{\url{http://wikipediafs.sourceforge.net/}} which allows users to view and edit articles locally.
+FUSE (\textbf{F}ilesystem in \textbf{Use}rspace) is a project that allows users to create virtual filesystems in the user level. Internally, it delegates tasks to a kernel module. As so, users do not have to interact with the kernel directly. FUSE is a popular choice for esoteric filesystems which do not store data themselves. A few notable examples are \emph{sshfs}\cite{sshfs}, which mounts a remote filesystem using SFTP\cite{sftp}, and \emph{WikipediaFS}\cite{wikipediafs} which allows users to view and edit articles locally.
 
 FUSE is made up of two components:
 \begin{itemize}
@@ -153,13 +153,13 @@ FUSE is made up of two components:
 
 FUSE filesystems are usually implemented as regular applications that interact with the \textit{libfuse} library. This library provides two interfaces that are useful for defining the behavior of the filesystem. In both cases, the filesystem receives incoming requests from the kernel, which are provided as calls to methods defined in the interface.
 
-First, there is the high-level interface (appendix~\ref{appendix:fuse_high_level}). It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface (appendix~\ref{appendix:fuse_low_level}). Files are identified using low level concepts such as inodes\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \emph{fuse}\footnote{\url{https://crates.io/crates/fuse}} crate. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
+First, there is the high-level interface (appendix~\ref{appendix:fuse_high_level}). It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface (appendix~\ref{appendix:fuse_low_level}). Files are identified using low level concepts such as inodes\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \emph{fuse}\cite{fuse_crate} crate. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
 
 \subsection{Drive API}
 
-Google provides a REST API for interacting with Drive\footnote{\url{https://developers.google.com/drive/api/v3/about-sdk}}. It also provides official client libraries for multiple programming languages: Java, Javascript, .NET, Objective-C, PHP and Python. There are also early-stage libraries for Dart, Go, Node.js and Ruby.
+Google provides a REST API for interacting with Drive\cite{google_drive_rest_api_overview}. It also provides official client libraries for multiple programming languages: Java, Javascript, .NET, Objective-C, PHP and Python. There are also early-stage libraries for Dart, Go, Node.js and Ruby.
 
-Unfortunately, Rust is not officially supported. There is however a set of unofficial libraries\footnote{\url{https://github.com/Byron/google-apis-rs}}  programatically generated by Sebastian Thiel\footnote{\url{https://github.com/Byron}}. Although imperfect, they are good enough for the scope of this project.
+Unfortunately, Rust is not officially supported. There is however a set of unofficial libraries\cite{google_apis_rs}  programatically generated by Sebastian Thiel\cite{sebastian_thiel}. Although imperfect, they are good enough for the scope of this project.
 
 \subsection{Architecture}
 
@@ -204,9 +204,9 @@ As with any sufficiently large project, GCSF involved a series of annoying and o
 
 \subsection{Shared files} \label{shared_files}
 
-The Google Drive REST API provides the \codeword{files.list} endpoint\footnote{\url{https://developers.google.com/drive/api/v3/reference/files/list}} for listing files which meet some criteria. One of the filters that can be applied is the \codeword{sharedWithMe} boolean. It instructs the API to include or ommit files that are shown in the \emph{Shared with me} collection on Drive.
+The Google Drive REST API provides the \codeword{files.list} endpoint\cite{files_list_call} for listing files which meet some criteria. One of the filters that can be applied is the \codeword{sharedWithMe} boolean. It instructs the API to include or ommit files that are shown in the \emph{Shared with me} collection on Drive.
 
-Early implementations of GCSF did not aim to manage shared files at all, as this feature requires extra work to get right. Excluding shared files is easy -- just set \codeword{sharedWithMe = false} in the request. Unfortunately, this does not work, as reported by multiple other developers.\footnote{\url{https://stackoverflow.com/questions/24515151/google-drive-sdk-sharedwithme-false-search-query-not-works}}\footnote{\url{https://github.com/google/google-api-nodejs-client/issues/1136}}\footnote{\url{https://stackoverflow.com/questions/21717592/google-drive-api-files-setq-sharedwithme-false-causes-500-internal-server-error}}. Instead of returning the requested list of files, the API returns a \textbf{500 Internal Server Error}. There is no warning sign for this behavior.
+Early implementations of GCSF did not aim to manage shared files at all, as this feature requires extra work to get right. Excluding shared files is easy -- just set \codeword{sharedWithMe = false} in the request. Unfortunately, this does not work, as reported by multiple other developers.\cite{shared_with_me_error}\cite{shared_with_me_error2}\cite{shared_with_me_error3}. Instead of returning the requested list of files, the API returns a \textbf{500 Internal Server Error}. There is no warning sign for this behavior.
 
 A possible workaround consists of replacing the query with \codeword{`me' in owners}. This is intuitive -- files that are shared with a user are usually not owned by that user, making the two queries partial substitutes for one another. This workaround is not failproof. Exceptions exist and they lead to inconsistent behavior.
 
