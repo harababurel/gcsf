@@ -1,18 +1,24 @@
 \documentclass[a4paper,12pt,titlepage,openany]{book}
-\usepackage[utf8x]{inputenc}
+\usepackage[utf8]{inputenc}
 \usepackage{color}
 \usepackage{datetime}
 \usepackage{graphicx}
 \usepackage[toc,page]{appendix}
 \usepackage{listings, listings-rust}
 \usepackage{multirow}
-\usepackage{url}
+\usepackage[hyphens]{url}
+\usepackage[hidelinks]{hyperref}
 \usepackage{xcolor}
 \usepackage{xparse}
 \usepackage[nottoc]{tocbibind}
 
+% \usepackage[style=numeric-comp]{biblatex}
+% \addbibresource{bibliography.bib}
+
 \graphicspath{ {./images/} }
 
+\hypersetup{breaklinks=true}
+\urlstyle{same}
 
 \definecolor{codegreen}{rgb}{0,0.6,0}
 \definecolor{codegray}{rgb}{0.5,0.5,0.5}
@@ -62,6 +68,7 @@
 \newdateformat{monthyeardate}{%
   \monthname[\THEMONTH] \THEYEAR}
 
+
 \title{GCSF}
 \author{Sergiu Dan Pușcaș \\ srg.pscs@gmail.com}
 \date{June 2018}
@@ -90,7 +97,9 @@
 \lstinputlisting[language=Rust, caption=Rust FUSE interface, frame=single]{fuse.rs}
 \end{appendices}
 
-\bibliographystyle{unsrt}
+\Urlmuskip=0mu plus 1mu\relax
+\bibliographystyle{plain}
 \bibliography{bibliography}
+% \printbibliography
 
 \end{document}
