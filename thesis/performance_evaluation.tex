@@ -1,2 +1,24 @@
 \chapter{Performance evaluation}
-Some performance evaluation here.
+
+Although comparing GCSF with similar tools is a fuzzy task, I will attempt to construct an appropriate performance analysis. I will use Dustin Oprea's \emph{GDriveFS}\cite{gdrivefs} project as a baseline for comparison.
+
+As of \date{June 2018}, \emph{GDriveFS} aims to be ``an innovative FUSE wrapper for Google Drive''\cite{gdrivefs}. It has been developed and maintained since \date{August 2012}, accumulating along the way a total of almost 400 commits, 23 releases, 6 contributors and 81 forks.
+
+\begin{tabular}{cc|c|c|c|c|l}
+\cline{3-4}
+& & \multicolumn{1}{ c| }{GCSF} & \multicolumn{1}{ c|}{GDriveFS} \\ \cline{1-4}
+\multicolumn{1}{ |l  }{\multirow{5}{*}{Github Statistics} } &
+\multicolumn{1}{ |l| }{First Commit} & \date{April 2018} & \date{August 2012}     \\ \cline{2-4}
+\multicolumn{1}{ |l  }{}                        &
+\multicolumn{1}{ |l| }{Commits} & 105 & 395 \\ \cline{2-4}
+\multicolumn{1}{ |l  }{}                        &
+\multicolumn{1}{ |l| }{Contributors} & 1 & 6 \\ \cline{2-4}
+\multicolumn{1}{ |l  }{}                        &
+\multicolumn{1}{ |l| }{Stars} & 0 & 489 \\ \cline{2-4}
+\multicolumn{1}{ |l  }{}                        &
+\multicolumn{1}{ |l| }{Forks} & 0 & 81 \\ \cline{1-4}
+\multicolumn{1}{ |l  }{\multirow{2}{*}{Technical Details} } &
+\multicolumn{1}{ |l| }{Language} & Rust & Python \\ \cline{2-4}
+\multicolumn{1}{ |l  }{}                        &
+\multicolumn{1}{ |l| }{LoC} & 1887 & 5232 \\ \cline{1-4}
+\end{tabular}
