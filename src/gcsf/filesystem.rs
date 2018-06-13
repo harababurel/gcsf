@@ -425,7 +425,7 @@ impl Filesystem for GCSF {
 
     fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
         if !self.statfs_cache.contains_key("size") || !self.statfs_cache.contains_key("capacity") {
-            let (size, capacity) = self.manager.df.size_and_capacity();
+            let (size, capacity) = self.manager.df.size_and_capacity().unwrap_or((0, Some(0)));
             let capacity = capacity.unwrap_or(std::i64::MAX as u64);
             self.statfs_cache.insert("size".to_string(), size);
             self.statfs_cache.insert("capacity".to_string(), capacity);

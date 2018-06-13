@@ -111,7 +111,7 @@ impl DriveFacade {
 
         match response {
             Ok((_, file)) => Ok(file.id == Some(id.to_string())),
-            Err(e) => Err(err_msg(format!("{}", e))),
+            Err(e) => Err(err_msg(format!("{:#?}", e))),
         }
     }
 
@@ -150,7 +150,7 @@ impl DriveFacade {
             .add_scope(drive3::Scope::Full)
             .doit()
             .map(|(_response, file)| file)
-            .map_err(|e| err_msg(format!("{}", e)))
+            .map_err(|e| err_msg(format!("{:#?}", e)))
     }
 
     fn get_file_content(
@@ -169,7 +169,7 @@ impl DriveFacade {
                     .export(drive_id, &t)
                     .add_scope(drive3::Scope::Full)
                     .doit()
-                    .map_err(|e| err_msg(format!("{}", e)))?;
+                    .map_err(|e| err_msg(format!("{:#?}", e)))?;
 
                 debug!("response: {:?}", &response);
                 response
@@ -182,7 +182,7 @@ impl DriveFacade {
                     .param("alt", "media")
                     .add_scope(drive3::Scope::Full)
                     .doit()
-                    .map_err(|e| err_msg(format!("{}", e)))?;
+                    .map_err(|e| err_msg(format!("{:#?}", e)))?;
                 response
             }
         };
@@ -234,7 +234,7 @@ impl DriveFacade {
             .q("'root' in parents")
             .add_scope(drive3::Scope::Full)
             .doit()
-            .map_err(|e| err_msg(format!("{}", e)))?
+            .map_err(|e| err_msg(format!("{:#?}", e)))?
             .1
             .files
             .ok_or(err_msg("No files received"))?
@@ -265,7 +265,7 @@ impl DriveFacade {
             .get_start_page_token()
             .add_scope(drive3::Scope::Full)
             .doit()
-            .map_err(|e| err_msg(format!("{}", e)))
+            .map_err(|e| err_msg(format!("{:#?}", e)))
             .map(|result| {
                 result.1.start_page_token.unwrap_or(
                     err_msg(
@@ -301,7 +301,7 @@ impl DriveFacade {
                 .page_size(1000)
                 .add_scope(drive3::Scope::Full)
                 .doit()
-                .map_err(|e| err_msg(format!("{}", e)))?;
+                .map_err(|e| err_msg(format!("{:#?}", e)))?;
 
             match changelist.changes {
                 Some(changes) => all_changes.extend(changes),
@@ -355,7 +355,7 @@ impl DriveFacade {
             let (_, filelist) = request
                 .q(&query)
                 .doit()
-                .map_err(|e| err_msg(format!("{}", e)))?;
+                .map_err(|e| err_msg(format!("{:#?}", e)))?;
 
             match filelist.files {
                 Some(files) => all_files.extend(files),
@@ -422,8 +422,8 @@ impl DriveFacade {
             .use_content_as_indexable_text(true)
             .supports_team_drives(false)
             .ignore_default_visibility(true)
-            .upload(dummy_file, "text/plain".parse().unwrap())
-            .map_err(|e| err_msg(format!("{}", e)))
+            .upload(dummy_file, "application/octet-stream".parse().unwrap())
+            .map_err(|e| err_msg(format!("{:#?}", e)))
             .map(|(_, file)| {
                 file.id.unwrap_or(
                     err_msg("Received file from drive but it has no drive id.").to_string(),
@@ -452,7 +452,7 @@ impl DriveFacade {
             .add_scope(drive3::Scope::Full)
             .doit()
             .map(|response| response.status.is_success())
-            .map_err(|e| err_msg(format!("{}", e)))
+            .map_err(|e| err_msg(format!("{:#?}", e)))
     }
 
     pub fn move_to(
@@ -532,8 +532,7 @@ impl DriveFacade {
 
         let mut file_data = self.get_file_content(&id, None).unwrap_or_default();
         self.apply_pending_writes_on_data(id.clone(), &mut file_data);
-        self.update_file_content(id.clone(), &file_data)
-            .map_err(|_| err_msg(format!("Could not update file content for {:?}", id)))?;
+        self.update_file_content(id.clone(), &file_data)?;
 
         Ok(())
     }
@@ -542,39 +541,40 @@ impl DriveFacade {
         &mut self,
         id: DriveId,
         data: &[u8],
-    ) -> drive3::Result<(Response, drive3::File)> {
+    ) -> Result<(Response, drive3::File), Error> {
         let mime_guess = data.sniff_mime_type().unwrap_or("application/octet-stream");
         debug!(
             "Updating file content for drive_id={}. Mime type guess based on content: {}",
             &id, &mime_guess
         );
 
+        let mut file = drive3::File::default();
+        file.mime_type = Some(mime_guess.to_string());
         self.hub
             .files()
-            .update(drive3::File::default(), &id)
+            .update(file, &id)
+            .add_scope(drive3::Scope::Full)
             .upload_resumable(DummyFile::new(data), mime_guess.parse().unwrap())
+            .map_err(|e| err_msg(format!("{:#?}", e)))
     }
 
-    pub fn size_and_capacity(&mut self) -> (u64, Option<u64>) {
-        let result = self.hub
+    pub fn size_and_capacity(&mut self) -> Result<(u64, Option<u64>), Error> {
+        let (_response, about) = self.hub
             .about()
             .get()
             .param("fields", "storageQuota")
             .add_scope(drive3::Scope::Full)
-            .doit();
+            .doit()
+            .map_err(|e| err_msg(format!("{:#?}", e)))?;
 
-        if result.is_err() {
-            error!("{:#?}", result);
-            return (0, Some(0));
-        }
-
-        let about = result.unwrap().1;
-        let storage_quota = about.storage_quota.unwrap();
+        let storage_quota = about
+            .storage_quota
+            .ok_or(err_msg("size_and_capacity(): no storage quota in response"))?;
 
         let usage = storage_quota.usage.unwrap().parse::<u64>().unwrap();
         let limit = storage_quota.limit.map(|s| s.parse::<u64>().unwrap());
 
-        (usage, limit)
+        Ok((usage, limit))
     }
 }
 
