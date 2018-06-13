@@ -1,0 +1,16 @@
+pub struct FileAttr {
+    pub ino: u64,
+    pub size: u64,
+    pub blocks: u64,
+    pub atime: Timespec,
+    pub mtime: Timespec,
+    pub ctime: Timespec,
+    pub crtime: Timespec,
+    pub kind: FileType,
+    pub perm: u16,
+    pub nlink: u32,
+    pub uid: u32,
+    pub gid: u32,
+    pub rdev: u32,
+    pub flags: u32,
+}

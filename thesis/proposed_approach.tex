@@ -246,7 +246,7 @@ The \codeword{perm} field is an encoding which describes a file's permissions, e
 
 Notice something missing? There is no argument for changing the file permissions. This defeats the entire purpose of recognizing different user permissions and is the reason why GCSF does not enforce this security feature.
 
-\subsection{Updating file metadata on Drive}
+\subsection{Updating file metadata on Drive} \label{updating_metadata}
 
 The client library that GCSF uses is generated based on a template which is mostly consistent with the API schema that Google uses. However, there are some inconsistent methods which act as limitations for this project.
 
@@ -297,3 +297,7 @@ GCSF aims to achieve data consistency in two directions: any change applied loca
 This generally works. Files added/removed/modified on the web or mobile client are picked up by GCSF after a short while. No wasteful network traffic is generated, as would be the case with regular polling. The delay perceived by the user is present but not significant as it only occurs every once in a while.
 
 But there is a problem. The API seems to make up its own mind and only return the requested changes when it wants. Sometimes, this happens almost instantly. On other occasions, the user has to manually intervene and remount the filesystem in order to preserve its consistency. This can lead to problems which impair user experience.
+
+\subsection{Moving files to trash}
+
+A problem similar to \ref{updating_metadata} occurs when attempting to move a file to trash. From a technical standpoint, this can be done by querying the \codeword{files.update} endpoint and setting \codeword{trashed=true} in the request. However, this results in an internal server error which states that the \codeword{trashed} field cannot be set manually. There seems to be no straightforward alternative, so at the moment all file deletions performed by GCSF are permanent.
