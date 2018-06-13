@@ -4,21 +4,31 @@ Although comparing GCSF with similar tools is a fuzzy task, I will attempt to co
 
 As of \date{June 2018}, \emph{GDriveFS} aims to be ``an innovative FUSE wrapper for Google Drive''\cite{gdrivefs}. It has been developed and maintained since \date{August 2012}, accumulating along the way a total of almost 400 commits, 23 releases, 6 contributors and 81 forks.
 
-\begin{tabular}{cc|c|c|c|c|l}
-\cline{3-4}
-& & \multicolumn{1}{ c| }{GCSF} & \multicolumn{1}{ c|}{GDriveFS} \\ \cline{1-4}
-\multicolumn{1}{ |l  }{\multirow{5}{*}{Github Statistics} } &
-\multicolumn{1}{ |l| }{First Commit} & \date{April 2018} & \date{August 2012}     \\ \cline{2-4}
-\multicolumn{1}{ |l  }{}                        &
-\multicolumn{1}{ |l| }{Commits} & 105 & 395 \\ \cline{2-4}
-\multicolumn{1}{ |l  }{}                        &
-\multicolumn{1}{ |l| }{Contributors} & 1 & 6 \\ \cline{2-4}
-\multicolumn{1}{ |l  }{}                        &
-\multicolumn{1}{ |l| }{Stars} & 0 & 489 \\ \cline{2-4}
-\multicolumn{1}{ |l  }{}                        &
-\multicolumn{1}{ |l| }{Forks} & 0 & 81 \\ \cline{1-4}
-\multicolumn{1}{ |l  }{\multirow{2}{*}{Technical Details} } &
-\multicolumn{1}{ |l| }{Language} & Rust & Python \\ \cline{2-4}
-\multicolumn{1}{ |l  }{}                        &
-\multicolumn{1}{ |l| }{LoC} & 1887 & 5232 \\ \cline{1-4}
+\makebox[\textwidth]{
+\begin{tabular}{cc|c|c|c|c|l|l}
+\cline{3-6}
+& & \multicolumn{1}{ c| }{GCSF} & \multicolumn{1}{ c|}{GDriveFS} & \multicolumn{1}{ c| }{google-drive-ocamlfuse} & \multicolumn{1}{ c| }{gdrive} \\ \cline{1-6}
+
+\multicolumn{1}{ |l| }{\multirow{7}{*}{Github Statistics} } &
+\multicolumn{1}{  l| }{Owner}        & Sergiu Pușcaș     & Dustin Oprea       & Alessandro Strada & Carbo Kuo       \\ \cline{2-6}
+\multicolumn{1}{ |l| }{}             &
+\multicolumn{1}{  l| }{First Commit} & \date{April 2018} & \date{August 2012} & \date{May 2012}   & \date{May 2012} \\ \cline{2-6}
+\multicolumn{1}{ |l| }{}             &
+\multicolumn{1}{  l| }{Commits}      & 105               & 395                & 511               & 30              \\ \cline{2-6}
+\multicolumn{1}{ |l| }{}             &
+\multicolumn{1}{  l| }{Releases}     & 1                 & 23                 & 71                & 0               \\ \cline{2-6}
+\multicolumn{1}{ |l| }{}             &
+\multicolumn{1}{  l| }{Contributors} & 1                 & 6                  & 12                & 1               \\ \cline{2-6}
+\multicolumn{1}{ |l| }{}             &
+\multicolumn{1}{  l| }{Stars}        & 0                 & 489                & 2063              & 16              \\ \cline{2-6}
+\multicolumn{1}{ |l| }{}             &
+\multicolumn{1}{  l| }{Forks}        & 0                 & 81                 & 151               & 4               \\ \cline{1-6}
+
+\multicolumn{1}{ |l| }{\multirow{2}{*}{Technical Details} } &
+\multicolumn{1}{  l| }{Language}     & Rust              & Python 2.7         & OCaml             & C++             \\ \cline{2-6}
+\multicolumn{1}{ |l| }{}             &
+\multicolumn{1}{  l| }{LoC}          & 1887              & 5232               & 7962              & 1755            \\ \cline{1-6}
 \end{tabular}
+}
+
+As a consequence, GDriveFS has more features and its longevity makes it a time-proven tool.
