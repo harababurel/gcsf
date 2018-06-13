@@ -153,20 +153,7 @@ FUSE is made up of two components:
 
 FUSE filesystems are usually implemented as regular applications that interact with the \textit{libfuse} library. This library provides two interfaces that are useful for defining the behavior of the filesystem. In both cases, the filesystem receives incoming requests from the kernel, which are provided as calls to methods defined in the interface.
 
-First, there is the high-level interface. It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface. Files are identified using low level concepts such as inodes\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust.
-
-\subsubsection{High-level interface}
-
-\lstinputlisting[language=C, caption=High-level FUSE interface, frame=single]{fuse.h}
-
-\subsubsection{Low-level interface}
-\lstinputlisting[language=C, caption=Low-level FUSE interface, frame=single]{fuse_lowlevel.h}
-
-\subsection{Rust client library}
-
-A Rust implementation of the original FUSE library is available through the \emph{fuse}\footnote{\url{https://crates.io/crates/fuse}} crate. GCSF implements the \codeword{Filesystem} trait defined below.
-
-\lstinputlisting[language=Rust, caption=Rust FUSE interface, frame=single]{fuse.rs}
+First, there is the high-level interface (appendix~\ref{appendix:fuse_high_level}). It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface (appendix~\ref{appendix:fuse_low_level}). Files are identified using low level concepts such as inodes\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \emph{fuse}\footnote{\url{https://crates.io/crates/fuse}} crate. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
 
 \subsection{Drive API}
 

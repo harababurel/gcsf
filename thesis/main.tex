@@ -1,8 +1,9 @@
-\documentclass[a4paper,11pt,titlepage,openany]{book}
+\documentclass[a4paper,12pt,titlepage,openany]{book}
 \usepackage[utf8x]{inputenc}
 \usepackage{color}
 \usepackage{datetime}
 \usepackage{graphicx}
+\usepackage[toc,page]{appendix}
 \usepackage{listings, listings-rust}
 \usepackage{multirow}
 \usepackage{url}
@@ -77,6 +78,17 @@
 \input{proposed_approach}
 \input{performance_evaluation}
 \input{conclusion}
+
+\begin{appendices}
+\chapter{FUSE high-level API} \label{appendix:fuse_high_level}
+\lstinputlisting[language=C, caption=High-level FUSE interface, frame=single]{fuse.h}
+
+\chapter{FUSE low-level API} \label{appendix:fuse_low_level}
+\lstinputlisting[language=C, caption=Low-level FUSE interface, frame=single]{fuse_lowlevel.h}
+
+\chapter{Rust FUSE library} \label{appendix:rust_fuse}
+\lstinputlisting[language=Rust, caption=Rust FUSE interface, frame=single]{fuse.rs}
+\end{appendices}
 
 \bibliographystyle{unsrt}
 \bibliography{bibliography}
