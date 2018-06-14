@@ -1,12 +1,28 @@
 \chapter{Performance evaluation}
 
-Although comparing GCSF with similar tools is a fuzzy task, I will attempt to construct an appropriate performance analysis. For this purpose I have selected three other projects:
+Although comparing GCSF with similar tools is a fuzzy task, I will attempt to construct an appropriate performance analysis. For this purpose I have selected two other projects:
 
 \begin{itemize}
-  \item \emph{GDriveFS}, which I personally used prior to starting work on GCSF
-  \item \emph{google-drive-ocamlfuse}, which seems to be the most popular choice
-  \item \emph{gdrive}, which is no longer maintained
+  \itemsep0em
+  \item \emph{GDriveFS}, which I personally used prior to starting work on GCSF.
+  \item \emph{google-drive-ocamlfuse}, which seems to be the most popular choice.
 \end{itemize}
+
+There are however many other similar projects. Most of them are either in early stages of development, abandoned, or serve a different purpose:
+
+\begin{itemize}
+  \itemsep0em
+  \item \emph{thejinx0r/node-gdrive-fuse}, unmaintained since \date{February 2016}.
+  \item \emph{S2Games/drivefs}, unmaintained since \date{June 2014}.
+  \item \emph{BYVoid/gdrive}, unmaintained since \date{October 2013}.
+  \item \emph{jcline/fuse-google-drive}, unmaintained since \date{September 2012}.
+  \item \emph{thejinx0r/DriveFS}, undocumented as of \date{June 2018}.
+  \item \emph{zond/futon}, unmaintained since \date{December 2014}. In addition, it is ``right now, and probably forever, read only'' according to the documentation.
+  \item \emph{dweidenfeld/plexdrive}, which only allows read-only access and targets media streaming.
+\end{itemize}
+
+I have also been unable to set up and run \emph{joe42/CloudFusion} so I excluded it from further benchmarks.
+  % \item \emph{gdrive}, which is no longer maintained
 
 
 Here is a brief comparison between these projects:

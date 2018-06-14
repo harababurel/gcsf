@@ -121,13 +121,16 @@ Rust is a programming language that helps you write faster, more reliable softwa
 From this description, Rust seems like a good fit for this type of project. However, there are a few specific reasons why I chose it instead of a different language:
 
 \begin{enumerate}
+  \itemsep0em
   \item Performance. Rust is in many cases on par with C/C++ in terms of performance. Compared to interpreted languages like Python or Ruby, this is a clear advantage.
   \item Type safety. Any code that may lead to undefined behavior in Rust must be explicitly wrapped within an \codeword{unsafe { }} block, making it the programmer's responsibility to make sure that the code is correct. GCSF does not contain unsafe blocks.
   \item Memory safety.
     \begin{itemize}
+      \itemsep0em
       \item \emph{No null pointer dereferences}. Rust does not have the concept of a \codeword{NULL} pointer. Instead, it uses a construct borrowed from the functional world (\codeword{Option<T>}) which encourages the programmer to always check the existence of a packed value.
       \item \emph{No dangling pointers}. Instead of using a garbage collector, Rust has a set of rules that define when and how allocated memory is freed. All of these rules are enforced at compile time, thus eliminating an entire category of runtime errors. The rules are:
       \begin{enumerate}
+        \itemsep0em
         \item Any value has a single owner at any given time.
         \item References can not outlive the objects they point to.
         \item At any point, there can be at most one mutable reference \emph{or} any number of immutable (read-only) references to a value.
@@ -147,6 +150,7 @@ FUSE (\textbf{F}ilesystem in \textbf{Use}rspace) is a project that allows users 
 
 FUSE is made up of two components:
 \begin{itemize}
+  \itemsep0em
   \item the \textit{fuse} kernel module
   \item the \textit{libfuse} userspace library
 \end{itemize}
@@ -281,6 +285,7 @@ pub fn doit_without_upload(mut self) -> Result<(Response, File)>
 GCSF aims to achieve data consistency in two directions: any change applied locally should also be applied on Drive, and any change applied remotely should also be reflected locally. Remote changes are detected using the \codeword{changes.list} endpoint. GCSF follows the following polling policy:
 
 \begin{itemize}
+  \itemsep0em
   \item It should ask for remote changes and apply them locally right before serving user requests.
   \item It should not do this everytime. There should be a user-defined cooldown period between syncs.
 \end{itemize}
