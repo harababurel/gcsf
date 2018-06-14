@@ -309,7 +309,7 @@ impl Filesystem for GCSF {
             return;
         }
 
-        match self.manager.delete(&id) {
+        match self.manager.move_file_to_trash(&id, true) {
             Ok(response) => {
                 debug!("{:?}", response);
                 reply.ok();

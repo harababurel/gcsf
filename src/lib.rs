@@ -2,7 +2,7 @@
 
 extern crate failure;
 extern crate fuse;
-extern crate google_drive3 as drive3;
+extern crate google_drive3_fork as drive3;
 extern crate hyper;
 extern crate hyper_rustls;
 extern crate id_tree;

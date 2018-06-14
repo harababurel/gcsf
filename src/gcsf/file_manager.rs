@@ -4,8 +4,8 @@ use drive3;
 // use rand::Rng;
 use failure::{err_msg, Error};
 use fuse::{FileAttr, FileType};
-use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
+use id_tree::InsertBehavior::*;
 use id_tree::RemoveBehavior::*;
 use id_tree::{Node, NodeId, Tree, TreeBuilder};
 use std::collections::HashMap;
@@ -413,9 +413,7 @@ impl FileManager {
         self.tree.move_node(&node_id, ToParent(&trash_id))?;
 
         if also_on_drive {
-            self.df
-                .move_to_trash(drive_id)
-                .map_err(|_| err_msg("asdf"))?;
+            self.df.move_to_trash(drive_id)?;
         }
 
         Ok(())

@@ -465,21 +465,10 @@ impl DriveFacade {
         parent: &DriveId,
         new_name: &str,
     ) -> Result<(Response, drive3::File), Error> {
-        let data = self.get_file_content(id, None)?;
-        let dummy_file = DummyFile::new(&data);
-
-        let metadata = self.get_file_metadata(id)?;
-        let mime_type = metadata.mime_type.unwrap_or(
-            data.sniff_mime_type()
-                .unwrap_or("application/octet-stream")
-                .to_string(),
-        );
-        let current_parents = metadata
+        let current_parents = self.get_file_metadata(id)?
             .parents
             .unwrap_or(vec![String::from("root")])
             .join(",");
-
-        debug!("current_parents: {:?}", &current_parents);
 
         let mut file = drive3::File::default();
         file.name = Some(new_name.to_string());
@@ -488,22 +477,22 @@ impl DriveFacade {
             .update(file, id)
             .remove_parents(&current_parents)
             .add_parents(parent)
-            .upload_resumable(dummy_file, mime_type.parse().unwrap())
+            .add_scope(drive3::Scope::Full)
+            .doit_without_upload()
             .map_err(|e| err_msg(format!("DriveFacade::move_to() {}", e)))
     }
 
-    // This will fail: "The resource body includes fields which are not directly writable."
-    pub fn move_to_trash(&mut self, id: DriveId) -> drive3::Result<(Response, drive3::File)> {
+    pub fn move_to_trash(&mut self, id: DriveId) -> Result<(), Error> {
         let mut f = drive3::File::default();
-        f.id = Some(id.clone());
         f.trashed = Some(true);
-        f.explicitly_trashed = Some(true);
 
         self.hub
             .files()
             .update(f, &id)
             .add_scope(drive3::Scope::Full)
-            .upload(DummyFile::new(&[]), "text/plain".parse().unwrap())
+            .doit_without_upload()
+            .map(|_| ())
+            .map_err(|e| err_msg(format!("DriveFacade::move_to() {}", e)))
     }
 
     // pub fn remove(&mut self, id: DriveId) {
