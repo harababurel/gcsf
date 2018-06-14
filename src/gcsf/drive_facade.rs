@@ -12,7 +12,8 @@ use std::collections::HashMap;
 use std::io;
 use std::io::{Read, Seek, SeekFrom};
 
-const PAGE_SIZE: u32 = 1000;
+const PAGE_SIZE: i32 = 1000;
+const CLIENT_SECRET: &str = "{\"installed\":{\"client_id\":\"726003905312-e2mq9mesjc5llclmvc04ef1k7qopv9tu.apps.googleusercontent.com\",\"project_id\":\"weighty-triode-199418\",\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\",\"client_secret\":\"hp83n1Rzz8UpxgCnqvX15qC2\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"http://localhost\"]}}";
 
 type Inode = u64;
 type DriveId = String;
@@ -69,7 +70,10 @@ impl DriveFacade {
     fn create_drive_auth() -> Result<GCAuthenticator, Error> {
         // Get an ApplicationSecret instance by some means. It contains the `client_id` and
         // `client_secret`, among other things.
-        let secret: oauth2::ApplicationSecret = Self::read_client_secret("client_secret.json")?;
+        let secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(CLIENT_SECRET)?;
+        let secret = secret
+            .installed
+            .ok_or(err_msg("ConsoleApplicationSecret.installed is None"))?;
 
         // Instantiate the authenticator. It will choose a suitable authentication flow for you,
         // unless you replace  `None` with the desired Flow.
@@ -298,7 +302,7 @@ impl DriveFacade {
                 .include_removed(false) // ^wtf?
                 .supports_team_drives(false)
                 .include_team_drive_items(false)
-                .page_size(1000)
+                .page_size(PAGE_SIZE)
                 .add_scope(drive3::Scope::Full)
                 .doit()
                 .map_err(|e| err_msg(format!("{:#?}", e)))?;
@@ -331,7 +335,7 @@ impl DriveFacade {
                 .param("fields", "nextPageToken,files(name,id,size,mimeType,owners,parents,trashed)")
                 .spaces("drive") // TODO: maybe add photos as well
                 .corpora("user")
-                .page_size(1000)
+                .page_size(PAGE_SIZE)
                 .add_scope(drive3::Scope::Full);
 
             if let Some(token) = page_token {
