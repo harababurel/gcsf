@@ -235,19 +235,19 @@ Notice something missing? There is no argument for changing the file permissions
 
 \subsection{Updating file metadata on Drive} \label{updating_metadata}
 
-The client library that GCSF uses is generated based on a template which is mostly consistent with the API schema that Google uses. However, there are some inconsistent methods which act as limitations for this project.
+The client library that GCSF uses is generated based on a template which is mostly consistent with the API schema that Google provides. However, there are some inconsistent methods which act as limitations for this project.
 
-One of them regards updates on file metadata. GCSF sometimes has to modify something about a file without modifying its content. For instance, renaming a file or moving it to a different directory are operations which require this sort of behavior. In order to to this, the \codeword{FileUpdateCall} can be used.
+One of them regards updates on file metadata. GCSF sometimes has to modify information about a file without changing its content. For instance, renaming a file or moving it to a different directory are operations which require this sort of behavior. In order to to this, a \codeword{FileUpdateCall} can be used.
 
 For context, most calls exposed by this client library follow the builder pattern\cite{gof}. The general structure is:
 
-\begin{lstlisting}[language=Rust, caption=Setting file attributes, frame=single]
+\begin{lstlisting}[language=Rust, frame=single]
 let result = hub.resource().activity(...).doit();
 \end{lstlisting}
 
 Or specifically:
 
-\begin{lstlisting}[language=Rust, caption=Setting file attributes, frame=single]
+\begin{lstlisting}[language=Rust, frame=single]
 let result = hub.files().copy(...).doit();
 let result = hub.files().create(...).doit();
 let result = hub.files().list(...).doit();
@@ -256,7 +256,7 @@ let result = hub.files().delete(...).doit();
 
 But the \codeword{update} call is different. Instead of exposing a public \codeword{doit()} method which does all the work, it exposes two alternatives:
 
-\begin{lstlisting}[language=Rust, caption=Setting file attributes, frame=single]
+\begin{lstlisting}[language=Rust, frame=single]
 fn upload<RS>(
   self,
   stream: RS,
@@ -270,7 +270,11 @@ fn upload_resumable<RS>(
 ) -> Result<(Response, File)>
 \end{lstlisting}
 
-This means that there is no way to update a file's metadata without also providing new content. GCSF works around this by first downloading the current file content and then reuploading it exactly as it is, along with the new metadata. This is extremely wasteful and should be addressed in a future release of the library.
+This means that there is no way to update a file's metadata without also providing new content. One terribly inefficient solution would consist of first downloading the current file content, then modifying the relevant file metadata and finally applying the changes by reuploading the content exactly as it is, along with the new metadata. In fact, this is how earlier versions of GCSF worked around this issue. As of version 0.1.2, GCSF uses a custom fork\cite{google_drive3_fork} of the library which also exposes a new method which does not require uploading file content:
+
+\begin{lstlisting}[language=Rust, frame=single]
+pub fn doit_without_upload(mut self) -> Result<(Response, File)>
+\end{lstlisting}
 
 \subsection{Detecting remote changes}
 
