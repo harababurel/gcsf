@@ -1,0 +1,27 @@
+### This is the configuration file that GCSF uses.
+### It should be placed in $XDG_CONFIG_HOME/gcsf/gcsf.toml, which is usually
+### defined as $HOME/.config/gcsf/gcsf.toml
+
+debug = true
+
+# How long to cache the contents of a file after it has been accessed.
+cache_max_seconds = 300
+
+# How how many files to cache.
+cache_max_items = 10
+
+# Mount options
+mount_options = [
+    "fsname=GCSF",
+    "allow_root",
+    "big_writes",
+    "max_write=131072"
+]
+
+# If set to true, Google Drive will provide a code after logging in and
+# authorizing GCSF. This code must be copied and pasted into GCSF in order to
+# complete the process. Useful for running GCSF on a remote server.
+#
+# If set to false, Google Drive will attempt to communicate with GCSF directly.
+# This is usually faster and more convenient.
+authorize_using_code = false
