@@ -543,6 +543,7 @@ impl DriveFacade {
 
         let mut file = drive3::File::default();
         file.mime_type = Some(mime_guess.to_string());
+
         self.hub
             .files()
             .update(file, &id)
@@ -604,13 +605,13 @@ impl Seek for DummyFile {
 
 impl Read for DummyFile {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.cursor < self.data.len() as u64 {
-            buf[0] = self.data[self.cursor as usize];
-            self.cursor += 1;
-            Ok(1)
-        } else {
-            Ok(0)
-        }
+        let remaining = self.data.len() - self.cursor as usize;
+        let copied = cmp::min(buf.len(), remaining);
+
+        buf[..].copy_from_slice(&self.data[self.cursor as usize..self.cursor as usize + copied]);
+
+        self.cursor += copied as u64;
+        Ok(copied)
     }
 
     fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
@@ -622,7 +623,9 @@ impl Read for DummyFile {
         self.cursor += written as u64;
         Ok(written)
     }
+
     fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
+        debug!("DummyFile::read_to_string()");
         let mut written: usize = 0;
         for i in self.cursor..self.data.len() as u64 {
             buf.push(self.data[i as usize] as char);
@@ -632,6 +635,7 @@ impl Read for DummyFile {
         Ok(written)
     }
     fn read_exact(&mut self, _buf: &mut [u8]) -> io::Result<()> {
+        debug!("DummyFile::read_exact()");
         Ok(())
     }
     fn by_ref(&mut self) -> &mut Self
