@@ -613,35 +613,4 @@ impl Read for DummyFile {
         self.cursor += copied as u64;
         Ok(copied)
     }
-
-    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> io::Result<usize> {
-        let mut written: usize = 0;
-        for i in self.cursor..self.data.len() as u64 {
-            buf.push(self.data[i as usize]);
-            written += 1;
-        }
-        self.cursor += written as u64;
-        Ok(written)
-    }
-
-    fn read_to_string(&mut self, buf: &mut String) -> io::Result<usize> {
-        debug!("DummyFile::read_to_string()");
-        let mut written: usize = 0;
-        for i in self.cursor..self.data.len() as u64 {
-            buf.push(self.data[i as usize] as char);
-            written += 1;
-        }
-        self.cursor += written as u64;
-        Ok(written)
-    }
-    fn read_exact(&mut self, _buf: &mut [u8]) -> io::Result<()> {
-        debug!("DummyFile::read_exact()");
-        Ok(())
-    }
-    fn by_ref(&mut self) -> &mut Self
-    where
-        Self: Sized,
-    {
-        self
-    }
 }
