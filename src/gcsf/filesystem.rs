@@ -1,4 +1,4 @@
-use super::{File, FileId, FileManager};
+use super::{Config, File, FileId, FileManager};
 use drive3;
 use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
            ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
@@ -8,8 +8,6 @@ use std;
 use std::clone::Clone;
 use std::cmp;
 use std::ffi::OsStr;
-// use std::thread;
-use std::time::Duration;
 use time::Timespec;
 use DriveFacade;
 
@@ -27,11 +25,14 @@ pub struct GCSF {
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
 impl GCSF {
-    pub fn new() -> Self {
+    pub fn with_config(config: Config) -> Self {
         GCSF {
-            manager: FileManager::with_drive_facade(Duration::from_secs(10), DriveFacade::new()),
+            manager: FileManager::with_drive_facade(
+                config.sync_interval(),
+                DriveFacade::new(&config),
+            ),
             statfs_cache: LruCache::<String, u64>::with_expiry_duration_and_capacity(
-                Duration::from_secs(10),
+                config.cache_statfs_seconds(),
                 2,
             ),
         }
@@ -135,7 +136,7 @@ impl Filesystem for GCSF {
         mut reply: ReplyDirectory,
     ) {
         if let Err(e) = self.manager.sync() {
-            error!("Could not perform sync: {}", e);
+            warn!("Could not perform sync: {}", e);
         }
 
         let mut curr_offs = offset + 1;
@@ -424,15 +425,20 @@ impl Filesystem for GCSF {
     }
 
     fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
-        if !self.statfs_cache.contains_key("size") || !self.statfs_cache.contains_key("capacity") {
+        let (size, capacity) = if !self.statfs_cache.contains_key("size")
+            || !self.statfs_cache.contains_key("capacity")
+        {
             let (size, capacity) = self.manager.df.size_and_capacity().unwrap_or((0, Some(0)));
             let capacity = capacity.unwrap_or(std::i64::MAX as u64);
             self.statfs_cache.insert("size".to_string(), size);
             self.statfs_cache.insert("capacity".to_string(), capacity);
-        }
 
-        let size = self.statfs_cache.get("size").unwrap().to_owned();
-        let capacity = self.statfs_cache.get("capacity").unwrap().to_owned();
+            (size, capacity)
+        } else {
+            let size = self.statfs_cache.get("size").unwrap().to_owned();
+            let capacity = self.statfs_cache.get("capacity").unwrap().to_owned();
+            (size, capacity)
+        };
 
         reply.statfs(
             /* blocks:*/ capacity,

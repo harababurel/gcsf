@@ -17,6 +17,8 @@ extern crate pretty_env_logger;
 extern crate rand;
 extern crate serde;
 extern crate serde_json;
+#[macro_use]
+extern crate serde_derive;
 extern crate time;
 extern crate yup_oauth2 as oauth2;
 #[macro_use]
@@ -25,7 +27,7 @@ extern crate lazy_static;
 mod gcsf;
 
 pub use gcsf::filesystem::{NullFS, GCSF};
-pub use gcsf::DriveFacade;
+pub use gcsf::{Config, DriveFacade};
 
 #[cfg(test)]
 mod tests;

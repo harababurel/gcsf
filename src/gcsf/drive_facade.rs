@@ -1,3 +1,4 @@
+use super::Config;
 use drive3;
 use failure::{err_msg, Error};
 use hyper;
@@ -53,50 +54,47 @@ lazy_static! {
 
 /// Deals with everything that involves communication with Google Drive.
 impl DriveFacade {
-    fn read_client_secret(file: &str) -> Result<oauth2::ApplicationSecret, Error> {
-        use std::fs::OpenOptions;
-        use std::io::Read;
+    pub fn new(config: &Config) -> Self {
+        debug!("DriveFacade::new()");
 
-        let mut file = OpenOptions::new().read(true).open(file)?;
-        let mut secret = String::new();
-        file.read_to_string(&mut secret)?;
+        let ttl = config.cache_max_seconds();
+        let max_count = config.cache_max_items() as usize;
 
-        let app_secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(secret.as_str())?;
-        app_secret
-            .installed
-            .ok_or(err_msg("Option did not contain a value."))
+        DriveFacade {
+            hub: DriveFacade::create_drive(&config).unwrap(),
+            buff: Vec::new(),
+            pending_writes: HashMap::new(),
+            cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
+            root_id: None,
+            changes_token: None,
+        }
     }
 
-    fn create_drive_auth() -> Result<GCAuthenticator, Error> {
-        // Get an ApplicationSecret instance by some means. It contains the `client_id` and
-        // `client_secret`, among other things.
+    fn create_drive_auth(config: &Config) -> Result<GCAuthenticator, Error> {
         let secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(CLIENT_SECRET)?;
         let secret = secret
             .installed
             .ok_or(err_msg("ConsoleApplicationSecret.installed is None"))?;
 
-        // Instantiate the authenticator. It will choose a suitable authentication flow for you,
-        // unless you replace  `None` with the desired Flow.
-        // Provide your own `AuthenticatorDelegate` to adjust the way it operates
-        // and get feedback about
-        // what's going on. You probably want to bring in your own `TokenStorage`
-        // to persist tokens and
-        // retrieve them from storage.
         let auth = oauth2::Authenticator::new(
             &secret,
             oauth2::DefaultAuthenticatorDelegate,
             hyper::Client::with_connector(hyper::net::HttpsConnector::new(
                 hyper_rustls::TlsClient::new(),
             )),
-            oauth2::DiskTokenStorage::new(&String::from("/tmp/gcsf_token.json")).unwrap(),
-            Some(oauth2::FlowType::InstalledInteractive),
+            oauth2::DiskTokenStorage::new(&config.token_path().to_string()).unwrap(),
+            Some(if config.authorize_using_code() {
+                oauth2::FlowType::InstalledInteractive
+            } else {
+                oauth2::FlowType::InstalledRedirect(8081)
+            }),
         );
 
         Ok(auth)
     }
 
-    fn create_drive() -> Result<GCDrive, Error> {
-        let auth = Self::create_drive_auth()?;
+    fn create_drive(config: &Config) -> Result<GCDrive, Error> {
+        let auth = Self::create_drive_auth(config)?;
         Ok(drive3::Drive::new(
             hyper::Client::with_connector(hyper::net::HttpsConnector::new(
                 hyper_rustls::TlsClient::new(),
@@ -118,30 +116,6 @@ impl DriveFacade {
             Err(e) => Err(err_msg(format!("{:#?}", e))),
         }
     }
-
-    // fn get_file_id(&self, name: &str) -> drive3::Result<String> {
-    //     let query = format!("name=\"{}\"", name);
-    //     let (search_response, file_list) = self.hub
-    //         .files()
-    //         .list()
-    //         .spaces("drive")
-    //         .corpora("user")
-    //         .q(&query)
-    //         .page_size(1)
-    //         .add_scope(drive3::Scope::Full)
-    //         .doit()?;
-
-    //     let metadata = file_list
-    //         .files
-    //         .map(|files| files.into_iter().take(1).next())
-    //         .ok_or(drive3::Error::FieldClash("haha"))?
-    //         .ok_or(drive3::Error::Failure(search_response))?;
-
-    //     metadata.id.ok_or(drive3::Error::FieldClash(
-    //         "file metadata does not contain an id",
-    //     ))
-    // }
-
     // pub fn get_file_size(&self, drive_id: &str, mime_type: Option<String>) -> u64 {
     //     self.get_file_content(drive_id, mime_type).unwrap().len() as u64
     // }
@@ -196,14 +170,6 @@ impl DriveFacade {
 
         Ok(content)
     }
-
-    // fn export_file(&self, drive_id: &str, mime_type: &str) -> drive3::Result<Vec<u8>> {
-
-    //     let mut content: Vec<u8> = Vec::new();
-    //     let _result = response.read_to_end(&mut content);
-
-    //     Ok(content)
-    // }
 
     fn apply_pending_writes_on_data(&mut self, id: DriveId, data: &mut Vec<u8>) {
         self.pending_writes
@@ -372,22 +338,6 @@ impl DriveFacade {
             }
         }
         return Ok(all_files);
-    }
-
-    pub fn new() -> Self {
-        debug!("DriveFacade::new()");
-
-        let ttl = ::std::time::Duration::from_secs(5 * 60);
-        let max_count = 100;
-
-        DriveFacade {
-            hub: DriveFacade::create_drive().unwrap(),
-            buff: Vec::new(),
-            pending_writes: HashMap::new(),
-            cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
-            root_id: None,
-            changes_token: None,
-        }
     }
 
     pub fn read(
