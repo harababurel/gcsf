@@ -558,7 +558,9 @@ impl Read for DummyFile {
         let remaining = self.data.len() - self.cursor as usize;
         let copied = cmp::min(buf.len(), remaining);
 
-        buf[..].copy_from_slice(&self.data[self.cursor as usize..self.cursor as usize + copied]);
+        if copied > 0 {
+            buf[..].copy_from_slice(&self.data[self.cursor as usize..self.cursor as usize + copied]);
+        }
 
         self.cursor += copied as u64;
         Ok(copied)
