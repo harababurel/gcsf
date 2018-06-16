@@ -5,7 +5,7 @@ Although comparing GCSF with similar tools is a fuzzy task, I will attempt to co
 \begin{itemize}
   \itemsep0em
   \item \emph{GDriveFS}, which I personally used prior to starting work on GCSF.
-  \item \emph{google-drive-ocamlfuse}, which seems to be the most popular choice.
+  \item \emph{google-drive-ocamlfuse}, which seems to be the most popular choice. (TODO: https://github.com/ocaml/opam-depext/issues/75)
 \end{itemize}
 
 There are however many other similar projects. Most of them are either in early stages of development, abandoned, or serve a different purpose:
@@ -125,3 +125,48 @@ Deleting a directory                             &  0.4 s  &  0.8 s  \\ \cline{1
 
 \end{tabular}
 }
+
+\section{Benchmarks}
+Specs:
+\begin{itemize}
+  \itemsep0em
+  \item Intel(R) Xeon(R) CPU D-1531 @ 2.20GHz
+  \item 2 GB RAM
+  \item Gigabit connection
+\end{itemize}
+
+\subsection{Write}
+
+\pgfplotstableread[row sep=\\,col sep=&]{
+fileSize & gcsf  & google-drive-ocamlfuse & gdrivefs \\
+1 MB     & 2.9  & 1.1  & 3.6  \\
+10 MB    & 3.4  & 2.3  & 4.7  \\
+100 MB   & 8.4  & 14.6 & 18.0 \\
+200 MB   & 14.1 & 28.6 & 34.1 \\
+}\writedata
+
+\definecolor{rustcolor}{rgb}{0.87, 0.64, 0.51}
+\definecolor{ocamlcolor}{rgb}{0.23, 0.88, 0.20}
+\definecolor{pythoncolor}{rgb}{0.20, 0.44, 0.64}
+
+\begin{tikzpicture}
+    \begin{axis}[
+            ybar,
+            bar width=.4cm,
+            width=\textwidth,
+            height=.6\textwidth,
+            legend style={at={(0.5,1)},
+                anchor=north,legend columns=-1},
+            symbolic x coords={1 MB,10 MB,100 MB,200 MB},
+            xtick=data,
+            nodes near coords,
+            nodes near coords align={vertical},
+            ymin=0,ymax=40,
+            ylabel={Time (seconds)},
+        ]
+        \addplot+[rustcolor,draw=black] table[x=fileSize,y=gcsf]{\writedata};
+        \addplot+[ocamlcolor,draw=black] table[x=fileSize,y=google-drive-ocamlfuse]{\writedata};
+        \addplot+[pythoncolor,draw=black] table[x=fileSize,y=gdrivefs]{\writedata};
+        \legend{GCSF, google-drive-ocamlfuse, GDriveFS}
+    \end{axis}
+\end{tikzpicture}
