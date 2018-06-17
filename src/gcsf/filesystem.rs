@@ -143,7 +143,7 @@ impl Filesystem for GCSF {
         match self.manager.get_children(&FileId::Inode(ino)) {
             Some(children) => {
                 for child in children.iter().skip(offset as usize) {
-                    reply.add(child.inode(), curr_offs, child.kind(), &child.name);
+                    reply.add(child.inode(), curr_offs, child.kind(), &child.name());
                     curr_offs += 1;
                 }
                 reply.ok();
@@ -277,6 +277,7 @@ impl Filesystem for GCSF {
                 rdev: 0,
                 flags: 0,
             },
+            identical_name_id: None,
             drive_file: Some(drive3::File {
                 name: Some(filename.clone()),
                 mime_type: None,
@@ -373,6 +374,7 @@ impl Filesystem for GCSF {
                 rdev: 0,
                 flags: 0,
             },
+            identical_name_id: None,
             drive_file: Some(drive3::File {
                 name: Some(dirname.clone()),
                 mime_type: Some("application/vnd.google-apps.folder".to_string()),
@@ -412,16 +414,13 @@ impl Filesystem for GCSF {
     }
 
     fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
-        self.manager
-            .get_file(&FileId::Inode(ino))
-            .and_then(|f| f.drive_id())
-            .map(|id| match self.manager.df.flush(&id) {
-                Ok(()) => reply.ok(),
-                Err(e) => {
-                    error!("{:?}", e);
-                    reply.error(EREMOTEIO);
-                }
-            });
+        match self.manager.flush(&FileId::Inode(ino)) {
+            Ok(()) => reply.ok(),
+            Err(e) => {
+                error!("{:?}", e);
+                reply.error(EREMOTEIO);
+            }
+        }
     }
 
     fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {

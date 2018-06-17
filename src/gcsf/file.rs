@@ -11,6 +11,7 @@ type DriveId = String;
 pub struct File {
     pub name: String,
     pub attr: FileAttr,
+    pub identical_name_id: Option<usize>,
     pub drive_file: Option<drive3::File>,
 }
 
@@ -88,11 +89,12 @@ impl File {
                 .filter(|c| File::is_posix(c))
                 .collect::<String>(),
             attr,
+            identical_name_id: None,
             drive_file: Some(drive_file),
         }
     }
 
-    pub fn is_posix(c: &char) -> bool {
+    fn is_posix(c: &char) -> bool {
         // https://en.wikipedia.org/wiki/Filename
         // @NTFS
 
@@ -105,6 +107,13 @@ impl File {
             .as_ref()
             .and_then(|f| f.mime_type.clone())
             .map(|t| EXTENSIONS.contains_key::<str>(&t)) == Some(true)
+    }
+
+    pub fn name(&self) -> String {
+        match self.identical_name_id {
+            Some(id) => format!("{}.{}", self.name, id),
+            None => self.name.clone(),
+        }
     }
 
     pub fn inode(&self) -> Inode {

@@ -214,6 +214,7 @@ impl FileManager {
                 rdev: 0,
                 flags: 0,
             },
+            identical_name_id: None,
             drive_file: Some(drive_file),
         })
     }
@@ -237,6 +238,7 @@ impl FileManager {
                 rdev: 0,
                 flags: 0,
             },
+            identical_name_id: None,
             drive_file: None,
         }
     }
@@ -291,7 +293,7 @@ impl FileManager {
                 ref name,
             } => self.get_children(&FileId::Inode(*parent))?
                 .into_iter()
-                .find(|child| child.name == *name)
+                .find(|child| child.name() == *name)
                 .map(|child| child.inode()),
         }
     }
@@ -330,12 +332,18 @@ impl FileManager {
         Ok(())
     }
 
+    pub fn flush(&mut self, id: &FileId) -> Result<(), Error> {
+        let file = self.get_drive_id(&id)
+            .ok_or(err_msg(format!("Cannot find drive id of {:?}", &id)))?;
+        self.df.flush(&file)
+    }
+
     /// Adds a file to the local file tree. Does not communicate with Drive.
-    fn add_file(&mut self, file: File, parent: Option<FileId>) -> Result<(), Error> {
+    fn add_file(&mut self, mut file: File, parent: Option<FileId>) -> Result<(), Error> {
         let node_id = match parent {
-            Some(inode) => {
+            Some(id) => {
                 {
-                    match self.get_file(&inode).map(|ref file| &file.name) {
+                    match self.get_file(&id).map(|ref file| &file.name) {
                         Some(parent_name) => {
                             info!("Added \"{}/{}\"", parent_name, &file.name);
                         }
@@ -345,9 +353,22 @@ impl FileManager {
                     };
                 }
 
-                let parent_id = self.get_node_id(&inode).ok_or(err_msg(
-                    "FileManager::add_file() could not find parent by inode",
+                let parent_id = self.get_node_id(&id).ok_or(err_msg(
+                    "FileManager::add_file() could not find parent by FileId",
                 ))?;
+
+                let identical_filename_count = self.get_children(&id)
+                    .ok_or(err_msg(
+                        "FileManager::add_file() could not get file siblings",
+                    ))?
+                    .iter()
+                    .filter(|child| child.name == file.name)
+                    .count();
+
+                if identical_filename_count > 0 {
+                    file.identical_name_id = Some(identical_filename_count);
+                }
+
                 self.tree
                     .insert(Node::new(file.inode()), UnderNode(&parent_id))?
             }
@@ -376,9 +397,12 @@ impl FileManager {
     }
 
     pub fn delete_locally(&mut self, id: &FileId) -> Result<(), Error> {
-        let node_id = self.get_node_id(id).unwrap();
-        let inode = self.get_inode(id).unwrap();
-        let drive_id = self.get_drive_id(id).unwrap();
+        let node_id = self.get_node_id(id)
+            .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
+        let inode = self.get_inode(id)
+            .ok_or(err_msg(format!("Cannot find inode of {:?}", &id)))?;
+        let drive_id = self.get_drive_id(id)
+            .ok_or(err_msg(format!("Cannot find drive id of {:?}", &id)))?;
 
         self.tree.remove_node(node_id, DropChildren)?;
         self.files.remove(&inode);
@@ -438,8 +462,20 @@ impl FileManager {
         self.tree.move_node(&current_node, ToParent(&target_node))?;
 
         {
+            let identical_filename_count = self.get_children(&FileId::Inode(new_parent))
+                .ok_or(err_msg("FileManager::rename() could not get file siblings"))?
+                .iter()
+                .filter(|child| child.name == new_name)
+                .count();
+
             let file = self.get_mut_file(&id).ok_or(err_msg("File doesn't exist"))?;
             file.name = new_name.clone();
+
+            if identical_filename_count > 0 {
+                file.identical_name_id = Some(identical_filename_count);
+            } else {
+                file.identical_name_id = None;
+            }
         }
 
         let drive_id = self.get_drive_id(&id)
