@@ -4,71 +4,67 @@ Although comparing GCSF with similar tools is a fuzzy task, I will attempt to co
 
 \begin{itemize}
   \itemsep0em
-  \item \emph{GDriveFS}, which I personally used prior to starting work on GCSF.
-  \item \emph{google-drive-ocamlfuse}, which seems to be the most popular choice. (TODO: https://github.com/ocaml/opam-depext/issues/75)
+  \item \emph{dsoprea/GDriveFS}~\cite{dsoprea/GDriveFS}, which I personally used prior to starting work on GCSF.
+  \item \emph{astrada/google-drive-ocamlfuse}~\cite{astrada/google-drive-ocamlfuse}, which seems to be the most popular project of those mentioned in this section.
 \end{itemize}
 
-There are however many other similar projects. Most of them are either in early stages of development, abandoned, or serve a different purpose:
+Besides the two, there are many other similar projects. Most of them are either in early stages of development, abandoned, or serve a different purpose:
 
 \begin{itemize}
   \itemsep0em
-  \item \emph{thejinx0r/node-gdrive-fuse}, unmaintained since \date{February 2016}.
-  \item \emph{S2Games/drivefs}, unmaintained since \date{June 2014}.
-  \item \emph{BYVoid/gdrive}, unmaintained since \date{October 2013}.
-  \item \emph{jcline/fuse-google-drive}, unmaintained since \date{September 2012}.
-  \item \emph{thejinx0r/DriveFS}, undocumented as of \date{June 2018}.
-  \item \emph{zond/futon}, unmaintained since \date{December 2014}. In addition, it is ``right now, and probably forever, read only'' according to the documentation.
-  \item \emph{dweidenfeld/plexdrive}, which only allows read-only access and targets media streaming.
+  \item \emph{thejinx0r/node-gdrive-fuse}~\cite{thejinx0r/node-gdrive-fuse}, unmaintained since \date{February 2016}.
+  \item \emph{joe42/CloudFusion}~\cite{joe42/CloudFusion}, unmaintained since \date{January 2015}.
+  \item \emph{S2Games/drivefs}~\cite{S2Games/drivefs}, unmaintained since \date{June 2014}.
+  \item \emph{BYVoid/gdrive}~\cite{BYVoid/gdrive}, unmaintained since \date{October 2013}.
+  \item \emph{jcline/fuse-google-drive}~\cite{jcline/fuse-google-drive}, unmaintained since \date{September 2012}.
+  \item \emph{thejinx0r/DriveFS}~\cite{thejinx0r/DriveFS}, undocumented as of \date{June 2018} and still in early stages of development.
+  \item \emph{zond/futon}~\cite{zond/futon}, unmaintained since \date{December 2014}. In addition, it is ``right now, and probably forever, read only'' according to the documentation.
+  \item \emph{dweidenfeld/plexdrive}~\cite{dweidenfeld/plexdrive}, which only allows read-only access and targets media streaming.
 \end{itemize}
 
-I have also been unable to set up and run \emph{joe42/CloudFusion} so I excluded it from further benchmarks.
-  % \item \emph{gdrive}, which is no longer maintained
-
-
-Here is a brief comparison between these projects:
+As such, I have decided to exclude these projects from my analysis and benchmarks. Here is a brief comparison of the chosen projects:
 
 \makebox[\textwidth]{
-\begin{tabular}{cc|c|c|c|c|l|l}
-\cline{3-6}
-& & \multicolumn{1}{ c| }{GCSF} & \multicolumn{1}{ c|}{GDriveFS} & \multicolumn{1}{ c| }{google-drive-ocamlfuse} & \multicolumn{1}{ c| }{gdrive} \\ \cline{1-6}
+\begin{tabular}{cc|c|c|c|c|l}
+\cline{3-5}
+& & \multicolumn{1}{ c| }{GCSF} & \multicolumn{1}{ c|}{GDriveFS} & \multicolumn{1}{ c| }{google-drive-ocamlfuse} \\ \cline{1-5}
 
 \multicolumn{1}{ |l| }{\multirow{7}{*}{Github Statistics} } &
-\multicolumn{1}{  l| }{Owner}        & Sergiu Pușcaș     & Dustin Oprea       & Alessandro Strada & Carbo Kuo       \\ \cline{2-6}
+\multicolumn{1}{  l| }{Owner}        & Sergiu Pușcaș     & Dustin Oprea       & Alessandro Strada \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{First Commit} & \date{April 2018} & \date{August 2012} & \date{May 2012}   & \date{May 2012} \\ \cline{2-6}
+\multicolumn{1}{  l| }{First Commit} & \date{April 2018} & \date{August 2012} & \date{May 2012}   \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Commits}      & 105               & 395                & 511               & 30              \\ \cline{2-6}
+\multicolumn{1}{  l| }{Commits}      & 116               & 395                & 511               \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Releases}     & 1                 & 23                 & 71                & 0               \\ \cline{2-6}
+\multicolumn{1}{  l| }{Releases}     & 1                 & 23                 & 71                \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Contributors} & 1                 & 6                  & 12                & 1               \\ \cline{2-6}
+\multicolumn{1}{  l| }{Contributors} & 1                 & 7                  & 12                \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Stars}        & 0                 & 489                & 2063              & 16              \\ \cline{2-6}
+\multicolumn{1}{  l| }{Stars}        & 1                 & 489                & 2063              \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Forks}        & 0                 & 81                 & 151               & 4               \\ \cline{1-6}
+\multicolumn{1}{  l| }{Forks}        & 0                 & 81                 & 151               \\ \cline{1-5}
 
 \multicolumn{1}{ |l| }{\multirow{2}{*}{Technical Details} } &
-\multicolumn{1}{  l| }{Language}     & Rust              & Python 2.7         & OCaml             & C++             \\ \cline{2-6}
+\multicolumn{1}{  l| }{Language}     & Rust              & Python 2.7         & OCaml             \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{LoC}          & 1887              & 5232               & 7962              & 1755            \\ \cline{1-6}
+\multicolumn{1}{  l| }{LoC}          & 1943              & 5232               & 7962              \\ \cline{1-5}
 \end{tabular}
 }
 
-In the next sections I will discuss each individual tool.
+In the next sections I will discuss each of these projects from a technical standpoint and from a user perspective.
 
 \section{GDriveFS}
 
-As of \date{June 2018}, \emph{GDriveFS} aims to be \emph{``an innovative FUSE wrapper for Google Drive''}\cite{gdrivefs}. It has been developed and maintained since \date{August 2012}, accumulating along the way a total of almost 400 commits, 23 releases, 6 contributors and 81 forks. As a consequence, GDriveFS has more features than GCSF and its longevity makes it a time-proven tool, which I can personally attest by my own experience. GDriveFS worked out of the box in most situations where I attempted to use it.
+As of \date{June 2018}, \emph{GDriveFS} aims to be \emph{``an innovative FUSE wrapper for Google Drive''}~\cite{dsoprea/GDriveFS}. It has been in development for the past six years, accumulating along the way a total of almost 400 commits, 23 releases, 6 contributors and 81 forks. As a consequence, GDriveFS has more features than GCSF and its longevity makes it a time-proven piece of software. This has been consistent with my personal experience. GDriveFS worked out of the box in most situations where I attempted to use it.
 
-Unfortunately, I encountered some issues with the latest releases. I will walk through a first time setup of this application in order to illustrate its drawbacks. First, we create a new virtual environment using \codeword{virtualenv} in order to avoid conflicts between global Python packages and the local requirements of GDriveFS. We can easily install GDriveFS in this environment as a \codeword{pip} package.
+Unfortunately, I also encountered some issues. I will walk through a first time setup of this application in order to illustrate its drawbacks. First, we create a new virtual environment using \codeword{virtualenv} in order to avoid conflicts between global Python packages and the local requirements of GDriveFS. We can easily install GDriveFS in this environment as a \codeword{pip} package.
 
 \begin{lstlisting}[caption=Creating a virtual environment and installing GDriveFS]
 $ virtualenv2 gdrivefs
-New python executable in /home/sergiu/work/gdrivefs/bin/python2
-Also creating executable in /home/sergiu/work/gdrivefs/bin/python
+New python executable in ./gdrivefs/bin/python2
+Also creating executable in ./gdrivefs/bin/python
 Installing setuptools, pip, wheel...done.
-$ cd gdrivefs
-$ source bin/activate
+$ source gdrivefs/bin/activate
 (gdrivefs) $ pip install gdrivefs
 Collecting gdrivefs
 Collecting fusepy==2.0.2 (from gdrivefs)
@@ -77,23 +73,23 @@ Collecting httplib2==0.8 (from gdrivefs)
 Successfully installed gdrivefs-0.14.9 [...]
 \end{lstlisting}
 
-Now we are ready to run into our first problem. The official documentation\cite{gdrivefs} suggests using \codeword{gdfstool auth_automatic} in order to log in with our Google account. However, we encounter an error:
+Now we are ready to run into our first problem. The official documentation~\cite{GDriveFS_README} suggests using \codeword{gdfstool auth_automatic} in order to log in with our Google account. However, we encounter an error:
 
 \begin{lstlisting}[caption=GDriveFS nonexistent authentication command]
 (gdrivefs) $ gdfstool auth_automatic
 usage: gdfstool [-h] {auth,mount} ...
-gdfstool: error: argument command: invalid choice: 'auth_automatic' (choose from 'auth', 'mount')
+gdfstool: error: argument command: invalid choice: `auth_automatic' (choose from `auth', `mount')
 \end{lstlisting}
 
-It seems that there is an inconsistency between the documentation and the application itself. No problem. We can follow the suggestion provided by the error message and execute \codeword{gdfstool auth} instead. We provide the \codeword{-o} flag in order to open the authentication form in a browser window. After logging in and allowing the application to access our Drive account, we are ready to feed the access code into \codeword{gdfstool}:
+It seems that there is an inconsistency between the documentation and the application itself. No problem. We can follow the suggestion provided by the error message and execute \codeword{gdfstool auth} instead. We provide the \codeword{-o} flag in order to open the authentication form in a browser window. After logging in and allowing the application to access our account, we are ready to feed the access code into \codeword{gdfstool}:
 
 \begin{lstlisting}[caption=GDriveFS authentication error]
-(gdrivefs) $ gdfstool auth -a /tmp/credentials "<authorization_code>"
+(gdrivefs) $ gdfstool auth -a /tmp/credentials "$CODE"
 [...]
 gdrivefs.errors.AuthorizationFailureError: Could not do auth-exchange (this was either a legitimate error, or the auth-exchange was attempted when not necessary): [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed (_ssl.c:726)
 \end{lstlisting}
 
-This is strange. After researching the problem, we find a relevant open issue on this subject\cite{gdrivefs_ssl_handshake_error}. According to user \emph{blitz313}, the root cause is one of the dependencies. Manual installation of package \codeword{httplib2-0.10.3} (instead of the required version \codeword{0.8}) seems to solve this problem and we can finally mount the filesystem:
+This is strange. After researching the problem, we find a relevant open issue on this subject~\cite{gdrivefs_ssl_handshake_error}. According to user \emph{blitz313}, the root cause is one of the dependencies. Manual installation of package \codeword{httplib2-0.10.3} (instead of the required version \codeword{0.8}) seems to solve this problem and we can finally mount the filesystem:
 
 \begin{lstlisting}[caption=GDriveFS filesystem mount]
 (gdrivefs) $ gdfstool mount /tmp/credentials /mnt/gdrivefs
@@ -107,26 +103,24 @@ drwxrwxrwx@    - sergiu 11 Jun 18:59 Stock photo collection
 .rw-rw-rw-@ 1.0k sergiu 11 Jun 18:57 This presentation#
 \end{lstlisting}
 
-\makebox[\textwidth]{
-\begin{tabular}{|p{9.0cm}|p{1.2cm}|p{1.8cm}|}
-\cline{1-3}
-Command & GCSF & GDriveFS \\ \cline{1-3}
-Recursively listing all filesystem (empty cache) &  0.6 s  & 34.3 s  \\ \cline{1-3}
-Recursively listing all filesystem (cached)      &  0.02 s &  0.14 s \\ \cline{1-3}
-Copying a 1 MB file                              &  2.5 s  &  3.4 s  \\ \cline{1-3}
-Copying a 100 MB file                            & 51.9 s  & 15.2 s\footnote{Although the execution ends after 15 seconds, the file is still being uploaded in the background and cannot be accessed until the transfer is finished} \\ \cline{1-3}
-Reading a 100 MB file (empty cache)              & 31.6 s  & 49.7 s  \\ \cline{1-3}
-Reading a 100 MB file (cached)                   &  0.3 s  & 50.3    \\ \cline{1-3}
-Deleting a 1 MB file                             &  0.5 s  &  0.6 s  \\ \cline{1-3}
-Deleting a 100 MB file                           &  0.7 s  &  0.6 s  \\ \cline{1-3}
-Creating a new directory                         &  0.8 s  &  1.1 s  \\ \cline{1-3}
-Deleting a directory                             &  0.4 s  &  0.8 s  \\ \cline{1-3}
+From this point on, most operations perform as expected. My biggest issue with GDriveFS is its async I/O strategy. Files written to the file system are not instantly updated locally or on Drive. Reading a file too soon after writing to it can cause data inconsistency. In my benchmarks, writing files larger than \mbox{10 MB} and reading them immediatelly afterwards resulted in a checksum fail in 80\% of the test cases. Moreover, an additional 13\% resulted in an I/O error. Reading the same file multiple times in a row can also result in different outputs.
 
+In the situations where GDriveFS did work, it took significantly longer than other projects. This may be attributed to the fact that it is implemented in Python, which is known to be slower than statically-typed compiled languages.
 
-\end{tabular}
-}
+Overall, the experience can only be described as messy. GDriveFS makes it difficult to reason about the state of the operations performed, and what you see is not always what you get.
 
-\section{Benchmarks}
+\section{google-drive-ocamlfuse}
+
+Compared to GDriveFS, google-drive-ocamlfuse is the result of the collective effort of twice as many contributors. As of \date{June 2018}, it has been starred by more than 2000 users on GitHub. For comparison, the programming language it is written in only has 1850 stars.~\cite{ocaml}
+
+This project is implemented in OCaml, ``an industrial strength programming language supporting functional, imperative and object-oriented styles''~\cite{ocaml-website}. According to open-source software developer Thomas Leonard, OCaml can often achieve better performance compared to Python~\cite{python_to_ocaml_retrospective}. Whether or not this is the case in general, it is certainly reflected in the case of this project. As it turns out, it is the best performer in several categories described in section~\ref{benchmarks}.
+
+From a user perspective, google-drive-ocamlfuse also has its flaws. For once, it does not support authentication using a generated code. This makes it more difficult to use on a headless machine, but it is not a problem for most users. Installation can also be tricky. I have personally run into issues such as~\cite{opam-depext-issue} while trying to set up the file system. The Arch Linux package~\cite{google-drive-ocamlfuse-aur} does not automatically pull in all dependencies, requiring manual installation of several packages.
+
+However, after setting the file system up, all of these issues disappear. The user experience is unimpaired. In all tests, there were no cases of data inconsistency or file system errors.
+
+\section{Benchmarks} \label{benchmarks}
+
 Specs:
 \begin{itemize}
   \itemsep0em
@@ -135,38 +129,114 @@ Specs:
   \item Gigabit connection
 \end{itemize}
 
-\subsection{Write}
+\subsection{Read -- empty cache}
 
 \pgfplotstableread[row sep=\\,col sep=&]{
-fileSize & gcsf  & google-drive-ocamlfuse & gdrivefs \\
-1 MB     & 2.9  & 1.1  & 3.6  \\
-10 MB    & 3.4  & 2.3  & 4.7  \\
-100 MB   & 8.4  & 14.6 & 18.0 \\
-200 MB   & 14.1 & 28.6 & 34.1 \\
-}\writedata
+fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
+1 MB     & 1.3  & 1.5 & 0.7   \\
+10 MB    & 2.3  & 1.8 & 6.9 \\
+50 MB    & 4.9  & 5.4 & 26  \\
+100 MB   & 6.8  & 8.2 & 60  \\
+200 MB   & 8.2  & 9.9 & 107 \\
+}\freshreaddata
 
-\definecolor{rustcolor}{rgb}{0.87, 0.64, 0.51}
-\definecolor{ocamlcolor}{rgb}{0.23, 0.88, 0.20}
-\definecolor{pythoncolor}{rgb}{0.20, 0.44, 0.64}
+\pgfplotstableread[row sep=\\,col sep=&]{
+fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
+1 MB     & 0  & 20  & 0 \\
+10 MB    & 0  & 40  & 0 \\
+50 MB    & 0  & 90  & 0 \\
+100 MB   & 0  & 80  & 0 \\
+200 MB   & 0  & 90  & 0 \\
+}\freshreaderrors
+
 
 \begin{tikzpicture}
     \begin{axis}[
             ybar,
-            bar width=.4cm,
+            bar width=.6cm,
             width=\textwidth,
             height=.6\textwidth,
             legend style={at={(0.5,1)},
                 anchor=north,legend columns=-1},
-            symbolic x coords={1 MB,10 MB,100 MB,200 MB},
+            symbolic x coords={1 MB,10 MB,50 MB,100 MB,200 MB},
             xtick=data,
             nodes near coords,
             nodes near coords align={vertical},
-            ymin=0,ymax=40,
+            ymin=0,ymax=117,
             ylabel={Time (seconds)},
         ]
-        \addplot+[rustcolor,draw=black] table[x=fileSize,y=gcsf]{\writedata};
-        \addplot+[ocamlcolor,draw=black] table[x=fileSize,y=google-drive-ocamlfuse]{\writedata};
-        \addplot+[pythoncolor,draw=black] table[x=fileSize,y=gdrivefs]{\writedata};
+        \addplot+[rustcolor,draw=black] table[x=fileSize,y=gcsf]{\freshreaddata};
+        \addplot+[ocamlcolor,draw=black] table[x=fileSize,y=google-drive-ocamlfuse]{\freshreaddata};
+        \addplot+[pythoncolor,draw=black] table[x=fileSize,y=gdrivefs]{\freshreaddata};
         \legend{GCSF, google-drive-ocamlfuse, GDriveFS}
     \end{axis}
 \end{tikzpicture}
+
+
+\begin{tikzpicture}
+    \begin{axis}[
+            ybar,
+            bar width=.6cm,
+            width=\textwidth,
+            height=.3\textwidth,
+            legend style={at={(0.5,1)},
+                anchor=north,legend columns=-1},
+            symbolic x coords={1 MB,10 MB,50 MB,100 MB,200 MB},
+            xtick=data,
+            nodes near coords,
+            nodes near coords align={vertical},
+            ymin=0,ymax=110,
+            ylabel={Checksum errors (\%)},
+        ]
+        \addplot+[rustcolor,draw=black] table[x=fileSize,y=gcsf]{\freshreaderrors};
+        \addplot+[ocamlcolor,draw=black] table[x=fileSize,y=google-drive-ocamlfuse]{\freshreaderrors};
+        \addplot+[pythoncolor,draw=black] table[x=fileSize,y=gdrivefs]{\freshreaderrors};
+        \legend{GCSF, google-drive-ocamlfuse, GDriveFS}
+    \end{axis}
+\end{tikzpicture}
+
+
+
+\subsection{Read -- cached}
+
+\pgfplotstableread[row sep=\\,col sep=&]{
+fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
+1 MB     & 0.0  & 0.0 & 0.5   \\
+10 MB    & 0.0  & 0.2 & 4.5 \\
+50 MB    & 0.1  & 0.7 & 26.6\\
+100 MB   & 0.3  & 1.4 & 60  \\
+200 MB   & 0.5  & 2.8 & 107 \\
+}\cachereaddata
+
+\pgfplotstableread[row sep=\\,col sep=&]{
+fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
+1 MB     & 0  & 20  & 0 \\
+10 MB    & 0  & 40  & 0 \\
+50 MB    & 0  & 90  & 0 \\
+100 MB   & 0  & 80  & 0 \\
+200 MB   & 0  & 90  & 0 \\
+}\cachereaderrors
+
+
+\begin{tikzpicture}
+    \begin{axis}[
+            ybar,
+            bar width=.6cm,
+            width=\textwidth,
+            height=.6\textwidth,
+            legend style={at={(0.5,1)},
+                anchor=north,legend columns=-1},
+            symbolic x coords={1 MB,10 MB,50 MB,100 MB,200 MB},
+            xtick=data,
+            nodes near coords,
+            nodes near coords align={vertical},
+            ymin=0,ymax=117,
+            ylabel={Time (seconds)},
+        ]
+        \addplot+[rustcolor,draw=black] table[x=fileSize,y=gcsf]{\cachereaddata};
+        \addplot+[ocamlcolor,draw=black] table[x=fileSize,y=google-drive-ocamlfuse]{\cachereaddata};
+        \addplot+[pythoncolor,draw=black] table[x=fileSize,y=gdrivefs]{\cachereaddata};
+        \legend{GCSF, google-drive-ocamlfuse, GDriveFS}
+    \end{axis}
+\end{tikzpicture}
+
