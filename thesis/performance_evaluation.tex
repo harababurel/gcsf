@@ -121,15 +121,67 @@ However, after setting the file system up, all of these issues disappear. The us
 
 \section{Benchmarks} \label{benchmarks}
 
-Specs:
+\subsection{Methodology}
+
+All tests were performed on a machine with the following specifications:
+
 \begin{itemize}
-  \itemsep0em
-  \item Intel(R) Xeon(R) CPU D-1531 @ 2.20GHz
-  \item 2 GB RAM
-  \item Gigabit connection
+  \setlength\itemsep{-0.4em}
+  \item Intel(R) Xeon(R) CPU E5-2650 v4 @ 2.20GHz
+  \item SSD storage
+  \item 4 GB RAM
+  \item 3 Gb/s internet connection
 \end{itemize}
 
-\subsection{Read -- empty cache}
+Unless stated otherwise, all file systems were mounted using their default configuration. All results reported in the following sections are averaged among 10 different executions.
+
+\subsection{Mounting and startup}
+
+Compared to google-drive-ocamlfuse and GDriveFS, GCSF populates the file tree at mount time. This translates into longer times required for mounting the file system.
+
+\pgfplotstableread[row sep=\\,col sep=&]{
+Mount & gcsf & google-drive-ocamlfuse & gdrivefs \\
+      & 3.28  & 0.75 & 0.02  \\
+}\mountingtimes
+
+\begin{figure}
+\centering
+\begin{tikzpicture}
+    \begin{axis}[
+            ybar,
+            bar width=3cm,
+            width=.9\textwidth,
+            height=.6\textwidth,
+            legend style={at={(0.5,1)},
+                anchor=north,legend columns=-1},
+            symbolic x coords={},
+            xtick=data,
+            nodes near coords,
+            nodes near coords align={vertical},
+            ymin=0,ymax=4,
+            ylabel={Time (seconds)},
+            every node near coord/.append style={/pgf/number format/.cd, fixed,1000 sep={}}
+        ]
+        \addplot+[rustcolor,draw=black] table[x=Mount,y=gcsf]{\mountingtimes};
+        \addplot+[ocamlcolor,draw=black] table[x=Mount,y=google-drive-ocamlfuse]{\mountingtimes};
+        \addplot+[pythoncolor,draw=black] table[x=Mount,y=gdrivefs]{\mountingtimes};
+        \legend{GCSF, google-drive-ocamlfuse, GDriveFS}
+    \end{axis}
+\end{tikzpicture}
+\caption{Mounting a file system with \ldots files nested on 4 levels} \label{fig:M1}
+\end{figure} 
+
+As discussed in \ref{shared_files}, the startup time of GCSF grows linearly with the depth of the file tree. This means that the file system will take longer to load deeply nested directories, but it has no problems with a large number of files in a shallow file tree.
+
+Constructing the file tree at mount time increases the loading time of the file system, but it significantly improves subsequent operations. More on this in section \ref{list_benchmark}.
+
+\subsection{File listing} \label{list_benchmark}
+
+asdf
+
+\subsection{Reading -- empty cache}
+
+The target of this test is to measure the execution time required for computing an MD5 checksum of a randomly generated file. This allows us to check whether or not the file content is retrieved by each file system in its entirety and without errors. Although computing the checksum takes some time in itself, it only affects the measured times marginally.
 
 \pgfplotstableread[row sep=\\,col sep=&]{
 fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
@@ -140,21 +192,11 @@ fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
 200 MB   & 8.2  & 9.9 & 107 \\
 }\freshreaddata
 
-\pgfplotstableread[row sep=\\,col sep=&]{
-fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
-1 MB     & 0  & 20  & 0 \\
-10 MB    & 0  & 40  & 0 \\
-50 MB    & 0  & 90  & 0 \\
-100 MB   & 0  & 80  & 0 \\
-200 MB   & 0  & 90  & 0 \\
-}\freshreaderrors
-
-
 \begin{tikzpicture}
     \begin{axis}[
             ybar,
-            bar width=.6cm,
-            width=\textwidth,
+            bar width=.5cm,
+            width=.95\textwidth,
             height=.6\textwidth,
             legend style={at={(0.5,1)},
                 anchor=north,legend columns=-1},
@@ -172,32 +214,27 @@ fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
     \end{axis}
 \end{tikzpicture}
 
+For small files, google-drive-ocamlfuse tends to perform best. GCSF is slower because it makes an additional request to Google Drive: first it creates an empty file and then it updates the file content. However, the performance changes for larger files. In this case, an additional network request becomes insignificant compared to each file system's efficiency of processing operations internally. As it turns out, GCSF performs slightly better than google-drive-ocamlfuse.
 
-\begin{tikzpicture}
-    \begin{axis}[
-            ybar,
-            bar width=.6cm,
-            width=\textwidth,
-            height=.3\textwidth,
-            legend style={at={(0.5,1)},
-                anchor=north,legend columns=-1},
-            symbolic x coords={1 MB,10 MB,50 MB,100 MB,200 MB},
-            xtick=data,
-            nodes near coords,
-            nodes near coords align={vertical},
-            ymin=0,ymax=110,
-            ylabel={Checksum errors (\%)},
-        ]
-        \addplot+[rustcolor,draw=black] table[x=fileSize,y=gcsf]{\freshreaderrors};
-        \addplot+[ocamlcolor,draw=black] table[x=fileSize,y=google-drive-ocamlfuse]{\freshreaderrors};
-        \addplot+[pythoncolor,draw=black] table[x=fileSize,y=gdrivefs]{\freshreaderrors};
-        \legend{GCSF, google-drive-ocamlfuse, GDriveFS}
-    \end{axis}
-\end{tikzpicture}
+Not the same can be said about GDriveFS. Its execution time grows almost linearly with the file size. Moreover, the computed checksums are incorrect in many cases.
 
+\makebox[\textwidth]{
+\begin{tabular}{|l|l|}
+\cline{1-2}
+File size (MB)   & Checksum errors (\%)   \\ \cline{1-2}
+1                & 20                     \\ \cline{1-2}
+10               & 40                     \\ \cline{1-2}
+50               & 90                     \\ \cline{1-2}
+100              & 80                     \\ \cline{1-2}
+200              & 90                     \\ \cline{1-2}
+\end{tabular}
+}
 
+\subsection{Reading -- cached}
 
-\subsection{Read -- cached}
+Both GCSF and google-drive-ocamlfuse provide a caching mechanism. GCSF uses an in-memory LRU cache in order to preserve file content for some time after retreiving it from Drive, whereas google-drive-ocamlfuse uses an on-disk SQLite 3 database. Both methods have their advantages and disadvantages. Retrieving data from memory is faster but the available capacity can be a limiting factor. Caching on disk removes this limitation, at the cost of slower speeds.
+
+As far as I can tell, GDriveFS only caches authentication tokens and the file tree. This is reflected in the benchmark:
 
 \pgfplotstableread[row sep=\\,col sep=&]{
 fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
@@ -207,16 +244,6 @@ fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
 100 MB   & 0.3  & 1.4 & 60  \\
 200 MB   & 0.5  & 2.8 & 107 \\
 }\cachereaddata
-
-\pgfplotstableread[row sep=\\,col sep=&]{
-fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
-1 MB     & 0  & 20  & 0 \\
-10 MB    & 0  & 40  & 0 \\
-50 MB    & 0  & 90  & 0 \\
-100 MB   & 0  & 80  & 0 \\
-200 MB   & 0  & 90  & 0 \\
-}\cachereaderrors
-
 
 \begin{tikzpicture}
     \begin{axis}[
@@ -239,4 +266,3 @@ fileSize & gcsf & google-drive-ocamlfuse & gdrivefs \\
         \legend{GCSF, google-drive-ocamlfuse, GDriveFS}
     \end{axis}
 \end{tikzpicture}
-
