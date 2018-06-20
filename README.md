@@ -24,4 +24,6 @@ $ gcsf mount /mnt/gcsf
 Please direct your browser to https://accounts.google.com/o/oauth2/[...], follow the instructions and enter the code displayed here:
 ```
 
-You can now find the contents of your Drive account in `/mnt/gcsf`.
+You can now find the contents of your Drive account in `/mnt/gcsf`:
+
+![GCSF in Thunar](https://i.imgur.com/67QaeYg.jpg)
