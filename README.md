@@ -19,6 +19,8 @@ This will generate the `./target/release/gcsf` binary.
 
 ### Usage
 
+Before running, you should copy `sample_config.toml` to `$XDG_CONFIG_HOME/gcsf/gcsf.toml`, which is usually defined as `$HOME/.config/gcsf/gcsf.toml`.
+
 ```bash
 $ gcsf mount /mnt/gcsf
 Please direct your browser to https://accounts.google.com/o/oauth2/[...], follow the instructions and enter the code displayed here:
