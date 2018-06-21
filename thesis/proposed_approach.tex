@@ -14,7 +14,7 @@ Disk-based storage devices are organized by the operating system using a file sy
 
 An interesting concept comes to mind: why not model a Google Drive account in such a way that it behaves identically to a traditional file system? The only difference would be that instead of storing and reading data from a local disk, it would interact with Google's servers.
 
-GCSF does exactly that. It is a virtual file system on top of Google Drive. It allows users to mount their Drive account locally and interact with it as they would with a regular disk partition. This is achieved using the FUSE (Filesystem in Userspace) interface~\cite{libfuse}, as described in \ref{implementation}.
+GCSF does exactly that. It is a virtual file system on top of Google Drive. It allows users to mount their Drive account locally and interact with it as they would with a regular disk partition. This is achieved using the FUSE (Filesystem in Userspace) interface~\cite{libfuse}, as described in section \ref{implementation}.
 
 \section{Usage}
 
@@ -47,10 +47,10 @@ Please direct your browser to https://accounts.google.com/o/oauth2/[...] and fol
 \end{lstlisting}
 
 \begin{figure}[bpt]
+\centering
+\includegraphics[width=0.7\textwidth]{gcsf_auth}
 \caption{Google Drive authorization}
 \label{fig:drive_auth}
-\centering
-\includegraphics[width=0.5\textwidth]{gcsf_auth}
 \end{figure}
 
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=Size and capacity of mounted filesystems,frame=single,label=df_output,float]
@@ -74,7 +74,7 @@ Now the mount directory can be accessed using a file explorer such as \emph{Rang
 \caption{Ranger window}
 \label{fig:ranger}
 \centering
-\fbox{\includegraphics[width=\textwidth]{ranger}}
+\fbox{\includegraphics[width=\textwidth]{ranger_white}}
 \end{figure}
 
 \begin{figure}[tbp]
@@ -88,7 +88,7 @@ Now the mount directory can be accessed using a file explorer such as \emph{Rang
   \caption{File listing}
 \label{fig:ls}
 \centering
-\fbox{\includegraphics[width=\textwidth]{ls}}
+\fbox{\includegraphics[width=\textwidth]{ls_white}}
 \end{figure}
 
 \subsection{Exceptions}
@@ -99,7 +99,7 @@ As can be seen in fig.~\ref{fig:ls}, some files have a \codeword{#} symbol attac
 \caption{Exporting Google Docs as OpenDocument files.}
 \label{fig:export_doc}
 \centering
-\fbox{\includegraphics[width=\textwidth]{ls-some-doc}}
+\fbox{\includegraphics[width=\textwidth]{export_white}}
 \end{figure}
 
 
@@ -130,7 +130,7 @@ From this description, Rust seems like a good fit for this type of project. Howe
         \item References can not outlive the objects they point to.
         \item At any point, there can be at most one mutable reference \emph{or} any number of immutable (read-only) references to a value.
       \end{enumerate}
-      \item \emph{No buffer overruns}
+      \item \emph{No buffer overruns.}
     \end{itemize}
   \item Easy integration of third-party libraries using the \codeword{cargo} package manager and the official package registry~\cite{crates_io}.
   \item Support for the functional paradigm. Rust uses many functional concepts, \emph{closures} and \emph{iterators} being two notable examples.
@@ -154,7 +154,7 @@ FUSE is made up of two components:
 FUSE filesystems are usually implemented as regular applications that interact with the \textit{libfuse} library. This library provides two interfaces that are useful for defining the behavior of the filesystem. In both cases, the filesystem receives incoming requests from the kernel, which are provided as calls to methods defined in the interface.
 
 % First, there is the high-level interface (appendix~\ref{appendix:fuse_high_level}). It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface (appendix~\ref{appendix:fuse_low_level}). Files are identified using low level concepts such as inodes~\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \codeword{fuse} crate~\cite{fuse_crate}. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
-First, there is the high-level interface. It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface. Files are identified using low level concepts such as inodes~\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \codeword{fuse} crate~\cite{fuse_crate}. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
+First, there is the high-level interface. It uses concepts such as file names and paths in most of its methods. Second, there is the low-level interface, which uses inodes in order to identify files~\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \codeword{fuse} crate~\cite{fuse_crate}. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
 
 \subsection{Drive API}
 
@@ -168,6 +168,8 @@ The heart of the application is the \codeword{GCSF} struct. It implements the \c
 
 These abstractions create a distinct separation of responsibilities. For instance, anything that requires network communication is performed by the \codeword{DriveFacade}. Information about any file can be obtained by simply querying the \codeword{FileManager}. (Un)mounting the file system and responding to system calls is done by \codeword{GCSF}.
 
+Figure \ref{fig:gcsf_architecture} outlines how these components interact with each other.
+
 \begin{figure}[bpt]
 \caption{GCSF architecture}
 \label{fig:gcsf_architecture}
@@ -177,7 +179,7 @@ These abstractions create a distinct separation of responsibilities. For instanc
 
 \subsection{Configuration}
 
-GCSF can be configured using a configuration file. An example can be found in listing \ref{gcsf_config}. 
+A configuration file can be used in order to set different parameters for GCSF. One example can be found in listing \ref{gcsf_config}. 
 
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=GCSF configuration file, frame=single, label=gcsf_config,float]
 ### This is the configuration file that GCSF uses.
@@ -229,7 +231,7 @@ Because internet connections tend to be slow and imperfect, GCSF aims reduce unn
 The second strategy for reducing network requests consists of only uploading new data when necessary. In a UNIX environment, the action of copying a single file might involve a large number of system calls. For instance, the file might have to first be created (using a \codeword{create} call), then have its attributes filled in (using a \codeword{setattr} call), then have its data written (using potentially many \codeword{write} calls with different offsets and data buffers) and finally be \codeword{flush}ed. Uploading every small change that comes with each individual \codeword{write} call does not make a lot of sense. For this reason, GCSF decides to be lazy and simply store the \codeword{PendingWrite}s in memory. The operations are only performed when a \codeword{flush} call is encountered, and the new file content is uploaded as a whole afterwards.
 
 
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,float,caption=File caching, frame=single, label=file_caching]
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,float,caption=File caching in action, frame=single, label=file_caching]
 $ time file "/mnt/gcsf/LaTeX Guide.pdf"
 LaTeX Guide.pdf: PDF document, version 1.5
 
@@ -250,13 +252,13 @@ As with any sufficiently large project, GCSF involved a series of annoying and o
 
 \subsection{Shared files} \label{shared_files}
 
-The Google Drive REST API provides the \codeword{files.list} endpoint\cite{files_list_call} for listing files which meet some criteria. One of the filters that can be applied is the \codeword{sharedWithMe} boolean. It instructs the API to include or ommit files that are shown in the \emph{Shared with me} collection on Drive.
+The Google Drive REST API provides the \codeword{files.list} endpoint for listing files which meet some criteria~\cite{files_list_call}. One of the filters that can be applied is the \codeword{sharedWithMe} boolean. It instructs the API to include or ommit files that are shown in the \emph{Shared with me} collection on Drive.
 
-Early implementations of GCSF did not aim to manage shared files at all, as this feature requires extra work to get right. Excluding shared files is easy -- just set \codeword{sharedWithMe = false} in the request. Unfortunately, this does not work, as reported by multiple other developers.\cite{shared_with_me_error}\cite{shared_with_me_error2}\cite{shared_with_me_error3}. Instead of returning the requested list of files, the API returns a \textbf{500 Internal Server Error}. There is no warning sign for this behavior.
+Early implementations of GCSF did not aim to manage shared files at all, as this feature requires extra work to get right. Excluding shared files is easy -- just add \codeword{sharedWithMe = false} in the request. Unfortunately, this does not work, as reported by multiple other developers~\cite{shared_with_me_error,shared_with_me_error2,shared_with_me_error3}. Instead of returning the requested list of files, the API returns a \textbf{500 Internal Server Error}. There is no warning sign for this behavior.
 
 A possible workaround consists of replacing the query with \codeword{`me' in owners}. This is intuitive -- files that are shared with a user are usually not owned by that user, making the two queries partial substitutes for one another. This workaround is not failproof. Exceptions exist and they lead to inconsistent behavior.
 
-The solution I opted for involves a different querying strategy. Instead of asking for all files which are not shared, GCSF asks for files which are direct children of the \emph{My Drive} directory. This is equivalent to setting the query to \codeword{`root' in parents}. Afterwords, the resulting files are processed. In order to explore the rest of the file tree, GCSF recursively queries children of any one of the directories obtained at the previous step. For instance, if the children of the \codeword{root} directory are \codeword{a}, \codeword{b}, \codeword{c}, then the next query will be \codeword{`a' in parents or `b' in parents or `c' in parents}. This essentially explores the file tree one level at a time, resulting in $ O(tree~depth) $ requests.
+The solution I opted for involves a different querying strategy. Instead of asking for all files which are not shared, GCSF asks for files which are direct children of the \emph{My Drive} directory. This is equivalent to setting the query to \codeword{`root' in parents}. Afterwords, the returned files are processed. In order to explore the rest of the file tree, GCSF recursively queries children of any one of the directories obtained at the previous step. For instance, if the children of the \codeword{root} directory are \codeword{a}, \codeword{b} and \codeword{c}, then the next query will be \codeword{`a' in parents or `b' in parents or `c' in parents}. This essentially explores the file tree one level at a time, resulting in $ O(tree~depth) $ network requests.
 
 \subsection{`My Drive' id}
 
@@ -264,28 +266,25 @@ Every file on Google Drive has its own associated string identifier. As discusse
 
 The question is: how to obtain this identifier? There is no method for retrieving it from the API.
 
-One way is to get all files that match the \codeword{`root' in parents} query and check the actual identifier that they have in the \codeword{parent} field. GCSF can then use this identifier instead of the \codeword{`root'} placeholder from this point onward. This method usually works, but there were some cases in which the application crashed because of it. For instance, if there are absolutely no files on Drive, the root identifier cannot be obtained. The current implementation works around this limitation by postponing the operation until at least one file is added.
+One way is to get all files that match the \codeword{`root' in parents} query and check the actual identifier that they have in the \codeword{parent} field. GCSF can then use this identifier instead of the \codeword{`root'} placeholder from this point onward. This method usually works, but there were some cases in which the application crashed because of it. For instance, if there are absolutely no files on Drive, the root identifier cannot be obtained. The current implementation works around this limitation by postponing the operation until at least one file is added to Drive.
 
 \subsection{File attributes}
 
-The \codeword{fuse} crate represents file attributes using the following struct:
+The \codeword{fuse} crate represents file attributes using the \codeword{FileAttr} struct, as seen in listing \ref{fileattr}. The \codeword{perm} field is an encoding which describes a file's permissions, essentially stating what any user on the system can and can't do with that particular file. Any \codeword{Filesytem} can alter these permissions using the \codeword{setattr} method, as seen in listing \ref{setattr}.
 
-\lstinputlisting[language=Rust, caption=File attributes representation, frame=single]{fileattr.rs}
+\lstinputlisting[language=Rust, caption=File attributes representation, label=fileattr, frame=single, float]{fileattr.rs}
 
-The \codeword{perm} field is an encoding which describes a file's permissions, essentially stating what any user on the system can and can't do with that file. Any \codeword{Filesytem} can alter these permissions using the \codeword{setattr} method:
-
-
-\lstinputlisting[language=Rust, caption=Setting file attributes, frame=single]{setattr.rs}
+\lstinputlisting[language=Rust, caption=Setting file attributes, label=setattr, frame=single, float]{setattr.rs}
 
 Notice something missing? There is no argument for changing the file permissions. This defeats the entire purpose of recognizing different user permissions and is the reason why GCSF does not enforce this security feature.
 
 \subsection{Updating file metadata on Drive} \label{updating_metadata}
 
-The client library that GCSF uses is generated based on a template which is mostly consistent with the API schema that Google provides. However, there are some inconsistent methods which act as limitations for this project.
+The Rust library that GCSF uses is generated based on a template which is mostly consistent with the API schema that Google provides. However, there are some inconsistent methods which act as limitations for this project.
 
 One of them regards updates on file metadata. GCSF sometimes has to modify information about a file without changing its content. For instance, renaming a file or moving it to a different directory are operations which require this sort of behavior. In order to to this, a \codeword{FileUpdateCall} can be used.
 
-For context, most calls exposed by this client library follow the builder pattern~\cite{gof}. The general structure is:
+For context, most calls exposed by the library follow the builder pattern~\cite{gof}. The general structure is:
 
 \begin{lstlisting}[language=Rust, frame=single]
 let result = hub.resource().activity(...).doit();
@@ -303,20 +302,20 @@ let result = hub.files().delete(...).doit();
 But the \codeword{update} call is different. Instead of exposing a public \codeword{doit()} method which does all the work, it exposes two alternatives:
 
 \begin{lstlisting}[language=Rust, frame=single]
-fn upload<RS>(
+pub fn upload<RS>(
   self,
   stream: RS,
   mime_type: Mime
 ) -> Result<(Response, File)>
 
-fn upload_resumable<RS>(
+pub fn upload_resumable<RS>(
   self,
   resumeable_stream: RS,
   mime_type: Mime
 ) -> Result<(Response, File)>
 \end{lstlisting}
 
-This means that there is no way to update a file's metadata without also providing new content. One terribly inefficient solution would consist of first downloading the current file content, then modifying the relevant file metadata and finally applying the changes by reuploading the content exactly as it is, along with the new metadata. In fact, this is how earlier versions of GCSF worked around this issue. As of version 0.1.2, GCSF uses a custom fork\cite{google_drive3_fork} of the library which also exposes a new method which does not require uploading file content:
+This means that there is no way to update a file's metadata without also providing new content. One terribly inefficient solution would consist of first downloading the current file content, then modifying the relevant file metadata and finally applying the changes by reuploading the content exactly as it is, along with the new metadata. In fact, this is how earlier versions of GCSF worked around this issue. As of version 0.1.2, GCSF uses a custom fork~\cite{google_drive3_fork} of the library which also exposes a new method which does not require uploading file content:
 
 \begin{lstlisting}[language=Rust, frame=single]
 pub fn doit_without_upload(mut self) -> Result<(Response, File)>
@@ -324,18 +323,14 @@ pub fn doit_without_upload(mut self) -> Result<(Response, File)>
 
 \subsection{Detecting remote changes}
 
-GCSF aims to achieve data consistency in two directions: any change applied locally should also be applied on Drive, and any change applied remotely should also be reflected locally. Remote changes are detected using the \codeword{changes.list} endpoint. GCSF follows the following polling policy:
+GCSF aims to achieve data consistency in two directions: any change applied locally should also be applied on Drive, and any change applied remotely should also be reflected locally. Remote changes are detected using the \codeword{changes.list} API endpoint~\cite{changes_list_endpoint}. GCSF follows the following polling policy:
 
 \begin{itemize}
   \itemsep0em
-  \item It should ask for remote changes and apply them locally right before serving user requests.
-  \item It should not do this everytime. There should be a user-defined cooldown period between syncs.
+  \item It should ask for remote changes and apply them locally right before serving user requests, so that the user only receives fresh data.
+  \item It should not do this for every request, so that the added latency does not impact the user experience. There should be a user-defined cooldown period between syncs.
 \end{itemize}
 
 This generally works. Files added/removed/modified on the web or mobile client are picked up by GCSF after a short while. No wasteful network traffic is generated, as would be the case with regular polling. The delay perceived by the user is present but not significant as it only occurs every once in a while.
 
 But there is a problem. The API seems to make up its own mind and only return the requested changes when it wants. Sometimes, this happens almost instantly. On other occasions, the user has to manually intervene and remount the filesystem in order to preserve its consistency. This can lead to problems which impair user experience.
-
-\subsection{Moving files to trash}
-
-A problem similar to \ref{updating_metadata} occurs when attempting to move a file to trash. From a technical standpoint, this can be done by querying the \codeword{files.update} endpoint and setting \codeword{trashed=true} in the request. However, this results in an internal server error which states that the \codeword{trashed} field cannot be set manually. There seems to be no straightforward alternative, so at the moment all file deletions performed by GCSF are permanent.

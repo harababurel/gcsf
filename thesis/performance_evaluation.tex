@@ -55,7 +55,7 @@ Besides the two, there are many other similar projects. Most of them are either 
   \item \emph{dweidenfeld/plexdrive}~\cite{dweidenfeld/plexdrive} -- only allows read-only access and targets media streaming.
 \end{itemize}
 
-As such, I have decided to exclude these projects from my analysis and benchmarks. Here is a brief comparison of the chosen projects:
+As such, I have decided to exclude these projects from my analysis and benchmarks. Here is a brief comparison of the chosen projects, as of \date{21 June 2018}:
 
 \vspace{1em}
 
@@ -73,11 +73,11 @@ As such, I have decided to exclude these projects from my analysis and benchmark
 \multicolumn{1}{ |l| }{}             &
 \multicolumn{1}{  l| }{Releases}     & 1                 & 23                 & 71                \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Contributors} & 1                 & 7                  & 12                \\ \cline{2-5}
+\multicolumn{1}{  l| }{Contributors} & 1                 & 6                  & 12                \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Stars}        & 8                 & 489                & 2063              \\ \cline{2-5}
+\multicolumn{1}{  l| }{Stars}        & 8                 & 490                & 2085              \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Forks}        & 0                 & 81                 & 151               \\ \cline{1-5}
+\multicolumn{1}{  l| }{Forks}        & 0                 & 81                 & 153               \\ \cline{1-5}
 
 \multicolumn{1}{ |l| }{\multirow{2}{*}{Technical Details} } &
 \multicolumn{1}{  l| }{Language}     & Rust              & Python 2.7         & OCaml             \\ \cline{2-5}
@@ -96,7 +96,7 @@ As of \date{June 2018}, \emph{GDriveFS} aims to be \emph{``an innovative FUSE wr
 
 Unfortunately, I also encountered some issues. I will walk through a first time setup of this application in order to illustrate its drawbacks. First, we create a new virtual environment using \codeword{virtualenv} in order to avoid conflicts between global Python packages and the local requirements of GDriveFS. We can easily install GDriveFS in this environment as a \codeword{pip} package.
 
-\begin{lstlisting}[frame=single,caption=Creating a virtual environment and installing GDriveFS]
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,frame=single,caption=Creating a virtual environment and installing GDriveFS]
 $ virtualenv2 gdrivefs
 New python executable in ./gdrivefs/bin/python2
 Also creating executable in ./gdrivefs/bin/python
@@ -110,9 +110,9 @@ Collecting httplib2==0.8 (from gdrivefs)
 Successfully installed gdrivefs-0.14.9 [...]
 \end{lstlisting}
 
-Now we are ready to run into our first problem. The official documentation~\cite{GDriveFS_README} suggests using \codeword{gdfstool auth_automatic} in order to log in with our Google account. However, we encounter an error:
+Now we are ready to run into our first problem. The official documentation suggests using \codeword{gdfstool auth_automatic} in order to log in with our Google account~\cite{GDriveFS_README}. However, we encounter an error:
 
-\begin{lstlisting}[frame=single,caption=GDriveFS nonexistent authentication command]
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,frame=single,caption=GDriveFS nonexistent authentication command]
 (gdrivefs) $ gdfstool auth_automatic
 usage: gdfstool [-h] {auth,mount} ...
 gdfstool: error: argument command: invalid choice: `auth_automatic' (choose from `auth', `mount')
@@ -121,7 +121,7 @@ gdfstool: error: argument command: invalid choice: `auth_automatic' (choose from
 It seems that there is an inconsistency between the documentation and the application itself. No problem. We can follow the suggestion provided by the error message and execute \codeword{gdfstool auth} instead. We provide the \codeword{-o} flag in order to open the authentication form in a browser window. After logging in and allowing the application to access our account, we are ready to feed the access code into \codeword{gdfstool}:
 
 \begin{lstlisting}[frame=single,caption=GDriveFS authentication error]
-(gdrivefs) $ gdfstool auth -a /tmp/credentials "$CODE"
+(gdrivefs) $ gdfstool auth -a /tmp/credentials "$AUTH_CODE"
 [...]
 gdrivefs.errors.AuthorizationFailureError: Could not do auth-exchange (this was either a legitimate error, or the auth-exchange was attempted when not necessary): [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed (_ssl.c:726)
 \end{lstlisting}
@@ -140,17 +140,17 @@ drwxrwxrwx@    - sergiu 11 Jun 18:59 Stock photo collection
 .rw-rw-rw-@ 1.0k sergiu 11 Jun 18:57 This presentation#
 \end{lstlisting}
 
-From this point on, most operations perform as expected. My biggest issue with GDriveFS is its async I/O strategy. Files written to the file system are not instantly updated locally or on Drive. Reading a file too soon after writing to it can cause data inconsistency. In my benchmarks, writing files larger than \mbox{10 MB} and reading them immediatelly afterwards resulted in a checksum fail in 80\% of the test cases. Moreover, an additional 13\% resulted in an I/O error. Reading the same file multiple times in a row can also result in different outputs.
+From this point on, most operations perform as expected. My biggest issue with GDriveFS is its async I/O strategy. Files written to the file system are not instantly updated locally or on Drive. Reading a file too soon after writing to it can cause data inconsistency. In my benchmarks, writing files larger than \mbox{10 MB} and reading them immediatelly afterwards often resulted in checksum failures. Reading the same file multiple times in a row can also result in different outputs.
 
-In the situations where GDriveFS did work, it took significantly longer than other projects. This may be attributed to the fact that it is implemented in Python, which is known to be slower than statically-typed compiled languages.
+In the situations where GDriveFS did work, it required significantly more time than its competitors. This may be attributed to the fact that it is implemented in Python, which is known to be slower than statically-typed compiled languages.
 
 Overall, the experience can only be described as messy. GDriveFS makes it difficult to reason about the state of the operations performed, and what you see is not always what you get.
 
 \section{google-drive-ocamlfuse}
 
-Compared to GDriveFS, google-drive-ocamlfuse is the result of the collective effort of twice as many contributors. As of \date{June 2018}, it has been starred by more than 2000 users on GitHub. For comparison, the programming language it is written in only has 1850 stars.~\cite{ocaml}
+Compared to GDriveFS, google-drive-ocamlfuse is the result of the collective effort of twice as many contributors. As of \date{June 2018}, it has been starred by more than 2000 users on GitHub. For comparison, the programming language it is written in only has 1850 stars~\cite{ocaml}.
 
-This project is implemented in OCaml, ``an industrial strength programming language supporting functional, imperative and object-oriented styles''~\cite{ocaml-website}. According to open-source software developer Thomas Leonard, OCaml can often achieve better performance compared to Python~\cite{python_to_ocaml_retrospective}. Whether or not this is the case in general, it is certainly reflected in the case of this project. As it turns out, it is the best performer in several categories described in section~\ref{benchmarks}.
+This project is implemented in OCaml~\cite{ocaml-website}, ``an industrial strength programming language supporting functional, imperative and object-oriented styles''. According to open-source software developer Thomas Leonard, OCaml can often achieve better performance compared to Python~\cite{python_to_ocaml_retrospective}. Whether or not this is the case in general, it is certainly reflected in the case of this project. As it turns out, it is the best performer in several categories described in section~\ref{benchmarks}.
 
 From a user perspective, google-drive-ocamlfuse also has its flaws. For once, it does not support authentication using a generated code. This makes it more difficult to use on a headless machine, but it is not a problem for most users. Installation can also be tricky. I have personally run into issues such as~\cite{opam-depext-issue} while trying to set up the file system. The Arch Linux package~\cite{google-drive-ocamlfuse-aur} does not automatically pull in all dependencies, requiring manual installation of several packages.
 
@@ -170,7 +170,7 @@ All tests were performed on a machine with the following specifications:
   \item 3 Gb/s internet connection
 \end{itemize}
 
-Unless stated otherwise, all file systems were mounted using their default configuration. All results reported in the following sections are averaged among 10 different executions. The test account has been artificially populated with 2000 files and 100 directories, totalling 2.8 GB. The maximum depth of any file in the the file tree is 4.
+Unless stated otherwise, all file systems were mounted using their default configuration. All results reported in the following sections are averaged among 10 successive executions. The test account has been artificially populated with 2000 files and 100 directories, totalling 2.8 GB. The maximum depth of any file in the the file tree is 4.
 
 \subsection{Mounting and startup}
 
@@ -186,14 +186,14 @@ As seen in fig.~\ref{fig:mount_benchmark}, constructing the file tree at mount t
             ybar,
             bar width=3cm,
             width=.9\textwidth,
-            height=.5\textwidth,
+            height=.4\textwidth,
             legend style={at={(0.5,1)},
                 anchor=north,legend columns=-1},
             symbolic x coords={},
             xtick=data,
             nodes near coords,
             nodes near coords align={vertical},
-            ymin=0,ymax=11,
+            ymin=0,ymax=12,
             ylabel={Time (seconds)},
             every node near coord/.append style={/pgf/number format/.cd, fixed,1000 sep={}}
         ]
@@ -210,7 +210,7 @@ As seen in fig.~\ref{fig:mount_benchmark}, constructing the file tree at mount t
 
 \subsection{File listing} \label{list_benchmark}
 
-One of the first operations performed after mounting the file system is in many cases a file listing. Whether this is achieved using a command line tool such as \codeword{ls} or a GUI file explorer, the file system has to respond to the same system calls: \codeword{readdir} and \codeword{lookup}. For this benchmark, I decided to measure the execution time of the \codeword{tree} command \cite{tree_man_page}. This  command explores an entire directory recursively, constructing an ASCII tree-like structure of all files and directories.
+One of the first operations performed after mounting the file system is in many cases a file listing. Whether this is achieved using a command line tool such as \codeword{ls} or a GUI file explorer, the file system has to respond to the same system calls -- mainly \codeword{readdir} and \codeword{lookup}. For this benchmark, I decided to measure the execution time of the \codeword{tree} command \cite{tree_man_page}. This  command explores an entire directory recursively, constructing an ASCII tree-like structure of all files and directories.
 
 This is where the longer mount time of GCSF pays off. As seen in fig.~\ref{fig:tree_benchmark}, GCSF is one order of magnitude faster than google-drive-ocamlfuse, and two orders of magnitude faster than GDriveFS. It should be noted that the first listing performed on google-drive-ocamlfuse is considerably slower than subsequent listings -- approximately 60 seconds -- because of the empty cache. This outlier is not included in the computed average.
 
@@ -222,14 +222,14 @@ This is where the longer mount time of GCSF pays off. As seen in fig.~\ref{fig:t
             ybar,
             bar width=3cm,
             width=.9\textwidth,
-            height=.5\textwidth,
+            height=.4\textwidth,
             legend style={at={(0.5,1)},
                 anchor=north,legend columns=-1},
             symbolic x coords={},
             xtick=data,
             nodes near coords,
             nodes near coords align={vertical},
-            ymin=0,ymax=84,
+            ymin=0,ymax=92,
             ylabel={Time (seconds)},
             every node near coord/.append style={/pgf/number format/.cd, fixed,1000 sep={}}
         ]
@@ -281,41 +281,27 @@ As seen in fig.~\ref{fig:fresh_read_benchmark}, google-drive-ocamlfuse tends to 
 
 Not the same can be said about GDriveFS. Its execution time grows almost linearly with the file size. Moreover, the computed checksums are incorrect in many cases. Waiting for the file system to resynchronize with Drive may fix these errors, but the inconvenience of not knowing whether or not the file system introduced errors to user data still exists.
 
-\begin{table}[bpt]
+\begin{table}[h]
 \makebox[\textwidth]{
-\begin{tabular}{|r|l|}
-\cline{1-2}
-File size (MB)   & Checksum errors (\%)   \\ \cline{1-2}
-1                & 20                     \\ \cline{1-2}
-10               & 40                     \\ \cline{1-2}
-50               & 90                     \\ \cline{1-2}
-100              & 80                     \\ \cline{1-2}
-200              & 90                     \\ \cline{1-2}
+\begin{tabular}{|l|l|l|}
+\hline
+\multirow{2}{*}{File size (MB)} & \multicolumn{2}{l|}{Checksum errors (\%)} \\ \cline{2-3}
+                                & Fresh read          & Cached read         \\ \hline
+1                               & 20                  & 10                  \\ \hline
+10                              & 40                  & 60                  \\ \hline
+50                              & 90                  & 70                  \\ \hline
+100                             & 80                  & 100                 \\ \hline
+200                             & 90                  & 100                 \\ \hline
 \end{tabular}
 }
-\caption{Checksum errors reported when reading files from GDriveFS} \label{tab:checksum_errors_fresh_read}
+\caption{Checksum errors reported when reading from GDriveFS} \label{tab:checksum_errors}
 \end{table}
 
 \subsection{Reading -- cached}
 
 Both GCSF and google-drive-ocamlfuse provide a caching mechanism. GCSF uses an in-memory least recently used (LRU) cache in order to preserve file content for some time after retrieving it from Drive, whereas google-drive-ocamlfuse uses an on-disk SQLite 3 database. Both methods have their advantages and disadvantages. Retrieving data from memory is faster but the available capacity can be a limiting factor. Caching on disk removes this limitation, at the cost of slower speeds.
 
-As far as I can tell, GDriveFS only caches authentication tokens and the structure of the file tree. This is reflected in fig.~\ref{fig:cached_read_benchmark}. As was the case in section \ref{reading_empty_cache}, checksum errors still occur with GDriveFS. The exact values can be found in table \ref{tab:checksum_errors_cached_read}.
-
-\begin{table}[bpt]
-\makebox[\textwidth]{
-\begin{tabular}{|r|l|}
-\cline{1-2}
-File size (MB)   & Checksum errors (\%)   \\ \cline{1-2}
-1                & 10                     \\ \cline{1-2}
-10               & 60                     \\ \cline{1-2}
-50               & 70                     \\ \cline{1-2}
-100              & 100                    \\ \cline{1-2}
-200              & 100                    \\ \cline{1-2}
-\end{tabular}
-}
-\caption{Checksum errors reported when reading cached files from GDriveFS} \label{tab:checksum_errors_cached_read}
-\end{table}
+As far as I can tell, GDriveFS only caches authentication tokens and the structure of the file tree. This is reflected in fig.~\ref{fig:cached_read_benchmark}. As was the case in section \ref{reading_empty_cache}, checksum errors still occur with GDriveFS. The exact values can be found in table \ref{tab:checksum_errors}.
 
 \begin{figure}[bpt]
 \centering
