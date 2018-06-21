@@ -4,27 +4,27 @@
 
 This project aims to improve the experience of using Google Drive specifically for power users. Regular users can benefit from it as well -- provided they follow some prerequisite steps in order to use the application.
 
-If successful, it will drastically diminish the issues described in \ref{power_user_experience}.
+If successful, it will drastically diminish the some of the issues described in section~\ref{main_disadvantages}.
 
 \section{Summary}
 
 In essence, Google Drive is nothing more than a remote storage system. All the operations that a user might want to execute on a local storage system (e.g. copying files, creating and organising directories, reading and writing data) have an equivalent operation on Google Drive.
 
-Disk-based storage devices are organized by the operating system using a filesystem in order to keep track of all the data they contain. This happens behind the scences. Users can interact with the storage device using system calls. Some of the more popular ones are \codeword{read}, \codeword{write}, \codeword{close}, \codeword{wait}, \codeword{exec}, \codeword{fork}, \codeword{exit}, \codeword{kill}. Note that not all of these deal with file storage. Some of them are a proxy which expose different functionalities of the operating system.
+Disk-based storage devices are organized by the operating system using a file system in order to keep track of all the data they contain. This happens behind the scences. Users can interact with the storage device using system calls. Some of the more popular ones are \codeword{read}, \codeword{write}, \codeword{close}, \codeword{wait}, \codeword{exec}, \codeword{fork}, \codeword{exit}, \codeword{kill}. Note that not all of these deal with file storage. Some of them are a proxy which expose different functionalities of the operating system. In addition, users seldom execute system calls manually. It is the task of higher level applications to do this instead.
 
-An interesting concept comes to mind: why not model a Google Drive account in such a way that it behaves identically to a traditional filesystem? The only difference would be that instead of storing and reading data from a local disk, it would interact with Google's servers.
+An interesting concept comes to mind: why not model a Google Drive account in such a way that it behaves identically to a traditional file system? The only difference would be that instead of storing and reading data from a local disk, it would interact with Google's servers.
 
-GCSF does exactly that. It is a virtual filesystem on top of Google Drive. It allows users to mount their Drive account locally and interact with it as with a regular disk partition. This is achieved using the FUSE (Filesystem in Userspace) interface\cite{libfuse}, as described in \ref{implementation}.
+GCSF does exactly that. It is a virtual file system on top of Google Drive. It allows users to mount their Drive account locally and interact with it as they would with a regular disk partition. This is achieved using the FUSE (Filesystem in Userspace) interface~\cite{libfuse}, as described in \ref{implementation}.
 
 \section{Usage}
 
 Before delving into implementation details, I present a brief overview of how GCSF works from the user perspective.
 
-GCSF consists of a single binary. When executed with no arguments, it prints a help menu as seen in \ref{gcsf_help_menu}. Users can choose to mount the filesystem to a local directory. GCSF points to an authentication URL (\ref{gcsf_mount}) that must be accessed in order to obtain the right credentials for Google Drive (fig.~\ref{fig:drive_auth}). Upon completing the authentication process, GCSF mounts the filesystem and populates it with all files and directories contained in the \emph{My Drive} directory on Google Drive. This can be observed using tools such as \codeword{df} (\ref{df_output}) and \codeword{mount} (\ref{mount_output}).
+GCSF consists of a single binary. When executed with no arguments, it prints a help menu as seen in listing \ref{gcsf_help_menu}. Users can choose to mount the file system to a local directory. GCSF points to an authentication URL (listing~\ref{gcsf_mount}) that must be accessed in order to authorize access to Google Drive (fig.~\ref{fig:drive_auth}). Upon completing the authentication process, GCSF mounts the file system and populates it with all files and directories contained in the \emph{My Drive} directory on Google Drive. This can be observed using tools such as \codeword{df} (listing~\ref{df_output}) and \codeword{mount} (listing~\ref{mount_output}).
 
-\begin{lstlisting}[caption=GCSF help menu, frame=single, label=gcsf_help_menu]
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=GCSF help menu,frame=single,label=gcsf_help_menu,float]
 $ gcsf
-GCSF 0.1.1
+GCSF 0.1.3
 Sergiu Puscas <srg.pscs@gmail.com>
 Filesystem based on Google Drive
 
@@ -41,19 +41,19 @@ SUBCOMMANDS:
     mount     Mount the filesystem
 \end{lstlisting}
 
-\begin{lstlisting}[caption=GCSF mount, frame=single, label=gcsf_mount]
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=GCSF mount,frame=single,label=gcsf_mount,float]
 $ gcsf mount /mnt/gcsf
-Please direct your browser to https://accounts.google.com/o/oauth2/[...], follow the instructions and enter the code displayed here:
+Please direct your browser to https://accounts.google.com/o/oauth2/[...] and follow the instructions displayed there.
 \end{lstlisting}
 
 \begin{figure}[bpt]
-\caption{Google Drive authentication}
+\caption{Google Drive authorization}
 \label{fig:drive_auth}
 \centering
-\includegraphics[width=\textwidth]{gcsf_auth}
+\includegraphics[width=0.5\textwidth]{gcsf_auth}
 \end{figure}
 
-\begin{lstlisting}[caption=List of mounted filesystems, frame=single, label=df_output]
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=Size and capacity of mounted filesystems,frame=single,label=df_output,float]
 $ df -h
 Filesystem      Size  Used Avail Use% Mounted on
 /dev/nvme0n1p5   64G   45G   17G  74% /
@@ -62,57 +62,52 @@ Filesystem      Size  Used Avail Use% Mounted on
 GCSF             15G   11G  4.6G  70% /mnt/gcsf
 \end{lstlisting}
 
-\begin{lstlisting}[caption=Output of mount, frame=single, label=mount_output]
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=Output of mount,frame=single,label=mount_output,float]
 $ mount | grep GCSF
 GCSF on /mnt/gcsf type fuse (rw,nosuid,nodev,relatime,user_id=1000,group_id=100,allow_other)
 \end{lstlisting}
 
 
-Now the mount directory can be accessed using a file explorer such as \emph{Ranger} (fig.~\ref{fig:ranger}) or \emph{Thunar} (fig.~\ref{fig:thunar}). Command line programs such as \codeword{ls} work as well (fig.~\ref{fig:ls}). From this point onward, the mount directory can be treated as a regular local directory apart from a few exceptions.
+Now the mount directory can be accessed using a file explorer such as \emph{Ranger} (fig.~\ref{fig:ranger}) or \emph{Thunar} (fig.~\ref{fig:thunar}). Command line programs such as \codeword{ls} or \codeword{exa} work as well (fig.~\ref{fig:ls}). From this point onward, the mount directory can be treated as a regular local directory apart from a few exceptions.
 
 \begin{figure}[tbp]
 \caption{Ranger window}
 \label{fig:ranger}
 \centering
-\includegraphics[width=\textwidth]{ranger}
+\fbox{\includegraphics[width=\textwidth]{ranger}}
 \end{figure}
 
 \begin{figure}[tbp]
 \caption{Thunar window}
 \label{fig:thunar}
 \centering
-\includegraphics[width=\textwidth]{thunar}
+\fbox{\includegraphics[width=\textwidth]{thunar}}
 \end{figure}
 
 \begin{figure}[tbp]
-\caption{Output of ls}
+  \caption{File listing}
 \label{fig:ls}
 \centering
-\includegraphics[width=\textwidth]{ls}
+\fbox{\includegraphics[width=\textwidth]{ls}}
 \end{figure}
 
 \subsection{Exceptions}
 
-As can be seen in fig.~\ref{fig:ls}, some files have a \codeword{#} symbol attached at the end of their name. This is the case for special Google Drive files, including spreadsheets, docs and slides. Since their file format and size is undefined at this point, GCSF reports the maximum file size supported for these types of files. When such a file is accessed by a user, GCSF chooses the most appropriate filetype and exports the file from Drive. It also adds the appropriate extension to the file name and updates its real size (\ref{gcsf_export}).
+As can be seen in fig.~\ref{fig:ls}, some files have a \codeword{#} symbol attached at the end of their name. This is the case for special Google Drive files, including spreadsheets, docs and slides. Since their file format and size is undefined at this point, GCSF reports the maximum file size supported for these types of files. When such a file is accessed by a user, GCSF chooses the most appropriate filetype and exports the file from Drive. It also adds the appropriate extension to the file name and updates its real size (fig.~\ref{fig:export_doc}). Due to the nature of such files, they cannot be edited locally and are essentially limited to read-only access. However, they can be exported in a known file format, edited locally and then stored separately using GCSF.
 
-\begin{lstlisting}[caption=Exporting Google Drive documents, frame=single, label=gcsf_export]
-$ ls "Some document#.odt"
-.rwxr-xr-x 10M root  1 Jan  1970 Some document#.odt
-$ cp "Some document#.odt" /tmp
-$ ls "/tmp/Some document#.odt"
-.rwxr-xr-x 8.8k sergiu 12 Jun 18:30 /tmp/Some document#.odt
-$ file "/tmp/Some document#.odt"
-/tmp/Some document#.odt: OpenDocument Text
-\end{lstlisting}
-
-
+\begin{figure}[tbp]
+\caption{Exporting Google Docs as OpenDocument files.}
+\label{fig:export_doc}
+\centering
+\fbox{\includegraphics[width=\textwidth]{ls-some-doc}}
+\end{figure}
 
 
 \section{Implementation} \label{implementation}
 
 \subsection{Rust}
 
-Rust is a relatively new systems programming language\cite{rust_website} sponsored by the Mozilla Foundation. According to \emph{The Rust Programming Language} book\cite{trpl},
+Rust is a relatively new systems programming language sponsored by the Mozilla Foundation~\cite{rust_website}. According to \emph{The Rust Programming Language} book~\cite{trpl},
 
 \begin{quote}
 Rust is a programming language that helps you write faster, more reliable software. High-level ergonomics and low-level control are often at odds with each other in programming language design; Rust stands to challenge that. Through balancing powerful technical capacity and a great developer experience, Rust gives you the option to control low-level details (such as memory usage) without all the hassle traditionally associated with such control.
@@ -122,7 +117,7 @@ From this description, Rust seems like a good fit for this type of project. Howe
 
 \begin{enumerate}
   \itemsep0em
-  \item Performance. Rust is in many cases on par with C/C++ in terms of performance. Compared to interpreted languages like Python or Ruby, this is a clear advantage.
+  \item Performance. Rust is in many cases on par with C/C++ (or even faster!) in terms of performance~\cite{rust_vs_cpp_benchmark}. Compared to interpreted languages like Python or Ruby, this is a clear advantage.
   \item Type safety. Any code that may lead to undefined behavior in Rust must be explicitly wrapped within an \codeword{unsafe { }} block, making it the programmer's responsibility to make sure that the code is correct. GCSF does not contain unsafe blocks.
   \item Memory safety.
     \begin{itemize}
@@ -137,16 +132,17 @@ From this description, Rust seems like a good fit for this type of project. Howe
       \end{enumerate}
       \item \emph{No buffer overruns}
     \end{itemize}
-  \item Easy integration of third-party libraries using the \codeword{cargo} package manager and the official package registry\cite{crates_io}.
-  \item Support for the functional paradigm. Rust uses many functional concepts, \emph{closures} and \emph{iterators} being the most popular ones.
-  \item Community and growth. According to the \emph{stackoverflow Developer Survey}\cite{stack_overflow_most_loved}, developers have chosen Rust as the most loved programming language for three years in a row.
+  \item Easy integration of third-party libraries using the \codeword{cargo} package manager and the official package registry~\cite{crates_io}.
+  \item Support for the functional paradigm. Rust uses many functional concepts, \emph{closures} and \emph{iterators} being two notable examples.
+  \item Standardized ecosystem and builtin tools. Rust packages are commonly published on \url{crates.io}~\cite{crates_io}. Documentation is generated by \codeword{rustdoc} and published automatically to \url{docs.rs}~\cite{docs_rs}. The official style guide can be enforced using \codeword{rustfmt}.
+  \item Community and growth. According to the \emph{stackoverflow developer survey}~\cite{stack_overflow_most_loved}, developers have chosen Rust as the most loved programming language for three years in a row.
 \end{enumerate}
 
-Some of the points stated above are discussed in more depth in Jim Blandy's book \emph{Why Rust?}\cite{why_rust}.
+Some of the points stated above are discussed in more depth in Jim Blandy's book \emph{Why Rust?}~\cite{why_rust}.
 
 \subsection{FUSE}
 
-FUSE (\textbf{F}ilesystem in \textbf{Use}rspace) is a project that allows users to create virtual filesystems in the user level. Internally, it delegates tasks to a kernel module. As so, users do not have to interact with the kernel directly. FUSE is a popular choice for esoteric filesystems which do not store data themselves. A few notable examples are \emph{sshfs}\cite{sshfs}, which mounts a remote filesystem using SFTP\cite{sftp}, and \emph{WikipediaFS}\cite{wikipediafs} which allows users to view and edit articles locally.
+FUSE (\textbf{F}ilesystem in \textbf{Use}rspace) is a project that allows users to create virtual filesystems in the user level. Internally, it delegates tasks to a kernel module. As a result, users do not have to interact with the kernel directly. FUSE is a popular choice for esoteric filesystems which do not store data themselves. A few notable examples are \emph{sshfs}~\cite{sshfs}, which mounts a remote filesystem using SFTP~\cite{sftp}, and \emph{WikipediaFS}~\cite{wikipediafs} which allows users to view and edit articles locally.
 
 FUSE is made up of two components:
 \begin{itemize}
@@ -157,28 +153,83 @@ FUSE is made up of two components:
 
 FUSE filesystems are usually implemented as regular applications that interact with the \textit{libfuse} library. This library provides two interfaces that are useful for defining the behavior of the filesystem. In both cases, the filesystem receives incoming requests from the kernel, which are provided as calls to methods defined in the interface.
 
-First, there is the high-level interface (appendix~\ref{appendix:fuse_high_level}). It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface (appendix~\ref{appendix:fuse_low_level}). Files are identified using low level concepts such as inodes\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \emph{fuse}\cite{fuse_crate} crate. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
+% First, there is the high-level interface (appendix~\ref{appendix:fuse_high_level}). It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface (appendix~\ref{appendix:fuse_low_level}). Files are identified using low level concepts such as inodes~\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \codeword{fuse} crate~\cite{fuse_crate}. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
+First, there is the high-level interface. It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface. Files are identified using low level concepts such as inodes~\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \codeword{fuse} crate~\cite{fuse_crate}. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
 
 \subsection{Drive API}
 
-Google provides a REST API for interacting with Drive\cite{google_drive_rest_api_overview}. It also provides official client libraries for multiple programming languages: Java, Javascript, .NET, Objective-C, PHP and Python. There are also early-stage libraries for Dart, Go, Node.js and Ruby.
+Google provides a REST API for interacting with Drive~\cite{google_drive_rest_api_overview}. It also provides official client libraries for multiple programming languages: Java, Javascript, .NET, Objective-C, PHP and Python. There are also early-stage libraries for Dart, Go, Node.js and Ruby.
 
-Unfortunately, Rust is not officially supported. There is however a set of unofficial libraries\cite{google_apis_rs}  programatically generated by Sebastian Thiel\cite{sebastian_thiel}. Although imperfect, they are good enough for the scope of this project.
+Unfortunately, Rust is not officially supported. There is however a set of unofficial libraries, programatically generated by Sebastian Thiel~\cite{google_apis_rs,sebastian_thiel}. Although imperfect, they are good enough for the scope of this project. Some limitations are described in section \ref{problems_encountered}.
 
 \subsection{Architecture}
 
-The heart of the application is the \codeword{GCSF} struct. This implements the \codeword{fuse::Filesystem} trait, essentially making it a mountable filesystem. Internally, a \codeword{FileManager} is used for bookkeeping. The \codeword{FileManager} provides all the required functionality for dealing with local files and directories. It keeps track of the file hierarchy, inodes, metadata and performs regular syncs. In order to apply changes remotely on Drive, it uses a \codeword{DriveFacade} linked to the user's account.
+The heart of the application is the \codeword{GCSF} struct. It implements the \codeword{Filesystem} trait from the \codeword{fuse} module, essentially making it a mountable file system. Internally, a \codeword{FileManager} is used for bookkeeping. The \codeword{FileManager} provides all the required functionality for dealing with local files and directories. It keeps track of the file hierarchy, inodes, metadata and performs regular syncs. In order to communicate with Drive, it uses a \codeword{DriveFacade} which facilitates remote operations. The \codeword{DriveFacade} is linked to the user's account.
 
 These abstractions create a distinct separation of responsibilities. For instance, anything that requires network communication is performed by the \codeword{DriveFacade}. Information about any file can be obtained by simply querying the \codeword{FileManager}. (Un)mounting the file system and responding to system calls is done by \codeword{GCSF}.
 
+\begin{figure}[bpt]
+\caption{GCSF architecture}
+\label{fig:gcsf_architecture}
+\centering
+\includegraphics[width=0.4\linewidth]{gcsf_architecture}
+\end{figure}
+
+\subsection{Configuration}
+
+GCSF can be configured using a configuration file. An example can be found in listing \ref{gcsf_config}. 
+
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=GCSF configuration file, frame=single, label=gcsf_config,float]
+### This is the configuration file that GCSF uses.
+### It should be placed in $XDG_CONFIG_HOME/gcsf/gcsf.toml,
+### which is usually defined as $HOME/.config/gcsf/gcsf.toml
+
+# Show debug logs?
+debug = true
+
+# How long to cache the contents of a file after it has been
+# accessed.
+cache_max_seconds = 300
+
+# How how many files to cache.
+cache_max_items = 10
+
+# How long to cache the size and capacity of the filesystem.
+# These are the values reported by `df'.
+cache_statfs_seconds = 1
+
+# How many seconds to wait before checking for remote changes
+# and updating them locally.
+sync_interval = 10000
+
+# Mount options
+mount_options = [
+    "fsname=GCSF",
+    "allow_root",
+    "big_writes",
+    "max_write=131072"
+]
+
+# If set to true, Google Drive will provide a code after
+# logging in and authorizing GCSF. This code must be copied
+# and pasted into GCSF in order to complete the process.
+# Useful for running GCSF on a remote server.
+#
+# If set to false, Google Drive will attempt to communicate
+# with GCSF directly. This is usually faster and more
+# convenient.
+authorize_using_code = false
+\end{lstlisting}
+
+
 \subsection{Caching and laziness}
 
-Because internet connections tend to be slow and imperfect, GCSF aims reduce unnecessary network requests. The main way of achieving this is by caching file contents. Because the content of a given file is unlikely to be modified right after being accessed, it can be stored locally for a small amount of time for faster access. This can be observed by measuring the execution time of successive read operations on the same file (\ref{file_caching}). From a technical standpoint, this feature involves the use of an LRU cache, which is incidentally a remarkably popular programming interview question. Similarly, the reported filesystem capacity and usage values are also cached for a small amount of time.
+Because internet connections tend to be slow and imperfect, GCSF aims reduce unnecessary network requests. The main way of achieving this is by caching file contents. Considering that the content of a given file is unlikely to be modified right after being accessed, it can be stored locally for a small amount of time for faster access. The effect of such a strategy can be observed by measuring the execution time of successive read operations on the same file (listing \ref{file_caching}). From a technical standpoint, this feature involves the use of an LRU cache, which is incidentally a remarkably popular programming interview question. Similarly, the reported file system size and capacity values are also cached for a small amount of time. In addition, the file tree is permanently maintained in-memory because of its insignificant size. This allows both local and remote changes to be applied quickly.
 
-The second strategy for reducing network requests consists of only uploading new data when necessary. In a UNIX environment, the action of copying a single file might involve a large number of system calls. For instance, the file might have to first be created (using a \codeword{create} call), then have its attributes filled in (using a \codeword{setattr} call), then have its data written (using potentially many \codeword{write} calls with different offsets) and finally be \codeword{flush}ed. Uploading every small change that comes with each individual \codeword{write} call does not make a lot of sense. For this reason, GCSF decides to be lazy and simply store the \codeword{PendingWrite}s in memory. The operations are only performed when a \codeword{flush} call is encountered, and the new file content is uploaded as a whole afterwards.
+The second strategy for reducing network requests consists of only uploading new data when necessary. In a UNIX environment, the action of copying a single file might involve a large number of system calls. For instance, the file might have to first be created (using a \codeword{create} call), then have its attributes filled in (using a \codeword{setattr} call), then have its data written (using potentially many \codeword{write} calls with different offsets and data buffers) and finally be \codeword{flush}ed. Uploading every small change that comes with each individual \codeword{write} call does not make a lot of sense. For this reason, GCSF decides to be lazy and simply store the \codeword{PendingWrite}s in memory. The operations are only performed when a \codeword{flush} call is encountered, and the new file content is uploaded as a whole afterwards.
 
 
-\begin{lstlisting}[caption=File caching, frame=single, label=file_caching]
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,float,caption=File caching, frame=single, label=file_caching]
 $ time file "/mnt/gcsf/LaTeX Guide.pdf"
 LaTeX Guide.pdf: PDF document, version 1.5
 
@@ -193,16 +244,7 @@ user    0m0.017s
 sys     0m0.001s
 \end{lstlisting}
 
-
-\begin{figure}[bpt]
-\caption{GCSF Class Diagram}
-\label{fig:gcsf_class_diagram}
-\centering
-\includegraphics[width=\linewidth]{class_diagram}
-\end{figure}
-
-
-\section{Problems encountered}
+\section{Problems encountered} \label{problems_encountered}
 
 As with any sufficiently large project, GCSF involved a series of annoying and obscure problems along the way. I will describe some of the most notable ones in this section.
 
@@ -243,7 +285,7 @@ The client library that GCSF uses is generated based on a template which is most
 
 One of them regards updates on file metadata. GCSF sometimes has to modify information about a file without changing its content. For instance, renaming a file or moving it to a different directory are operations which require this sort of behavior. In order to to this, a \codeword{FileUpdateCall} can be used.
 
-For context, most calls exposed by this client library follow the builder pattern\cite{gof}. The general structure is:
+For context, most calls exposed by this client library follow the builder pattern~\cite{gof}. The general structure is:
 
 \begin{lstlisting}[language=Rust, frame=single]
 let result = hub.resource().activity(...).doit();

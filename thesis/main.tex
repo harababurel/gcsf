@@ -1,16 +1,17 @@
 \documentclass[a4paper,12pt,titlepage,openany]{book}
 \usepackage[hidelinks]{hyperref}
-\usepackage{url}
 \usepackage[nottoc]{tocbibind}
 \usepackage[toc,page]{appendix}
 \usepackage[utf8]{inputenc}
 \usepackage{color}
 \usepackage{datetime}
 \usepackage{graphicx}
-\usepackage{quoting}
 \usepackage{listings, listings-rust}
 \usepackage{multirow}
 \usepackage{pgfplots}
+\usepackage{quoting}
+\usepackage{textcomp}
+\usepackage{url}
 \usepackage{xcolor}
 \usepackage{xparse}
 
@@ -37,7 +38,7 @@
     keywordstyle=\color{magenta},
     numberstyle=\tiny\color{codegray},
     stringstyle=\color{codepurple},
-    basicstyle=\footnotesize,
+    basicstyle=\footnotesize\ttfamily,
     breakatwhitespace=false,
     breaklines=true,
     captionpos=b,
@@ -90,16 +91,17 @@ GCSF \\
 
 \input{introduction}
 \input{state_of_the_art}
+
 \input{proposed_approach}
 \input{performance_evaluation}
 \input{conclusion}
 
 \begin{appendices}
-\chapter{FUSE high-level API} \label{appendix:fuse_high_level}
-\lstinputlisting[language=C, caption=High-level FUSE interface, frame=single]{fuse.h}
+% \chapter{FUSE high-level API} \label{appendix:fuse_high_level}
+% \lstinputlisting[language=C, caption=High-level FUSE interface, frame=single]{fuse.h}
 
-\chapter{FUSE low-level API} \label{appendix:fuse_low_level}
-\lstinputlisting[language=C, caption=Low-level FUSE interface, frame=single]{fuse_lowlevel.h}
+% \chapter{FUSE low-level API} \label{appendix:fuse_low_level}
+% \lstinputlisting[language=C, caption=Low-level FUSE interface, frame=single]{fuse_lowlevel.h}
 
 \chapter{Rust FUSE library} \label{appendix:rust_fuse}
 \lstinputlisting[language=Rust, caption=Rust FUSE interface, frame=single]{fuse.rs}
