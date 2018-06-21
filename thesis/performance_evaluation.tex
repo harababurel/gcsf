@@ -45,17 +45,17 @@ Besides the two, there are many other similar projects. Most of them are either 
 
 \begin{itemize}
   \itemsep0em
-  \item \emph{thejinx0r/node-gdrive-fuse}~\cite{thejinx0r/node-gdrive-fuse} -- unmaintained since \date{February 2016}.
-  \item \emph{joe42/CloudFusion}~\cite{joe42/CloudFusion} -- unmaintained since \date{January 2015}.
-  \item \emph{S2Games/drivefs}~\cite{S2Games/drivefs} -- unmaintained since \date{June 2014}.
-  \item \emph{BYVoid/gdrive}~\cite{BYVoid/gdrive} -- unmaintained since \date{October 2013}.
-  \item \emph{jcline/fuse-google-drive}~\cite{jcline/fuse-google-drive} -- unmaintained since \date{September 2012}.
-  \item \emph{thejinx0r/DriveFS}~\cite{thejinx0r/DriveFS} -- undocumented as of \date{June 2018} and still in early stages of development.
-  \item \emph{zond/futon}~\cite{zond/futon} -- unmaintained since \date{December 2014}. In addition, it is \emph{``right now, and probably forever, read only''} according to the documentation.
+  \item \emph{thejinx0r/node-gdrive-fuse}~\cite{thejinx0r/node-gdrive-fuse} -- unmaintained since February 2016.
+  \item \emph{joe42/CloudFusion}~\cite{joe42/CloudFusion} -- unmaintained since January 2015.
+  \item \emph{S2Games/drivefs}~\cite{S2Games/drivefs} -- unmaintained since June 2014.
+  \item \emph{BYVoid/gdrive}~\cite{BYVoid/gdrive} -- unmaintained since October 2013.
+  \item \emph{jcline/fuse-google-drive}~\cite{jcline/fuse-google-drive} -- unmaintained since September 2012.
+  \item \emph{thejinx0r/DriveFS}~\cite{thejinx0r/DriveFS} -- undocumented as of June 2018 and still in early stages of development.
+  \item \emph{zond/futon}~\cite{zond/futon} -- unmaintained since December 2014. In addition, it is \emph{``right now, and probably forever, read only''} according to the documentation.
   \item \emph{dweidenfeld/plexdrive}~\cite{dweidenfeld/plexdrive} -- only allows read-only access and targets media streaming.
 \end{itemize}
 
-As such, I have decided to exclude these projects from my analysis and benchmarks. Here is a brief comparison of the chosen projects, as of \date{21 June 2018}:
+As such, I have decided to exclude these projects from my analysis and benchmarks. Here is a brief comparison of the chosen projects, as of 21 June 2018:
 
 \vspace{1em}
 
@@ -65,24 +65,24 @@ As such, I have decided to exclude these projects from my analysis and benchmark
 & & \multicolumn{1}{ c| }{GCSF} & \multicolumn{1}{ c|}{GDriveFS} & \multicolumn{1}{ c| }{google-drive-ocamlfuse} \\ \cline{1-5}
 
 \multicolumn{1}{ |l| }{\multirow{7}{*}{Github Statistics} } &
-\multicolumn{1}{  l| }{Owner}        & Sergiu Pușcaș     & Dustin Oprea       & Alessandro Strada \\ \cline{2-5}
+\multicolumn{1}{  l| }{Owner}        & Sergiu Pușcaș & Dustin Oprea & Alessandro Strada \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{First Commit} & \date{April 2018} & \date{August 2012} & \date{May 2012}   \\ \cline{2-5}
+\multicolumn{1}{  l| }{First Commit} & April 2018    & August 2012  & May 2012   \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Commits}      & 120               & 395                & 511               \\ \cline{2-5}
+\multicolumn{1}{  l| }{Commits}      & 120           & 395          & 511               \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Releases}     & 1                 & 23                 & 71                \\ \cline{2-5}
+\multicolumn{1}{  l| }{Releases}     & 1             & 23           & 71                \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Contributors} & 1                 & 6                  & 12                \\ \cline{2-5}
+\multicolumn{1}{  l| }{Contributors} & 1             & 6            & 12                \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Stars}        & 8                 & 490                & 2085              \\ \cline{2-5}
+\multicolumn{1}{  l| }{Stars}        & 8             & 490          & 2085              \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Forks}        & 0                 & 81                 & 153               \\ \cline{1-5}
+\multicolumn{1}{  l| }{Forks}        & 0             & 81           & 153               \\ \cline{1-5}
 
 \multicolumn{1}{ |l| }{\multirow{2}{*}{Technical Details} } &
-\multicolumn{1}{  l| }{Language}     & Rust              & Python 2.7         & OCaml             \\ \cline{2-5}
+\multicolumn{1}{  l| }{Language}     & Rust          & Python 2.7   & OCaml             \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{LoC}          & 1943              & 5232               & 7962              \\ \cline{1-5}
+\multicolumn{1}{  l| }{LoC}          & 1943          & 5232         & 7962              \\ \cline{1-5}
 \end{tabular}
 }
 
@@ -92,7 +92,7 @@ In the next sections I will discuss each of these projects from a technical stan
 
 \section{GDriveFS}
 
-As of \date{June 2018}, \emph{GDriveFS} aims to be \emph{``an innovative FUSE wrapper for Google Drive''}~\cite{dsoprea/GDriveFS}. It has been in development for the past six years, accumulating along the way a total of almost 400 commits, 23 releases, 6 contributors and 81 forks. As a consequence, GDriveFS has more features than GCSF and its longevity makes it a time-proven piece of software. This has been consistent with my personal experience. GDriveFS worked out of the box in most situations where I attempted to use it.
+As of June 2018, \emph{GDriveFS} aims to be \emph{``an innovative FUSE wrapper for Google Drive''}~\cite{dsoprea/GDriveFS}. It has been in development for the past six years, accumulating along the way a total of almost 400 commits, 23 releases, 6 contributors and 81 forks. As a consequence, GDriveFS has more features than GCSF and its longevity makes it a time-proven piece of software. This has been consistent with my personal experience. GDriveFS worked out of the box in most situations where I attempted to use it.
 
 Unfortunately, I also encountered some issues. I will walk through a first time setup of this application in order to illustrate its drawbacks. First, we create a new virtual environment using \codeword{virtualenv} in order to avoid conflicts between global Python packages and the local requirements of GDriveFS. We can easily install GDriveFS in this environment as a \codeword{pip} package.
 
@@ -148,7 +148,7 @@ Overall, the experience can only be described as messy. GDriveFS makes it diffic
 
 \section{google-drive-ocamlfuse}
 
-Compared to GDriveFS, google-drive-ocamlfuse is the result of the collective effort of twice as many contributors. As of \date{June 2018}, it has been starred by more than 2000 users on GitHub. For comparison, the programming language it is written in only has 1850 stars~\cite{ocaml}.
+Compared to GDriveFS, google-drive-ocamlfuse is the result of the collective effort of twice as many contributors. As of June 2018, it has been starred by more than 2000 users on GitHub. For comparison, the programming language it is written in only has 1850 stars~\cite{ocaml}.
 
 This project is implemented in OCaml~\cite{ocaml-website}, ``an industrial strength programming language supporting functional, imperative and object-oriented styles''. According to open-source software developer Thomas Leonard, OCaml can often achieve better performance compared to Python~\cite{python_to_ocaml_retrospective}. Whether or not this is the case in general, it is certainly reflected in the case of this project. As it turns out, it is the best performer in several categories described in section~\ref{benchmarks}.
 
@@ -184,7 +184,7 @@ As seen in fig.~\ref{fig:mount_benchmark}, constructing the file tree at mount t
 \begin{tikzpicture}
     \begin{axis}[
             ybar,
-            bar width=3cm,
+            bar width=2cm,
             width=.9\textwidth,
             height=.4\textwidth,
             legend style={at={(0.5,1)},
@@ -220,7 +220,7 @@ This is where the longer mount time of GCSF pays off. As seen in fig.~\ref{fig:t
 \begin{tikzpicture}
     \begin{axis}[
             ybar,
-            bar width=3cm,
+            bar width=2cm,
             width=.9\textwidth,
             height=.4\textwidth,
             legend style={at={(0.5,1)},

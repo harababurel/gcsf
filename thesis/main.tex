@@ -1,10 +1,11 @@
-\documentclass[a4paper,12pt,titlepage,openany]{book}
+\documentclass[a4paper,12pt,openany]{book}
 \usepackage[hidelinks]{hyperref}
 \usepackage[nottoc]{tocbibind}
 \usepackage[toc,page]{appendix}
 \usepackage[utf8]{inputenc}
 \usepackage{color}
 \usepackage{datetime}
+\usepackage{ragged2e}
 \usepackage{graphicx}
 \usepackage{listings, listings-rust}
 \usepackage{multirow}
@@ -75,41 +76,34 @@
 \newdateformat{monthyeardate}{%
   \monthname[\THEMONTH] \THEYEAR}
 
-
-\title{%
-GCSF \\
-\large a FUSE file system based on Google Drive}
-\author{Sergiu Dan Pușcaș \\ srg.pscs@gmail.com}
-\date{June 2018}
-
 \begin{document}
 
+\include{cover}
 % \frontmatter
 
-\maketitle
+\clearpage % end title page
+\begingroup
+  \pagestyle{empty}
+  \null
+  \newpage
+\endgroup
+
 \tableofcontents
 
 \input{introduction}
 \input{state_of_the_art}
-
 \input{proposed_approach}
 \input{performance_evaluation}
 \input{conclusion}
 
 \begin{appendices}
-% \chapter{FUSE high-level API} \label{appendix:fuse_high_level}
-% \lstinputlisting[language=C, caption=High-level FUSE interface, frame=single]{fuse.h}
-
-% \chapter{FUSE low-level API} \label{appendix:fuse_low_level}
-% \lstinputlisting[language=C, caption=Low-level FUSE interface, frame=single]{fuse_lowlevel.h}
-
 \chapter{Rust FUSE library} \label{appendix:rust_fuse}
 \lstinputlisting[language=Rust, caption=Rust FUSE interface, frame=single]{fuse.rs}
 \end{appendices}
 
-\Urlmuskip=0mu plus 1mu\relax
-\bibliographystyle{unsrt}
+% \Urlmuskip=0mu plus 1mu\relax
+\bibliographystyle{plain}
+\raggedright
 \bibliography{bibliography}
-% \printbibliography
 
 \end{document}
