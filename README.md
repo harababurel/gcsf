@@ -27,4 +27,10 @@ Please direct your browser to https://accounts.google.com/o/oauth2/[...], follow
 
 You can now find the contents of your Drive account in `/mnt/gcsf`:
 
+![GCSF ls](https://i.imgur.com/jdFIu5Y.png)
+
+Using Ranger:
+![GCSF in Ranger](https://i.imgur.com/BuS9BDD.png)
+
+Or Thunar:
 ![GCSF in Thunar](https://i.imgur.com/67QaeYg.jpg)
