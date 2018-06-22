@@ -11,10 +11,10 @@ Make sure you have the `fuse` library installed. GCSF requires the stable branch
 Afterwards, you can simply run:
 
 ```bash
-$ git clone https://github.com/harababurel/gcsf.git && cd gcsf && cargo build --release
+$ cargo install gcsf
 ```
 
-This will generate the `./target/release/gcsf` binary.
+This will generate the `gcsf` binary in `$HOME/.cargo/bin`. Make sure that this directory is in your `PATH` variable: `export PATH=$PATH:$HOME/.cargo/bin`
 
 ### Usage
 
