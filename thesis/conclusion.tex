@@ -1,2 +1,24 @@
-\chapter{Conclusion}
-Some conclusion here.
+\chapter{Conclusion}\label{conclusion}
+
+I personally consider that GCSF is a worthwhile alternative for users who are dissatisfied with existing tools. In many cases, it provides more control compared to the official web platform. As illustrated in Chapter \ref{performance_evaluation}, it can also achieve better performance and stability than similar FUSE-based file systems.
+
+This result is especially significant considering the short development cycle of just 11 weeks. The projects I compared it against have been in development for multiple years.
+
+As I plan to continue working on GCSF, I have assembled a list of areas for improvement. In no particular order:
+
+\begin{itemize}
+  \itemsep0em
+  \item \emph{Trash directory}. Currently, GCSF shows trashed files and directories but only has limited functionality in this area. Removing files currently moves them to trash, and there is no way to permanently delete files. This will be addressed by introducing context-aware behavior: removing a file from any directory will move it to trash, whereas removing a file from trash will permanently delete it.
+  \item \emph{`Shared with me' collection and team drives}. GCSF only supports the `My Drive' collection.
+  \item \emph{Faster mounting time}. The number of network requests required for populating the file system can be reduced from $ O(tree~depth) $ to $ O(1) $.
+  \item \emph{File attributes}. Add support for setting them locally and retrieving them from Drive.
+  \item \emph{Extended attributes}. Google Drive stores several custom file attributes in addition to those reported by \codeword{lsattr}.
+  \item \emph{Improve behavior for identically named files}.
+  \item \emph{User specified MIME type for special Drive files}.
+  \item \emph{Compress file uploads using} \codeword{gzip} \emph{for better performance}.
+  \item \emph{Concurrency}. GCSF can only perform one operation at a time. This is usually not a problem, but in some cases it impedes user experience.
+  \item \emph{Support for symbolic links}.
+  \item \emph{Package releases for multiple Linux distributions}.
+  \item \emph{Enforce file permissions}.
+
+\end{itemize}

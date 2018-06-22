@@ -31,7 +31,7 @@ Tree & gcsf & google-drive-ocamlfuse & gdrivefs \\
 % EOData
 
 
-\chapter{Performance evaluation}
+\chapter{Performance evaluation}\label{performance_evaluation}
 
 Although comparing GCSF with similar tools is a fuzzy task, I will attempt to construct an appropriate performance analysis. For this purpose I have selected two other projects:
 
@@ -55,31 +55,31 @@ Besides the two, there are many other similar projects. Most of them are either 
   \item \emph{dweidenfeld/plexdrive}~\cite{dweidenfeld/plexdrive} -- only allows read-only access and targets media streaming.
 \end{itemize}
 
-As such, I have decided to exclude these projects from my analysis and benchmarks. Here is a brief comparison of the chosen projects, as of 21 June 2018:
+As such, I have decided to exclude these projects from my analysis and benchmarks. Here is a brief comparison of the chosen projects, as of 22 June 2018:
 
 \vspace{1em}
 
-\makebox[\textwidth]{
+\makebox[.9\textwidth]{
 \begin{tabular}{cc|c|c|c|c|l}
 \cline{3-5}
 & & \multicolumn{1}{ c| }{GCSF} & \multicolumn{1}{ c|}{GDriveFS} & \multicolumn{1}{ c| }{google-drive-ocamlfuse} \\ \cline{1-5}
 
-\multicolumn{1}{ |l| }{\multirow{7}{*}{Github Statistics} } &
+\multicolumn{1}{ |l| }{\multirow{7}{*}{\shortstack[l]{Github \\ Statistics}}} &
 \multicolumn{1}{  l| }{Owner}        & Sergiu Pușcaș & Dustin Oprea & Alessandro Strada \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
 \multicolumn{1}{  l| }{First Commit} & April 2018    & August 2012  & May 2012   \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Commits}      & 120           & 395          & 511               \\ \cline{2-5}
+\multicolumn{1}{  l| }{Commits}      & 122           & 395          & 511               \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
 \multicolumn{1}{  l| }{Releases}     & 1             & 23           & 71                \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
 \multicolumn{1}{  l| }{Contributors} & 1             & 6            & 12                \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
-\multicolumn{1}{  l| }{Stars}        & 8             & 490          & 2085              \\ \cline{2-5}
+\multicolumn{1}{  l| }{Stars}        & 10            & 490          & 2085              \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
 \multicolumn{1}{  l| }{Forks}        & 0             & 81           & 153               \\ \cline{1-5}
 
-\multicolumn{1}{ |l| }{\multirow{2}{*}{Technical Details} } &
+\multicolumn{1}{ |l| }{\multirow{2}{*}{\shortstack[l]{Technical \\ Details}}} &
 \multicolumn{1}{  l| }{Language}     & Rust          & Python 2.7   & OCaml             \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
 \multicolumn{1}{  l| }{LoC}          & 1943          & 5232         & 7962              \\ \cline{1-5}
