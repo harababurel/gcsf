@@ -33,4 +33,4 @@ Using Ranger:
 ![GCSF in Ranger](https://i.imgur.com/BuS9BDD.png)
 
 Or Thunar:
-![GCSF in Thunar](https://i.imgur.com/67QaeYg.jpg)
+![GCSF in Thunar](https://i.imgur.com/9JSDqez.jpg)
