@@ -64,7 +64,7 @@ As such, I have decided to exclude these projects from my analysis and benchmark
 \cline{3-5}
 & & \multicolumn{1}{ c| }{GCSF} & \multicolumn{1}{ c|}{GDriveFS} & \multicolumn{1}{ c| }{google-drive-ocamlfuse} \\ \cline{1-5}
 
-\multicolumn{1}{ |l| }{\multirow{7}{*}{\shortstack[l]{Github \\ Statistics}}} &
+\multicolumn{1}{ |l| }{\multirow{7}{*}{\shortstack[l]{GitHub \\ Statistics}}} &
 \multicolumn{1}{  l| }{Owner}        & Sergiu Pușcaș & Dustin Oprea & Alessandro Strada \\ \cline{2-5}
 \multicolumn{1}{ |l| }{}             &
 \multicolumn{1}{  l| }{First Commit} & April 2018    & August 2012  & May 2012          \\ \cline{2-5}
@@ -126,7 +126,7 @@ It seems that there is an inconsistency between the documentation and the applic
 gdrivefs.errors.AuthorizationFailureError: Could not do auth-exchange (this was either a legitimate error, or the auth-exchange was attempted when not necessary): [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed (_ssl.c:726)
 \end{lstlisting}
 
-This is strange. After researching the problem, we find a relevant open issue on this subject~\cite{gdrivefs_ssl_handshake_error}. According to user \emph{blitz313}, the root cause is one of the dependencies. Manual installation of package \codeword{httplib2-0.10.3} (instead of the required version \codeword{0.8}) seems to solve this problem and we can finally mount the filesystem:
+This is strange. After researching the problem, we find a relevant open issue on this subject~\cite{gdrivefs_ssl_handshake_error}. According to user \emph{blitz313}, the root cause is one of the dependencies. Manual installation of package \codeword{httplib2-0.10.3} (instead of the required version \codeword{0.8}) seems to solve this problem and we can finally mount the file system:
 
 \begin{lstlisting}[frame=single,caption=GDriveFS filesystem mount]
 (gdrivefs) $ gdfstool mount /tmp/credentials /mnt/gdrivefs
@@ -140,7 +140,7 @@ drwxrwxrwx@    - sergiu 11 Jun 18:59 Stock photo collection
 .rw-rw-rw-@ 1.0k sergiu 11 Jun 18:57 This presentation#
 \end{lstlisting}
 
-From this point on, most operations perform as expected. My biggest issue with GDriveFS is its async I/O strategy. Files written to the file system are not instantly updated locally or on Drive. Reading a file too soon after writing to it can cause data inconsistency. In my benchmarks, writing files larger than \mbox{10 MB} and reading them immediatelly afterwards often resulted in checksum failures. Reading the same file multiple times in a row can also result in different outputs.
+From this point on, most operations perform as expected. My biggest issue with GDriveFS is its async I/O strategy. Files written to the file system are not instantly updated locally or on Drive. Reading a file too soon after writing to it can cause data inconsistency. In my benchmarks, writing files larger than \mbox{10 MB} and reading them immediately afterwards often resulted in checksum failures. Reading the same file multiple times in a row can also result in different outputs.
 
 In the situations where GDriveFS did work, it required significantly more time than its competitors. This may be attributed to the fact that it is implemented in Python, which is known to be slower than statically-typed compiled languages.
 
@@ -170,7 +170,7 @@ All tests were performed on a machine with the following specifications:
   \item 3 Gb/s internet connection
 \end{itemize}
 
-Unless stated otherwise, all file systems were mounted using their default configuration. All results reported in the following sections are averaged among 10 successive executions. The test account has been artificially populated with 2000 files and 100 directories, totalling 2.8 GB. The maximum depth of any file in the the file tree is 4.
+Unless stated otherwise, all file systems were mounted using their default configuration. All results reported in the following sections are averaged among 10 successive executions. The test account has been artificially populated with 2000 files and 100 directories, totaling 2.8 GB. The maximum depth of any file in the the file tree is 4.
 
 \subsection{Mounting and startup}
 
@@ -279,7 +279,7 @@ The target of this test is to measure the execution time required for computing 
 
 As seen in fig.~\ref{fig:fresh_read_benchmark}, google-drive-ocamlfuse tends to perform best on small files. GCSF is slower because it makes an additional request to Google Drive: first it creates an empty file and then it updates the file content. However, the performance changes for larger files. In this case, an additional network request becomes insignificant compared to each file system's efficiency of processing operations internally. As it turns out, GCSF performs slightly better than google-drive-ocamlfuse.
 
-Not the same can be said about GDriveFS. Its execution time grows almost linearly with the file size. Moreover, the computed checksums are incorrect in many cases. Waiting for the file system to resynchronize with Drive may fix these errors, but the inconvenience of not knowing whether or not the file system introduced errors to user data still exists.
+Not the same can be said about GDriveFS. Its execution time grows almost linearly with the file size. Moreover, the computed checksums are incorrect in many cases. Waiting for the file system to re-synchronize with Drive may fix these errors, but the inconvenience of not knowing whether or not the file system introduced errors to user data still exists.
 
 \begin{table}[h]
 \makebox[\textwidth]{
