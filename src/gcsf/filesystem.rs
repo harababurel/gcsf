@@ -1,7 +1,9 @@
 use super::{Config, File, FileId, FileManager};
 use drive3;
-use fuse::{FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory,
-           ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request};
+use fuse::{
+    FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
+    ReplyEntry, ReplyStatfs, ReplyWrite, Request,
+};
 use libc::{ENOENT, ENOTDIR, EREMOTEIO};
 use lru_time_cache::LruCache;
 use std;
@@ -12,7 +14,6 @@ use time::Timespec;
 use DriveFacade;
 
 pub type Inode = u64;
-pub type DriveId = String;
 
 pub struct NullFS;
 impl Filesystem for NullFS {}
@@ -136,7 +137,7 @@ impl Filesystem for GCSF {
         mut reply: ReplyDirectory,
     ) {
         if let Err(e) = self.manager.sync() {
-            warn!("Could not perform sync: {}", e);
+            debug!("Could not perform sync: {}", e);
         }
 
         let mut curr_offs = offset + 1;

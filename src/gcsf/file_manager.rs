@@ -1,7 +1,5 @@
 use super::{File, FileId};
 use drive3;
-// use rand;
-// use rand::Rng;
 use failure::{err_msg, Error};
 use fuse::{FileAttr, FileType};
 use id_tree::InsertBehavior::*;
@@ -11,7 +9,6 @@ use id_tree::{Node, NodeId, Tree, TreeBuilder};
 use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fmt;
-// use std::thread;
 use std::time::{Duration, SystemTime};
 use time::Timespec;
 use DriveFacade;
@@ -76,7 +73,7 @@ impl FileManager {
             ));
         }
 
-        warn!("Checking for changes and possibly applying them.");
+        info!("Checking for changes and possibly applying them.");
         self.last_sync = SystemTime::now();
 
         for change in self.df
@@ -279,7 +276,6 @@ impl FileManager {
     }
 
     pub fn get_inode(&self, id: &FileId) -> Option<Inode> {
-        // debug!("get_inode({:?})", &id);
         match id {
             FileId::Inode(inode) => Some(*inode),
             FileId::DriveId(drive_id) => self.drive_ids.get(drive_id).cloned(),
@@ -299,7 +295,6 @@ impl FileManager {
     }
 
     pub fn get_children(&self, id: &FileId) -> Option<Vec<&File>> {
-        // debug!("get_children({:?})", &id);
         let node_id = self.get_node_id(&id)?;
         let children: Vec<&File> = self.tree
             .children(&node_id)
@@ -313,7 +308,6 @@ impl FileManager {
     }
 
     pub fn get_file(&self, id: &FileId) -> Option<&File> {
-        // debug!("get_file({:?})", &id);
         let inode = self.get_inode(id)?;
         self.files.get(&inode)
     }
@@ -342,17 +336,6 @@ impl FileManager {
     fn add_file(&mut self, mut file: File, parent: Option<FileId>) -> Result<(), Error> {
         let node_id = match parent {
             Some(id) => {
-                {
-                    match self.get_file(&id).map(|ref file| &file.name) {
-                        Some(parent_name) => {
-                            info!("Added \"{}/{}\"", parent_name, &file.name);
-                        }
-                        None => {
-                            info!("Added \"???/{}\"", &file.name);
-                        }
-                    };
-                }
-
                 let parent_id = self.get_node_id(&id).ok_or(err_msg(
                     "FileManager::add_file() could not find parent by FileId",
                 ))?;
@@ -372,10 +355,7 @@ impl FileManager {
                 self.tree
                     .insert(Node::new(file.inode()), UnderNode(&parent_id))?
             }
-            None => {
-                info!("Adding file as root! This should only happen once.");
-                self.tree.insert(Node::new(file.inode()), AsRoot)?
-            }
+            None => self.tree.insert(Node::new(file.inode()), AsRoot)?,
         };
 
         self.node_ids.insert(file.inode(), node_id);

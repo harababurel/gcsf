@@ -16,7 +16,6 @@ use std::io::{Read, Seek, SeekFrom};
 const PAGE_SIZE: i32 = 1000;
 const CLIENT_SECRET: &str = "{\"installed\":{\"client_id\":\"726003905312-e2mq9mesjc5llclmvc04ef1k7qopv9tu.apps.googleusercontent.com\",\"project_id\":\"weighty-triode-199418\",\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\",\"client_secret\":\"hp83n1Rzz8UpxgCnqvX15qC2\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"http://localhost\"]}}";
 
-type Inode = u64;
 type DriveId = String;
 
 type GCClient = hyper::Client;
@@ -38,6 +37,7 @@ pub struct DriveFacade {
     root_id: Option<String>,
 }
 
+#[derive(Debug)]
 struct PendingWrite {
     id: DriveId,
     offset: usize,
@@ -116,9 +116,11 @@ impl DriveFacade {
             Err(e) => Err(err_msg(format!("{:#?}", e))),
         }
     }
-    // pub fn get_file_size(&self, drive_id: &str, mime_type: Option<String>) -> u64 {
-    //     self.get_file_content(drive_id, mime_type).unwrap().len() as u64
-    // }
+
+    #[allow(dead_code)]
+    fn get_file_size(&self, drive_id: &str, mime_type: Option<String>) -> u64 {
+        self.get_file_content(drive_id, mime_type).unwrap().len() as u64
+    }
 
     fn get_file_metadata(&self, id: &str) -> Result<drive3::File, Error> {
         self.hub
@@ -178,7 +180,10 @@ impl DriveFacade {
             .iter()
             .filter(|write| write.id == id)
             .for_each(|pending_write| {
-                info!("found a pending write! applying now");
+                debug!(
+                    "Applying pending write with offset {} on {}",
+                    &pending_write.offset, &pending_write.id
+                );
                 let required_size = pending_write.offset + pending_write.data.len();
 
                 data.resize(required_size, 0);
@@ -445,32 +450,18 @@ impl DriveFacade {
             .map_err(|e| err_msg(format!("DriveFacade::move_to() {}", e)))
     }
 
-    // pub fn remove(&mut self, id: DriveId) {
-    //     let filename = format!("{}.txt", inode);
-    //     let file_id = self.get_file_id(&filename).unwrap_or_default();
-    //     let _result = self.hub
-    //         .files()
-    //         .delete(&file_id)
-    //         .supports_team_drives(false)
-    //         .add_scope(drive3::Scope::Full)
-    //         .doit();
-
-    //     let _result = self.hub
-    //         .files()
-    //         .empty_trash()
-    //         .add_scope(drive3::Scope::Full)
-    //         .doit();
-    // }
-
     pub fn flush(&mut self, id: &DriveId) -> Result<(), Error> {
         if !self.pending_writes.contains_key(id) {
-            info!("flush() called but there are no pending writes on drive_id={}. nothing to do, moving on...", id);
+            debug!("flush({}): no pending writes", id);
             return Ok(());
         }
         self.cache.remove(id);
 
         if let Ok(false) = self.contains(id) {
-            return Err(err_msg("flush(): file doesn't exist on drive!"));
+            return Err(err_msg(format!(
+                "flush({}): file doesn't exist on drive!",
+                id
+            )));
         }
 
         let mut file_data = self.get_file_content(&id, None).unwrap_or_default();
@@ -487,7 +478,7 @@ impl DriveFacade {
     ) -> Result<(Response, drive3::File), Error> {
         let mime_guess = data.sniff_mime_type().unwrap_or("application/octet-stream");
         debug!(
-            "Updating file content for drive_id={}. Mime type guess based on content: {}",
+            "Updating file content for {}. Mime type guess based on content: {}",
             &id, &mime_guess
         );
 
