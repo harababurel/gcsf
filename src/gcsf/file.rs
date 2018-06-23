@@ -1,3 +1,4 @@
+use chrono::DateTime;
 use drive3;
 use fuse::{FileAttr, FileType};
 use id_tree::NodeId;
@@ -39,14 +40,32 @@ impl File {
             .map(|size| size.parse::<u64>().unwrap_or_default())
             .unwrap_or(10 * 1024 * 1024);
 
+        let times: Vec<_> = vec![
+            &drive_file.created_time,
+            &drive_file.modified_time,
+            &drive_file.viewed_by_me_time,
+        ].iter()
+            .map(|time| {
+                match DateTime::parse_from_rfc3339(time.as_ref().unwrap_or(&String::new())) {
+                    Ok(t) => Timespec {
+                        sec: t.timestamp(),
+                        nsec: t.timestamp_subsec_nanos() as i32,
+                    },
+                    Err(_) => Timespec { sec: 0, nsec: 0 },
+                }
+            })
+            .collect();
+
+        let (crtime, mtime, atime) = (times[0], times[1], times[2]);
+
         let mut attr = FileAttr {
             ino: inode,
             size,
             blocks: 1,
-            atime: Timespec { sec: 0, nsec: 0 },
-            mtime: Timespec { sec: 0, nsec: 0 },
-            ctime: Timespec { sec: 0, nsec: 0 },
-            crtime: Timespec { sec: 0, nsec: 0 },
+            atime,
+            mtime,
+            ctime: mtime,   // Time of last change
+            crtime: crtime, // Time of creation (macOS only)
             kind: if drive_file.mime_type == Some("application/vnd.google-apps.folder".to_string())
             {
                 FileType::Directory

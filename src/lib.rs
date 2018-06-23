@@ -1,3 +1,4 @@
+extern crate chrono;
 extern crate failure;
 extern crate fuse;
 extern crate google_drive3_fork as drive3;

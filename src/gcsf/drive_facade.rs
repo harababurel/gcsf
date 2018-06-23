@@ -266,7 +266,7 @@ impl DriveFacade {
             let (_response, changelist) = self.hub
                 .changes()
                 .list(&token)
-                .param("fields", "kind,newStartPageToken,changes(kind,type,time,removed,fileId,file(name,id,size,mimeType,owners,parents,trashed))")
+                .param("fields", "kind,newStartPageToken,changes(kind,type,time,removed,fileId,file(name,id,size,mimeType,owners,parents,trashed,modifiedTime,createdTime,viewedByMeTime))")
                 .spaces("drive")
                 .restrict_to_my_drive(true)
                 // Whether to include changes indicating that items have been removed from the list of changes, for example by deletion or loss of access. (Default: true)
@@ -303,7 +303,7 @@ impl DriveFacade {
         loop {
             let mut request = self.hub.files()
                 .list()
-                .param("fields", "nextPageToken,files(name,id,size,mimeType,owners,parents,trashed)")
+                .param("fields", "nextPageToken,files(name,id,size,mimeType,owners,parents,trashed,modifiedTime,createdTime,viewedByMeTime)")
                 .spaces("drive") // TODO: maybe add photos as well
                 .corpora("user")
                 .page_size(PAGE_SIZE)
