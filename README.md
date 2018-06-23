@@ -16,13 +16,15 @@ $ cargo install gcsf
 
 This will generate the `gcsf` binary in `$HOME/.cargo/bin`. Make sure that this directory is in your `PATH` variable: `export PATH=$PATH:$HOME/.cargo/bin`
 
-### Usage
+### Configuration
 
-Before running, you should copy `sample_config.toml` to `$XDG_CONFIG_HOME/gcsf/gcsf.toml`, which is usually defined as `$HOME/.config/gcsf/gcsf.toml`.
+GCSF will attempt to create a configuration file in `$XDG_CONFIG_HOME/gcsf/gcsf.toml`, which is usually defined as `$HOME/.config/gcsf/gcsf.toml`.
+
+### Usage
 
 ```bash
 $ gcsf mount /mnt/gcsf
-Please direct your browser to https://accounts.google.com/o/oauth2/[...], follow the instructions and enter the code displayed here:
+Please direct your browser to https://accounts.google.com/o/oauth2/[...] and follow the instructions displayed there.
 ```
 
 You can now find the contents of your Drive account in `/mnt/gcsf`:
