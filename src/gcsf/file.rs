@@ -8,6 +8,14 @@ use time::Timespec;
 type Inode = u64;
 type DriveId = String;
 
+/// The representation of a local file used by GCSF.
+///
+/// `name`: the file name
+/// `attr`: the file attributes,
+/// `identical_name_id`: if there are multiple files with the same name, this attribute indicates
+/// an additional numeric identifier for this particular file. This identifier influences the
+/// reported file name (e.g some_file.txt.1)
+/// `drive_file`: the associated Drive file (if one exists)
 #[derive(Debug, Clone)]
 pub struct File {
     pub name: String,
@@ -16,6 +24,14 @@ pub struct File {
     pub drive_file: Option<drive3::File>,
 }
 
+/// Specifies multiple ways of identifying a file:
+///
+/// * by inode
+/// * by Drive ID
+/// * by Node ID (the ID stored in the file tree)
+/// * by parent inode + file name (as required by some fuse methods)
+///
+/// These types are somewhat equivalent and can be converted into one another.
 #[derive(Debug, Clone)]
 pub enum FileId {
     Inode(Inode),
@@ -33,6 +49,7 @@ lazy_static! {
 }
 
 impl File {
+    /// Creates a new file using a Drive file as a template.
     pub fn from_drive_file(inode: Inode, drive_file: drive3::File) -> Self {
         let size = drive_file
             .size
@@ -113,10 +130,9 @@ impl File {
         }
     }
 
+    /// Whether a character can be used in a valid POSIX file name.
+    /// Read the [Wikipedia article](https://en.wikipedia.org/wiki/Filename)
     fn is_posix(c: &char) -> bool {
-        // https://en.wikipedia.org/wiki/Filename
-        // @NTFS
-
         let forbidden = String::from("*/:<>?\\|");
         !forbidden.contains(*c)
     }

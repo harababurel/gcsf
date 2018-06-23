@@ -31,19 +31,33 @@ macro_rules! unwrap_or_continue {
     };
 }
 
+/// Manages files locally and uses a DriveFacade in order to communicate with Google Drive and to ensure consistency between the local and remote state.
 pub struct FileManager {
+    /// A representation of the file tree. Each tree node stores the inode of the corresponding file.
     tree: Tree<Inode>,
+
+    /// Maps inodes to the corresponding files.
     pub files: HashMap<Inode, File>,
+
+    /// Maps inodes to corresponding node ids that `tree` uses.
     pub node_ids: HashMap<Inode, NodeId>,
+
+    /// Maps Google Drive ids (i.e strings) to corresponding inodes.
     pub drive_ids: HashMap<DriveId, Inode>,
+
+    /// A `DriveFacade` is used in order to communicate with the Google Drive API.
     pub df: DriveFacade,
+
+    /// The last timestamp when the file manager asked Google Drive for remote changes.
     pub last_sync: SystemTime,
+
+    /// Specifies how much time is needed to pass since `last_sync` for a new sync to be performed.
     pub sync_interval: Duration,
 }
 
-/// Deals with everything that involves local file managing. In turn, uses a DriveFacade in order
-/// to ensure consistency between the local and remote (drive) state.
 impl FileManager {
+    /// Creates a new FileManager with a specific `sync_interval` and an injected `DriveFacade`.
+    /// Also populates the manager's file tree with files contained in "My Drive" and "Trash".
     pub fn with_drive_facade(sync_interval: Duration, df: DriveFacade) -> Self {
         let mut manager = FileManager {
             tree: TreeBuilder::new().with_node_capacity(500).build(),
@@ -66,6 +80,8 @@ impl FileManager {
         manager
     }
 
+    /// Tries to retrieve recent changes from the `DriveFacade` and apply them locally in order to
+    /// maintain data consistency. Fails early if not enough time has passed since the last sync.
     pub fn sync(&mut self) -> Result<(), Error> {
         if SystemTime::now().duration_since(self.last_sync).unwrap() < self.sync_interval {
             return Err(err_msg(
@@ -93,8 +109,8 @@ impl FileManager {
 
                 let parent = f.drive_parent().unwrap();
                 debug!("drive parent: {:#?}", &parent);
-                self.add_file(f, Some(FileId::DriveId(parent)))?;
-                debug!("self.add_file() finished");
+                self.add_file_locally(f, Some(FileId::DriveId(parent)))?;
+                debug!("self.add_file_locally() finished");
             }
 
             // Trashed file. Move it to trash locally
@@ -133,10 +149,10 @@ impl FileManager {
         Ok(())
     }
 
-    // Recursively adds all files and directories shown in "My Drive".
+    /// Retrieves all files and directories shown in "My Drive" and adds them locally.
     fn populate(&mut self) -> Result<(), Error> {
         let root = self.new_root_file()?;
-        self.add_file(root, None)?;
+        self.add_file_locally(root, None)?;
 
         let mut queue: LinkedList<DriveId> = LinkedList::new();
         queue.push_back(self.df.root_id().unwrap_or(&"root".to_string()).to_string());
@@ -163,9 +179,9 @@ impl FileManager {
 
                 let file_parent = file.drive_parent().unwrap();
                 if self.contains(&FileId::DriveId(file_parent.clone())) {
-                    self.add_file(file, Some(FileId::DriveId(file_parent.clone())))?;
+                    self.add_file_locally(file, Some(FileId::DriveId(file_parent.clone())))?;
                 } else {
-                    self.add_file(file, None)?;
+                    self.add_file_locally(file, None)?;
                 }
             }
         }
@@ -173,19 +189,22 @@ impl FileManager {
         Ok(())
     }
 
+    /// Retrieves all trashed files and directories and adds them locally in a special directory.
     fn populate_trash(&mut self) -> Result<(), Error> {
         let root_id = self.df.root_id()?.to_string();
         let trash = self.new_special_dir("Trash", Some(TRASH_INODE));
-        self.add_file(trash.clone(), Some(FileId::DriveId(root_id.to_string())))?;
+        self.add_file_locally(trash.clone(), Some(FileId::DriveId(root_id.to_string())))?;
 
         for drive_file in self.df.get_all_files(None, Some(true))? {
             let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
-            self.add_file(file, Some(FileId::Inode(trash.inode())))?;
+            self.add_file_locally(file, Some(FileId::Inode(trash.inode())))?;
         }
 
         Ok(())
     }
 
+    /// Creates a new File struct which represents the root directory. If possible, it fills in the exact DriveId. If not, it
+    /// keeps using "root" as a placeholder id.
     fn new_root_file(&mut self) -> Result<File, Error> {
         let mut drive_file = drive3::File::default();
 
@@ -216,6 +235,8 @@ impl FileManager {
         })
     }
 
+    /// Creates a new File struct which represents a directory that does not necessarily exist on
+    /// Drive.
     fn new_special_dir(&mut self, name: &str, preferred_inode: Option<Inode>) -> File {
         File {
             name: name.to_string(),
@@ -240,6 +261,8 @@ impl FileManager {
         }
     }
 
+    /// Returns the next unused inode. Uses a very basic and inefficient method which works well in
+    /// practice because most users don't have that many files anyway.
     pub fn next_available_inode(&self) -> Inode {
         (3..)
             .filter(|inode| !self.contains(&FileId::Inode(*inode)))
@@ -321,11 +344,12 @@ impl FileManager {
     pub fn create_file(&mut self, mut file: File, parent: Option<FileId>) -> Result<(), Error> {
         let drive_id = self.df.create(file.drive_file.as_ref().unwrap())?;
         file.set_drive_id(drive_id);
-        self.add_file(file, parent)?;
+        self.add_file_locally(file, parent)?;
 
         Ok(())
     }
 
+    /// Passes along the FLUSH system call to the `DriveFacade`.
     pub fn flush(&mut self, id: &FileId) -> Result<(), Error> {
         let file = self.get_drive_id(&id)
             .ok_or(err_msg(format!("Cannot find drive id of {:?}", &id)))?;
@@ -333,16 +357,16 @@ impl FileManager {
     }
 
     /// Adds a file to the local file tree. Does not communicate with Drive.
-    fn add_file(&mut self, mut file: File, parent: Option<FileId>) -> Result<(), Error> {
+    fn add_file_locally(&mut self, mut file: File, parent: Option<FileId>) -> Result<(), Error> {
         let node_id = match parent {
             Some(id) => {
                 let parent_id = self.get_node_id(&id).ok_or(err_msg(
-                    "FileManager::add_file() could not find parent by FileId",
+                    "FileManager::add_file_locally() could not find parent by FileId",
                 ))?;
 
                 let identical_filename_count = self.get_children(&id)
                     .ok_or(err_msg(
-                        "FileManager::add_file() could not get file siblings",
+                        "FileManager::add_file_locally() could not get file siblings",
                     ))?
                     .iter()
                     .filter(|child| child.name == file.name)
@@ -366,7 +390,8 @@ impl FileManager {
         Ok(())
     }
 
-    pub fn move_locally(&mut self, id: &FileId, new_parent: &FileId) -> Result<(), Error> {
+    /// Moves a file somewhere else in the local file tree. Does not communicate with Drive.
+    fn move_locally(&mut self, id: &FileId, new_parent: &FileId) -> Result<(), Error> {
         let current_node = self.get_node_id(&id)
             .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
         let target_node = self.get_node_id(&new_parent)
@@ -376,7 +401,8 @@ impl FileManager {
         Ok(())
     }
 
-    pub fn delete_locally(&mut self, id: &FileId) -> Result<(), Error> {
+    /// Deletes a file and its children from the local file tree. Does not communicate with Drive.
+    fn delete_locally(&mut self, id: &FileId) -> Result<(), Error> {
         let node_id = self.get_node_id(id)
             .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
         let inode = self.get_inode(id)
@@ -392,6 +418,7 @@ impl FileManager {
         Ok(())
     }
 
+    /// Deletes a file locally *and* on Drive.
     pub fn delete(&mut self, id: &FileId) -> Result<(), Error> {
         let drive_id = self.get_drive_id(id).ok_or(err_msg("No such file"))?;
 
@@ -405,6 +432,7 @@ impl FileManager {
         }
     }
 
+    /// Moves a file to the Trash directory locally *and* on Drive.
     pub fn move_file_to_trash(&mut self, id: &FileId, also_on_drive: bool) -> Result<(), Error> {
         debug!("Moving {:?} to trash.", &id);
         let node_id = self.get_node_id(id)
@@ -423,6 +451,7 @@ impl FileManager {
         Ok(())
     }
 
+    /// Moves/renames a file locally *and* on Drive.
     pub fn rename(
         &mut self,
         id: &FileId,
@@ -471,6 +500,8 @@ impl FileManager {
         Ok(())
     }
 
+    /// Writes to a file locally *and* on Drive. Note: the pending write is not necessarily applied
+    /// instantly by the `DriveFacade`.
     pub fn write(&mut self, id: FileId, offset: usize, data: &[u8]) {
         let drive_id = self.get_drive_id(&id).unwrap();
         self.df.write(drive_id, offset, data);

@@ -26,17 +26,29 @@ type GCAuthenticator = oauth2::Authenticator<
 >;
 type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
 
+/// Provides a simple high-level interface for interacting with the Google Drive API.
 pub struct DriveFacade {
+    /// The `drive3::Drive` hub used for interacting with the API.
     pub hub: GCDrive,
+
+    /// A buffer used for temporarily caching read blocks. Storing this inside the struct makes it possible to return a reference to the data without the danger of the data outliving the struct.
     buff: Vec<u8>,
+
+    /// Maps Drive IDs to a list of pending write operations that must be applied on them.
     pending_writes: HashMap<DriveId, Vec<PendingWrite>>,
+
+    /// The LRU cache used for storing the file contents for any given Drive ID.
     cache: LruCache<DriveId, Vec<u8>>,
+
+    /// Keeps track of the page token used for receiving changes from the `changes.list` API endpoint.
     changes_token: Option<String>,
 
-    // This is only stored once, effectively caching the root id.
+    /// The root id is only stored once, effectively caching the root id.
     root_id: Option<String>,
 }
 
+/// Represents a write operation that has been performed from the user's point of view but has not
+/// yet been applied to the local or remote file.
 #[derive(Debug)]
 struct PendingWrite {
     id: DriveId,
@@ -52,7 +64,6 @@ lazy_static! {
     };
 }
 
-/// Deals with everything that involves communication with Google Drive.
 impl DriveFacade {
     pub fn new(config: &Config) -> Self {
         debug!("DriveFacade::new()");
@@ -93,6 +104,7 @@ impl DriveFacade {
         Ok(auth)
     }
 
+    /// Creates a drive hub.
     fn create_drive(config: &Config) -> Result<GCDrive, Error> {
         let auth = Self::create_drive_auth(config)?;
         Ok(drive3::Drive::new(
@@ -103,7 +115,7 @@ impl DriveFacade {
         ))
     }
 
-    // Will still detect a file even if it is in Trash
+    /// Will still detect a file even if it is in Trash.
     fn contains(&self, id: &DriveId) -> Result<bool, Error> {
         let response = self.hub
             .files()
@@ -133,6 +145,9 @@ impl DriveFacade {
             .map_err(|e| err_msg(format!("{:#?}", e)))
     }
 
+    /// Retrieves the content of a Drive file. If `mime_type` is specified, this method will
+    /// attempt to export the file in some appropriate format rather than just download it as is.
+    /// This is the only way of retrieving Docs, Sheets and Slides.
     fn get_file_content(
         &self,
         drive_id: &str,
@@ -173,6 +188,8 @@ impl DriveFacade {
         Ok(content)
     }
 
+    /// Applies all pending writes accumulated so far on a data buffer. The pending writes are then
+    /// cleared.
     fn apply_pending_writes_on_data(&mut self, id: DriveId, data: &mut Vec<u8>) {
         self.pending_writes
             .entry(id.clone())
@@ -193,7 +210,7 @@ impl DriveFacade {
         self.pending_writes.remove(&id);
     }
 
-    // The drive3::File id of the root "My Drive" directory
+    /// Returns the Drive ID of the root "My Drive" directory
     pub fn root_id(&mut self) -> Result<&String, Error> {
         if self.root_id.is_some() {
             return Ok(self.root_id.as_ref().unwrap());
@@ -234,6 +251,7 @@ impl DriveFacade {
         Ok(self.root_id.as_ref().unwrap())
     }
 
+    /// Returns the start page token for the `changes.list` API endpoint.
     fn get_start_page_token(&mut self) -> Result<String, Error> {
         self.hub
             .changes()
@@ -250,6 +268,8 @@ impl DriveFacade {
             })
     }
 
+    /// Returns the current token for the `changes.list` API endpoint, or the start page token if
+    /// absent.
     fn changes_token(&mut self) -> Result<&String, Error> {
         if self.changes_token.is_none() {
             self.changes_token = Some(self.get_start_page_token()?);
@@ -258,6 +278,8 @@ impl DriveFacade {
         Ok(self.changes_token.as_ref().unwrap())
     }
 
+    /// Returns a list of all changes reported by Drive which are more recent than the changes
+    /// token indicates.
     pub fn get_all_changes(&mut self) -> Result<Vec<drive3::Change>, Error> {
         let mut all_changes = Vec::new();
 
@@ -293,6 +315,7 @@ impl DriveFacade {
         Ok(all_changes)
     }
 
+    /// Returns a list of all files from Drive. If the `parents` list is provided, only files which are children of any one of the list's elements are returned. If `trashed` is provided, only files which are trashed/not trashed are returned. The two filters can be used together.
     pub fn get_all_files(
         &mut self,
         parents: Option<Vec<DriveId>>,
@@ -471,6 +494,8 @@ impl DriveFacade {
         Ok(())
     }
 
+    /// Updates the content of a file on Drive. The MIME type is guessed appropriately based on the
+    /// content.
     fn update_file_content(
         &mut self,
         id: DriveId,
@@ -493,6 +518,7 @@ impl DriveFacade {
             .map_err(|e| err_msg(format!("{:#?}", e)))
     }
 
+    /// Returns the size and capacity of the Drive account. In some cases, the limit can be absent.
     pub fn size_and_capacity(&mut self) -> Result<(u64, Option<u64>), Error> {
         let (_response, about) = self.hub
             .about()
@@ -513,6 +539,9 @@ impl DriveFacade {
     }
 }
 
+/// A virtual (in-memory) file which implements the Read + Seek traits. Can be constructed from a
+/// slice of bytes. Useful for uploading some file content to Drive without actually storing the
+/// file locally on disk.
 struct DummyFile {
     cursor: u64,
     data: Vec<u8>,

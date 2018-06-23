@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+/// Provides a few properties of the file system that can be configured. Includes sensible
+/// defaults for the absent values.
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
     debug: Option<bool>,
@@ -13,22 +15,27 @@ pub struct Config {
 }
 
 impl Config {
+    /// Whether to show additional logging info.
     pub fn debug(&self) -> bool {
         self.debug.unwrap_or(false)
     }
 
+    /// How long to cache the contents of a file after it has been accessed.
     pub fn cache_max_seconds(&self) -> Duration {
         Duration::from_secs(self.cache_max_seconds.unwrap_or(10))
     }
 
+    /// How how many files to cache.
     pub fn cache_max_items(&self) -> u64 {
         self.cache_max_items.unwrap_or(10)
     }
 
+    /// How long to cache the size and capacity of the filesystem. These are the values reported by `df`.
     pub fn cache_statfs_seconds(&self) -> Duration {
         Duration::from_secs(self.cache_statfs_seconds.unwrap_or(100))
     }
 
+    /// How many seconds to wait before checking for remote changes and updating them locally.
     pub fn sync_interval(&self) -> Duration {
         Duration::from_secs(self.sync_interval.unwrap_or(10))
     }
@@ -40,10 +47,17 @@ impl Config {
         }
     }
 
+    /// The path to the token file which authorizes access to a Drive account.
     pub fn token_path(&self) -> &str {
         self.token_path.as_ref().unwrap()
     }
 
+    /// If set to true, Google Drive will provide a code after logging in and
+    /// authorizing GCSF. This code must be copied and pasted into GCSF in order to
+    /// complete the process. Useful for running GCSF on a remote (headless) server.
+    ///
+    /// If set to false, Google Drive will attempt to communicate with GCSF directly.
+    /// This is usually faster and more convenient.
     pub fn authorize_using_code(&self) -> bool {
         self.authorize_using_code.unwrap_or(true)
     }

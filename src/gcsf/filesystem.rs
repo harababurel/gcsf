@@ -15,9 +15,13 @@ use DriveFacade;
 
 pub type Inode = u64;
 
+/// An empty FUSE file system. It can be used in a mounting test aimed to determine whether or
+/// not the real file system can be mounted as well. If the test fails, the application can fail
+/// early instead of wasting time constructing the real file system.
 pub struct NullFS;
 impl Filesystem for NullFS {}
 
+/// A FUSE file system which is linked to a Google Drive account.
 pub struct GCSF {
     manager: FileManager,
     statfs_cache: LruCache<String, u64>,
