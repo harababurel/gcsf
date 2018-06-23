@@ -70,7 +70,7 @@
 \lstset{style=mystyle}
 
 \NewDocumentCommand{\codeword}{v}{%
-\texttt{\textcolor{blue}{#1}}%
+  \texttt{\textcolor{black}{#1}}%
 }
 
 \newdateformat{monthyeardate}{%
@@ -79,8 +79,14 @@
 \begin{document}
 
 \include{cover}
-% \frontmatter
+\clearpage % end title page
+\begingroup
+  \pagestyle{empty}
+  \null
+  \newpage
+\endgroup
 
+\include{cover_ro}
 \clearpage % end title page
 \begingroup
   \pagestyle{empty}
@@ -96,10 +102,10 @@
 \input{performance_evaluation}
 \input{conclusion}
 
-\begin{appendices}
-\chapter{Rust FUSE library} \label{appendix:rust_fuse}
-\lstinputlisting[language=Rust, caption=Rust FUSE interface, frame=single]{fuse.rs}
-\end{appendices}
+% \begin{appendices}
+% \chapter{Rust FUSE library} \label{appendix:rust_fuse}
+% \lstinputlisting[language=Rust, caption=Rust FUSE interface, frame=single]{fuse.rs}
+% \end{appendices}
 
 % \Urlmuskip=0mu plus 1mu\relax
 \bibliographystyle{plain}

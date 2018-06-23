@@ -10,15 +10,18 @@ As I plan to continue working on GCSF, I have assembled a list of areas for impr
   \itemsep0em
   \item \emph{Trash directory}. Currently, GCSF shows trashed files and directories but only has limited functionality in this area. Removing files currently moves them to trash, and there is no way to permanently delete files. This will be addressed by introducing context-aware behavior: removing a file from any directory will move it to trash, whereas removing a file from trash will permanently delete it.
   \item \emph{`Shared with me' collection and team drives}. GCSF only supports the `My Drive' collection.
-  \item \emph{Faster mounting time}. The number of network requests required for populating the file system can be reduced from $ O(tree~depth) $ to $ O(1) $.
-  \item \emph{File attributes}. Add support for setting them locally and retrieving them from Drive.
+  \item \emph{Faster mount time}. The number of network requests required for populating the file system can be reduced from $ O(tree~depth) $ to $ O(1) $, with the addition of a more complex tree building strategy.
   \item \emph{Extended attributes}. Google Drive stores several custom file attributes in addition to those reported by \codeword{lsattr}.
-  \item \emph{Improve behavior for identically named files}.
-  \item \emph{User specified MIME type for special Drive files}.
-  \item \emph{Compress file uploads using} \codeword{gzip} \emph{for better performance}.
+  \item \emph{Identically named files}. Some operations are not well defined in the case of identically named files because this concept is foreign to traditional file systems. GCSF makes an effort to differentiate them by adding specific suffixes (e.g \codeword{hello.txt.1}, \codeword{hello.txt.2} and so on). When a user moves such a file to a different directory, it is not immediately clear what the correct behavior should be. Should the file keep its suffix even if not necessary, just for the sake of consistency? Should the suffix be adapted to match the identical files in the new directory or be removed altogether? A consistent strategy must be determined.
+  \item \emph{User specified MIME type for special Drive files}. GCSF guesses the best export format for Docs, Sheets and Slides. This is the format used by the OpenOffice suite. Users should be able to specify any valid format accepted by Google Drive.
+  \item \emph{Real file size of exportable Drive documents}. GCSF reports a fixed size of 10 MB for Docs, Sheets and Slides, which is not factually accurate. One alternative is to always report the file size that each specific document would have when exported in the default format.
+  \item \codeword{gzip} \emph{compression}. Google suggests the use of \codeword{gzip} for compressing files before transferring over the network. This requires additional CPU time to uncompress the results, but reduces the bandwidth needed in most cases. The trade-off is usually worthwhile.
   \item \emph{Concurrency}. GCSF can only perform one operation at a time. This is usually not a problem, but in some cases it impedes user experience.
   \item \emph{Support for symbolic links}.
-  \item \emph{Package releases for multiple Linux distributions}.
-  \item \emph{Enforce file permissions}.
-
+  \item \emph{Package releases for multiple Linux distributions}. The de facto method of installing GCSF is via the Cargo package manager. This requires a local installation of both Rust and Cargo and adds some time required for building the project. Packaging binaries for multiple operating systems and architectures would lower the barrier of using the application.
+  \item \emph{File permissions}. Enforcing file permissions would improve user experience in the case of multi-user environments.
 \end{itemize}
+
+\section{External links}
+
+The entire project is hosted on GitHub~\cite{harababurel/gcsf}. It is also published as a Rust crate on \url{crates.io}~\cite{gcsf_crate}. The latest documentation is accessible on \url{docs.rs}~\cite{gcsf_docs}.

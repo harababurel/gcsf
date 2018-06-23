@@ -38,7 +38,7 @@ FLAGS:
 SUBCOMMANDS:
     help      Prints this message or the help of the given subcommand(s)
     logout    Delete credentials file
-    mount     Mount the filesystem
+    mount     Mount the file system
 \end{lstlisting}
 
 \begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=GCSF mount,frame=single,label=gcsf_mount,float]
@@ -53,7 +53,7 @@ Please direct your browser to https://accounts.google.com/o/oauth2/[...] and fol
 \label{fig:drive_auth}
 \end{figure}
 
-\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=Size and capacity of mounted filesystems,frame=single,label=df_output,float]
+\begin{lstlisting}[basicstyle=\footnotesize\ttfamily,caption=Size and capacity of mounted file systems,frame=single,label=df_output,float]
 $ df -h
 Filesystem      Size  Used Avail Use% Mounted on
 /dev/nvme0n1p5   64G   45G   17G  74% /
@@ -118,7 +118,7 @@ From this description, Rust seems like a good fit for this type of project. Howe
 \begin{enumerate}
   \itemsep0em
   \item Performance. Rust is in many cases on par with C/C++ (or even faster!) in terms of performance~\cite{rust_vs_cpp_benchmark}. Compared to interpreted languages like Python or Ruby, this is a clear advantage.
-  \item Type safety. Any code that may lead to undefined behavior in Rust must be explicitly wrapped within an \codeword{unsafe { }} block, making it the programmer's responsibility to make sure that the code is correct. GCSF does not contain unsafe blocks.
+  \item Type safety. Any code that may lead to undefined behavior in Rust must be explicitly wrapped within an \codeword{unsafe { }} block, making it the programmer's responsibility to make sure that the code is correct. GCSF contains a single unsafe block, required for mounting the file system~\cite{fuse_spawn_mount_unsafe}.
   \item Memory safety.
     \begin{itemize}
       \itemsep0em
@@ -142,7 +142,7 @@ Some of the points stated above are discussed in more depth in Jim Blandy's book
 
 \subsection{FUSE}
 
-FUSE (\textbf{F}ilesystem in \textbf{Use}rspace) is a project that allows users to create virtual filesystems in the user level. Internally, it delegates tasks to a kernel module. As a result, users do not have to interact with the kernel directly. FUSE is a popular choice for esoteric filesystems which do not store data themselves. A few notable examples are \emph{sshfs}~\cite{sshfs}, which mounts a remote filesystem using SFTP~\cite{sftp}, and \emph{WikipediaFS}~\cite{wikipediafs} which allows users to view and edit articles locally.
+FUSE (\textbf{F}ilesystem in \textbf{Use}rspace) is a project that allows users to create virtual file systems in the user level. Internally, it delegates tasks to a kernel module. As a result, users do not have to interact with the kernel directly. FUSE is a popular choice for esoteric file systems which do not store data themselves. A few notable examples are \emph{sshfs}~\cite{sshfs}, which mounts a remote file system using SFTP~\cite{sftp}, and \emph{WikipediaFS}~\cite{wikipediafs} which allows users to view and edit articles locally.
 
 FUSE is made up of two components:
 \begin{itemize}
@@ -151,10 +151,9 @@ FUSE is made up of two components:
   \item the \textit{libfuse} userspace library
 \end{itemize}
 
-FUSE filesystems are usually implemented as regular applications that interact with the \textit{libfuse} library. This library provides two interfaces that are useful for defining the behavior of the filesystem. In both cases, the filesystem receives incoming requests from the kernel, which are provided as calls to methods defined in the interface.
+FUSE file systems are usually implemented as regular applications that interact with the \textit{libfuse} library. This library provides two interfaces that are useful for defining the behavior of the file system. In both cases, the file system receives incoming requests from the kernel, which are provided as calls to methods defined in the interface.
 
-% First, there is the high-level interface (appendix~\ref{appendix:fuse_high_level}). It uses high-level concepts such as file names and paths in most of its methods. Second, there is the low-level interface (appendix~\ref{appendix:fuse_low_level}). Files are identified using low level concepts such as inodes~\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \codeword{fuse} crate~\cite{fuse_crate}. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
-First, there is the high-level interface. It uses concepts such as file names and paths in most of its methods. Second, there is the low-level interface, which uses inodes in order to identify files~\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \codeword{fuse} crate~\cite{fuse_crate}. GCSF implements the \codeword{Filesystem} trait defined in appendix~\ref{appendix:rust_fuse}.
+First, there is the high-level interface. It uses concepts such as file names and paths in most of its methods. Second, there is the low-level interface, which uses inodes in order to identify files~\cite{tanenbaum}. GCSF uses the latter because of the available language library for Rust, provided through the \codeword{fuse} crate~\cite{fuse_crate}.
 
 \subsection{Drive API}
 
@@ -196,7 +195,7 @@ cache_max_seconds = 300
 # How how many files to cache.
 cache_max_items = 10
 
-# How long to cache the size and capacity of the filesystem.
+# How long to cache the size and capacity of the file system.
 # These are the values reported by `df'.
 cache_statfs_seconds = 1
 
@@ -333,4 +332,4 @@ GCSF aims to achieve data consistency in two directions: any change applied loca
 
 This generally works. Files added/removed/modified on the web or mobile client are picked up by GCSF after a short while. No wasteful network traffic is generated, as would be the case with regular polling. The delay perceived by the user is present but not significant as it only occurs every once in a while.
 
-But there is a problem. The API seems to make up its own mind and only return the requested changes when it wants. Sometimes, this happens almost instantly. On other occasions, the user has to manually intervene and remount the filesystem in order to preserve its consistency. This can lead to problems which impair user experience.
+But there is a problem. The API seems to make up its own mind and only return the requested changes when it wants. Sometimes, this happens almost instantly. On other occasions, the user has to manually intervene and remount the file system in order to preserve its consistency. This can lead to problems which impair user experience.
