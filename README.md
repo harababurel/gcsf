@@ -36,3 +36,7 @@ Using Ranger:
 
 Or Thunar:
 ![GCSF in Thunar](https://i.imgur.com/9JSDqez.jpg)
+
+### Contributing
+
+Contributions are welcome. You can also help by reporting or fixing [bugs](https://github.com/harababurel/gcsf/issues).
