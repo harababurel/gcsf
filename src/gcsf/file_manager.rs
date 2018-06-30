@@ -53,6 +53,8 @@ pub struct FileManager {
 
     /// Specifies how much time is needed to pass since `last_sync` for a new sync to be performed.
     pub sync_interval: Duration,
+
+    last_inode: Inode,
 }
 
 impl FileManager {
@@ -67,6 +69,7 @@ impl FileManager {
             last_sync: SystemTime::now(),
             sync_interval,
             df,
+            last_inode: 2,
         };
 
         if let Err(e) = manager.populate() {
@@ -261,14 +264,10 @@ impl FileManager {
         }
     }
 
-    /// Returns the next unused inode. Uses a very basic and inefficient method which works well in
-    /// practice because most users don't have that many files anyway.
-    pub fn next_available_inode(&self) -> Inode {
-        (3..)
-            .filter(|inode| !self.contains(&FileId::Inode(*inode)))
-            .take(1)
-            .next()
-            .unwrap()
+    /// Returns the next unused inode.
+    pub fn next_available_inode(&mut self) -> Inode {
+        self.last_inode += 1;
+        self.last_inode
     }
 
     pub fn contains(&self, file_id: &FileId) -> bool {
