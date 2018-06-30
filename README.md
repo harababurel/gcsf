@@ -1,12 +1,21 @@
+
+
+<img align="right" width="300px" height="300px"
+     title="Size Limit logo" src="https://i.imgur.com/9xdFwQq.png">
+
 [![Build Status](https://travis-ci.org/harababurel/gcsf.svg?branch=master)](https://travis-ci.org/harababurel/gcsf)
 [![Crates.io](http://meritbadge.herokuapp.com/gcsf)](https://crates.io/crates/gcsf)
 [![Docs](https://docs.rs/gcsf/badge.svg)](https://docs.rs/gcsf/latest/gcsf/)
+
+[![GitHub Issues](https://img.shields.io/github/issues/harababurel/gcsf.svg)](https://github.com/harababurel/gcsf/issues)
+![Contributions welcome](https://img.shields.io/badge/contributions-welcome-orange.svg)
 [![MIT License](http://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://github.com/harababurel/gcsf/blob/master/LICENSE)
 
-GCSF is a virtual filesystem that allows users to mount their Google Drive account locally and interact with it as a regular disk partition. You can find out more in this [paper](https://sergiu.ml/~sergiu/thesis.pdf) (note: it is a draft).
+GCSF is a virtual filesystem that allows users to mount their Google Drive account locally and interact with it as a regular disk partition. You can find out more in this [paper](https://sergiu.ml/~sergiu/thesis.pdf).
+
 ### Installation
 
-Make sure you have the `fuse` library installed. GCSF requires the stable branch of the Rust programming language, which can be installed following the instructions on [rustup.rs](https://rustup.rs).
+Make sure you have the `fuse` library installed (for macOS users: [osxfuse](https://osxfuse.github.io/)). GCSF requires the stable branch of the Rust programming language, which can be installed following the instructions on [rustup.rs](https://rustup.rs).
 
 Afterwards, you can simply run:
 
@@ -15,6 +24,8 @@ $ cargo install gcsf
 ```
 
 This will generate the `gcsf` binary in `$HOME/.cargo/bin`. Make sure that this directory is in your `PATH` variable: `export PATH=$PATH:$HOME/.cargo/bin`
+
+Alternatively, you can download a [release binary](https://github.com/harababurel/gcsf/releases) for your platform.
 
 ### Configuration
 
@@ -29,13 +40,23 @@ Please direct your browser to https://accounts.google.com/o/oauth2/[...] and fol
 
 You can now find the contents of your Drive account in `/mnt/gcsf`:
 
-![GCSF ls](https://i.imgur.com/jdFIu5Y.png)
+<p align="left">
+  <img src="https://i.imgur.com/jdFIu5Y.png" alt="GCSF ls"
+       width="530px" height="165px">
+</p>
 
 Using Ranger:
-![GCSF in Ranger](https://i.imgur.com/BuS9BDD.png)
+<p align="left">
+  <img src="https://i.imgur.com/BuS9BDD.png" alt="GCSF in Ranger"
+       width="616px" height="351px">
+</p>
+
 
 Or Thunar:
-![GCSF in Thunar](https://i.imgur.com/9JSDqez.jpg)
+<p align="left">
+  <img src="https://i.imgur.com/9JSDqez.jpg" alt="GCSF in Thunar"
+       width="746px" height="176px">
+</p>
 
 ### Contributing
 
