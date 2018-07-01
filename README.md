@@ -13,7 +13,7 @@ GCSF is a virtual filesystem that allows users to mount their Google Drive accou
 
 ### Installation
 
-Make sure you have the `fuse` library installed (for macOS users: [osxfuse](https://osxfuse.github.io/)). GCSF requires the stable branch of the Rust programming language, which can be installed following the instructions on [rustup.rs](https://rustup.rs).
+Make sure you have the `fuse` library installed (for macOS users: [osxfuse](https://osxfuse.github.io/); on Ubuntu, the `libfuse-dev` package). GCSF requires the stable branch of the Rust programming language, which can be installed following the instructions on [rustup.rs](https://rustup.rs).
 
 Afterwards, you can simply run:
 
