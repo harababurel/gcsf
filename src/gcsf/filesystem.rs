@@ -4,7 +4,7 @@ use fuse::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
     ReplyEntry, ReplyStatfs, ReplyWrite, Request,
 };
-use libc::{ENOENT, ENOTDIR, EREMOTEIO};
+use libc::{ENOENT, ENOTDIR, EREMOTE};
 use lru_time_cache::LruCache;
 use std;
 use std::clone::Clone;
@@ -300,7 +300,7 @@ impl Filesystem for GCSF {
             }
             Err(e) => {
                 error!("create: {}", e);
-                reply.error(EREMOTEIO);
+                reply.error(EREMOTE);
             }
         }
     }
@@ -323,7 +323,7 @@ impl Filesystem for GCSF {
             }
             Err(e) => {
                 error!("{:?}", e);
-                reply.error(EREMOTEIO);
+                reply.error(EREMOTE);
             }
         };
     }
@@ -397,7 +397,7 @@ impl Filesystem for GCSF {
             }
             Err(e) => {
                 error!("mkdir: {}", e);
-                reply.error(EREMOTEIO);
+                reply.error(EREMOTE);
             }
         }
     }
@@ -413,7 +413,7 @@ impl Filesystem for GCSF {
             }
             Err(e) => {
                 error!("{:?}", e);
-                reply.error(EREMOTEIO);
+                reply.error(EREMOTE);
             }
         };
     }
@@ -423,7 +423,7 @@ impl Filesystem for GCSF {
             Ok(()) => reply.ok(),
             Err(e) => {
                 error!("{:?}", e);
-                reply.error(EREMOTEIO);
+                reply.error(EREMOTE);
             }
         }
     }
