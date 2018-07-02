@@ -1,14 +1,10 @@
 language: rust
 
-os:
-  - linux
-  - osx
-
 rust:
   - stable
 
 before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; brew install pkg-config osxfuse; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; brew tap homebrew/cask; brew cask install pkg-config osxfuse; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get -qq update; sudo apt-get install -y libfuse-dev pkg-config; fi
 
 before_script:
@@ -22,8 +18,13 @@ script:
 
 matrix:
   include:
+    # Linux
     - os: linux
       dist: trusty
       sudo: required
+
+    # OSX
     - env: TARGET=x86_64-apple-darwin
+      os: osx
+    - env: TARGET=i686-apple-darwin
       os: osx
