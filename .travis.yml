@@ -1,12 +1,29 @@
 language: rust
+
+os:
+  - linux
+  - osx
+
 rust:
   - stable
+
 before_install:
-  - sudo apt-get -qq update
-  - sudo apt-get install -y libfuse-dev
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update; brew install pkg-conf osxfuse; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo apt-get -qq update; sudo apt-get install -y libfuse-dev pkg-conf; fi
+
 before_script:
+  - rustup self update
   - rustup component add rustfmt-preview
+
 script:
   - cargo fmt --all -- --write-mode=diff
   - cargo build
   - cargo test
+
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+      sudo: required
+    - env: TARGET=x86_64-apple-darwin
+      os: osx
