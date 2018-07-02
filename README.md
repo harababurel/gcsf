@@ -39,6 +39,10 @@ sudo apt-get install -y libfuse-dev pkg-config
 
 Make sure you have `pkg-config` and the `fuse` library installed. These are usually found in the package repositories of major distributions.
 
+#### Windows
+
+Unfortunately, Windows is not supported at the time being. See issue [#19](https://github.com/harababurel/gcsf/issues/19).
+
 ### Installation
 
 After all requirements are met, GCSF can be installed using `cargo`:
