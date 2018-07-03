@@ -93,7 +93,8 @@ impl DriveFacade {
             hyper::Client::with_connector(hyper::net::HttpsConnector::new(
                 hyper_rustls::TlsClient::new(),
             )),
-            oauth2::DiskTokenStorage::new(&config.token_path().to_string()).unwrap(),
+            oauth2::DiskTokenStorage::new(&config.token_file().to_str().unwrap().to_string())
+                .unwrap(),
             Some(if config.authorize_using_code() {
                 oauth2::FlowType::InstalledInteractive
             } else {

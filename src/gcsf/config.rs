@@ -1,17 +1,19 @@
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// Provides a few properties of the file system that can be configured. Includes sensible
 /// defaults for the absent values.
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Clone, Debug, Default)]
 pub struct Config {
-    debug: Option<bool>,
-    cache_max_seconds: Option<u64>,
-    cache_max_items: Option<u64>,
-    cache_statfs_seconds: Option<u64>,
-    sync_interval: Option<u64>,
-    mount_options: Option<Vec<String>>,
-    pub token_path: Option<String>,
-    authorize_using_code: Option<bool>,
+    pub debug: Option<bool>,
+    pub cache_max_seconds: Option<u64>,
+    pub cache_max_items: Option<u64>,
+    pub cache_statfs_seconds: Option<u64>,
+    pub sync_interval: Option<u64>,
+    pub mount_options: Option<Vec<String>>,
+    pub config_dir: Option<PathBuf>,
+    pub session_name: Option<String>,
+    pub authorize_using_code: Option<bool>,
 }
 
 impl Config {
@@ -47,9 +49,17 @@ impl Config {
         }
     }
 
+    pub fn session_name(&self) -> &String {
+        self.session_name.as_ref().unwrap()
+    }
+
     /// The path to the token file which authorizes access to a Drive account.
-    pub fn token_path(&self) -> &str {
-        self.token_path.as_ref().unwrap()
+    pub fn token_file(&self) -> PathBuf {
+        Path::new(self.config_dir.as_ref().unwrap()).join(Path::new(self.session_name()))
+    }
+
+    pub fn config_dir(&self) -> &PathBuf {
+        self.config_dir.as_ref().unwrap()
     }
 
     /// If set to true, Google Drive will provide a code after logging in and

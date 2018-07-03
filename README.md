@@ -58,13 +58,36 @@ Alternatively, you can download a [release binary](https://github.com/harababure
 
 ### Configuration
 
-GCSF will attempt to create a configuration file in `$XDG_CONFIG_HOME/gcsf/gcsf.toml`, which is usually defined as `$HOME/.config/gcsf/gcsf.toml`.
+GCSF will attempt to create a configuration file in `$XDG_CONFIG_HOME/gcsf/gcsf.toml`, which is usually defined as `$HOME/.config/gcsf/gcsf.toml`. Credentials are stored in the same directory.
 
 ### Usage
 
+The first step is to log in to Drive and authorize the application. A name must be provided for the session:
+
 ```bash
-$ gcsf mount /mnt/gcsf
+$ gcsf login some_session_name
 Please direct your browser to https://accounts.google.com/o/oauth2/[...] and follow the instructions displayed there.
+Successfully logged in. Saved credentials to "$HOME/.config/gcsf/some_session_name"
+```
+
+You can also list all existing sessions:
+
+```bash
+$ gcsf list
+Sessions:
+        - personal
+        - some_session_name
+        - work
+```
+
+And then mount one (or more) of them:
+
+```bash
+$ gcsf mount /mnt/gcsf -s some_session_name
+INFO  gcsf > Creating and populating file system...
+INFO  gcsf > File sytem created.
+INFO  gcsf > Mounting to /mnt/gcsf
+INFO  gcsf > Mounted to /mnt/gcsf
 ```
 
 You can now find the contents of your Drive account in `/mnt/gcsf`:
@@ -89,4 +112,4 @@ Or Thunar:
 
 ### Contributing
 
-Contributions are welcome. You can also help by reporting or fixing [bugs](https://github.com/harababurel/gcsf/issues).
+Contributions are welcome. You can also help by reporting or fixing [issues](https://github.com/harababurel/gcsf/issues).

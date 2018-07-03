@@ -1,20 +1,45 @@
 name: GCSF
-version: "0.1.7"
+version: "0.1.8"
 author: Sergiu Puscas <srg.pscs@gmail.com>
 about: Filesystem based on Google Drive
 subcommands:
   - mount:
     name: "mount"
-    about: "Mount the filesystem"
+    about: "Mount the filesystem."
     args:
+      - session_name:
+          short: s
+          long: session
+          value_name: session_name
+          help: An existing session name set during `gcsf login`
+          takes_value: true
+          required: true
       - mountpoint:
-          value_name: /path/to/mount/directory
-          help: path to mount directory
+          value_name: mount_directory
+          help: Path to mount directory
+          takes_value: true
+          required: true
+  - login:
+    name: "login"
+    about: "Login to Drive (create a new session)."
+    args:
+      - session_name:
+          value_name: session_name
+          help: User-defined name for this session.
           takes_value: true
           required: true
   - logout:
     name: "logout"
-    about: "Logout (delete credentials file)"
+    about: "Logout (delete a given session)."
+    args:
+      - session_name:
+          value_name: session_name
+          help: User-defined session name.
+          takes_value: true
+          required: true
+  - list:
+    name: "list"
+    about: "List sessions."
 after_help: "Note: this is a work in progress. It might cause data loss. Use with caution."
 settings:
   - SubcommandRequiredElseHelp

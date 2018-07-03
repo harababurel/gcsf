@@ -25,7 +25,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time;
 
-use gcsf::{Config, NullFS, GCSF};
+use gcsf::{Config, DriveFacade, NullFS, GCSF};
 
 const DEBUG_LOG: &str =
     "hyper::client=error,rustls::client_hs=error,hyper::http=error,hyper::net=error,debug";
@@ -119,37 +119,51 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
     }
 }
 
+fn login(config: &mut Config) -> Result<(), Error> {
+    debug!("{:#?}", &config);
+
+    if config.token_file().exists() {
+        return Err(err_msg(format!(
+            "token file {:?} already exists.",
+            config.token_file()
+        )));
+    }
+
+    // Create a DriveFacade which will store the authentication token in the desired file.
+    // And make an arbitrary request in order to trigger the authentication process.
+    let mut df = DriveFacade::new(&config);
+    let _result = df.root_id();
+
+    Ok(())
+}
+
 fn load_conf() -> Result<Config, Error> {
     let xdg_dirs = xdg::BaseDirectories::with_prefix("gcsf").unwrap();
-    let config_path = xdg_dirs
+    let config_file = xdg_dirs
         .place_config_file("gcsf.toml")
         .map_err(|_| err_msg("Cannot create configuration directory"))?;
 
-    info!("Config file: {:?}", &config_path);
+    info!("Config file: {:?}", &config_file);
 
-    if !config_path.exists() {
-        let mut config_file = fs::File::create(config_path.clone())
+    if !config_file.exists() {
+        let mut config_file = fs::File::create(config_file.clone())
             .map_err(|_| err_msg("Could not create config file"))?;
         config_file.write_all(DEFAULT_CONFIG.as_bytes())?;
     }
 
-    let token_path = xdg_dirs
-        .place_config_file("auth_token.json")
-        .map_err(|_| err_msg("Cannot create configuration directory"))?;
-
     let mut settings = config::Config::default();
     settings
-        .merge(config::File::with_name(config_path.to_str().unwrap()))
+        .merge(config::File::with_name(config_file.to_str().unwrap()))
         .expect("Invalid configuration file");
 
     let mut config = settings.try_into::<Config>()?;
-    config.token_path = Some(token_path.to_str().unwrap().to_string());
+    config.config_dir = Some(xdg_dirs.get_config_home());
 
     Ok(config)
 }
 
 fn main() {
-    let config = load_conf().expect("Could not load configuration file.");
+    let mut config = load_conf().expect("Could not load configuration file.");
 
     pretty_env_logger::formatted_builder()
         .unwrap()
@@ -159,20 +173,65 @@ fn main() {
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
 
-    if let Some(_matches) = matches.subcommand_matches("logout") {
-        let filename = config.token_path.as_ref().unwrap();
-        match fs::remove_file(filename) {
+    if let Some(matches) = matches.subcommand_matches("login") {
+        config.session_name = Some(matches.value_of("session_name").unwrap().to_string());
+
+        match login(&mut config) {
             Ok(_) => {
-                println!("Successfully removed {}", filename);
+                println!(
+                    "Successfully logged in. Saved credentials to {:?}",
+                    &config.token_file()
+                );
             }
             Err(e) => {
-                println!("Could not remove {}: {}", filename, e);
+                error!("Could not log in: {}", e);
             }
         };
     }
 
+    if let Some(matches) = matches.subcommand_matches("logout") {
+        config.session_name = Some(matches.value_of("session_name").unwrap().to_string());
+        let tf = config.token_file();
+        match fs::remove_file(&tf) {
+            Ok(_) => {
+                println!("Successfully removed {:?}", &tf);
+            }
+            Err(e) => {
+                println!("Could not remove {:?}: {}", &tf, e);
+            }
+        };
+    }
+
+    if let Some(_matches) = matches.subcommand_matches("list") {
+        let exception = String::from("gcsf.toml");
+        let mut sessions: Vec<_> = fs::read_dir(&config.config_dir())
+            .unwrap()
+            .map(Result::unwrap)
+            .map(|f| f.file_name().to_str().unwrap().to_string())
+            .filter(|name| name != &exception)
+            .collect();
+        sessions.sort();
+
+        if sessions.is_empty() {
+            println!("No sessions found.");
+        } else {
+            println!("Sessions:");
+            for session in sessions {
+                println!("\t- {}", &session);
+            }
+        }
+    }
+
     if let Some(matches) = matches.subcommand_matches("mount") {
         let mountpoint = matches.value_of("mountpoint").unwrap();
+        config.session_name = Some(matches.value_of("session_name").unwrap().to_string());
+
+        if !config.token_file().exists() {
+            error!("Token file {:?} does not exist.", config.token_file());
+            error!("Try logging in first using `gcsf login`.");
+            return;
+        }
+
         mount_gcsf(config, mountpoint);
     }
 }
