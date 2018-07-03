@@ -21,26 +21,30 @@ matrix:
     - env: TARGET=i686-apple-darwin
       os: osx
 
-
 before_install:
-- if [[ ${TRAVIS_OS_NAME} == "osx" ]]; then brew update; brew install pkg-config;
-  brew tap homebrew/cask; brew cask install osxfuse; fi
-- if [[ ${TRAVIS_OS_NAME} == "linux" ]]; then sudo apt-get -qq update; sudo apt-get
-  install -y libfuse-dev pkg-config; fi
+  - if [[ ${TRAVIS_OS_NAME} == "osx" ]]; then brew update; brew install pkg-config;
+    brew tap homebrew/cask; brew cask install osxfuse; fi
+  - if [[ ${TRAVIS_OS_NAME} == "linux" ]]; then sudo apt-get -qq update; sudo apt-get
+    install -y libfuse-dev pkg-config; fi
 
 before_script:
-- rustup self update
-- rustup component add rustfmt-preview
+  - rustup self update
+  - rustup component add rustfmt-preview
 
 script:
-- cargo fmt --all -- --write-mode=diff
-- cargo build --release
-- cargo test --release
+  - cargo fmt --all -- --write-mode=diff
+  - cargo build --release
+  - cargo test --release
+
+before_deploy:
+  - sh ci/before_deploy.sh
 
 deploy:
   provider: releases
   api_key:
     secure: J1M3lDhEpELNXToOsDwdeEVswVcwfe4KEAeCTGxjovL8VMiDX1iYGRsrx+7PvERB3f6Iaq6j2a60Y06+mDMUtFBMy0SN8GjXOgsF/M4Pa+EDgwhEYkxk1WKrsSkBBAhNc065qHTKtTCNLHLeY8y2fkul0qfcaqU/VsQlLrp6lZQFbEcQ6bMI+aDTtvjNiPkldoMXw1OsaPKflPY+A2elc0SJUSf0scmSnrnovrzdM8CtOLYh5fgc9/YISDYFiRKhdzVNtPB69/YW3Y4p4Qr2ELaWTeHWYoQHVxW8+5SvBPsZgau5OuVxmNMcVuus5QRgDPJn0Ftntu71SASLrU//2Mpi/bFvXtN2DzWBzB/1SLxadHN+JI9BdyCKtI3y/gW9ikyIqOVav86n8cvOmYDBELfbk8GM2g+3n8qalD0nQbTnaqMqg+bdAHyFFRjm0UBq1RCTQPVAIc4mx/pLk0oZxlZiVLYZbyPL1BZQ/mZ8SxCv0CZcRkmAYlEOmiy+8SeXRPjyPLAGOgEzUKRtmQJpPFGIAX9a0So4315x8I+1fJEoWXRpxfTO0C1nTkKFPkvrHgjDISM9uygMY0kv02XeS/Jjt2XDV/iAvcipQsGprwWoV/faWbMTkCRRlLswbATPoAYQCcxd7/cWaOb2k5ttY3rgauqtRnh/Qilr+zEvbAg=
+  file_glob: true
   file: $CRATE_NAME-$TRAVIS_TAG-$TARGET.*
   on:
     repo: harababurel/gcsf
+    tags: true
