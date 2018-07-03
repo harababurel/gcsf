@@ -48,3 +48,4 @@ deploy:
   on:
     repo: harababurel/gcsf
     tags: true
+  skip_cleanup: true
