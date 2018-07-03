@@ -18,6 +18,7 @@ main() {
 
     test -f Cargo.lock || cargo generate-lockfile
 
+    rustup target add $TARGET
     cargo build --release --target $TARGET
     cp target/$TARGET/release/gcsf $stage/
 
