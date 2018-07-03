@@ -1,5 +1,7 @@
 # This script takes care of building your crate and packaging it for release
 # https://github.com/japaric/trust
+set -x
+
 main() {
     local src=$(pwd) \
           stage=
