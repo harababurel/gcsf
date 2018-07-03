@@ -41,11 +41,18 @@ const DEFAULT_CONFIG: &str = "\
 # Show additional logging info?
 debug = false
 
+# Perform a mount check and fail early if it fails. Disable this if you
+# encounter this error:
+#
+#     fuse: attempt to remount on active mount point: [...]
+#     Could not mount to [...]: Undefined error: 0 (os error 0)
+mount_check = true
+
 # How long to cache the contents of a file after it has been accessed.
 cache_max_seconds = 300
 
 # How how many files to cache.
-cache_max_items = 20
+cache_max_items = 10
 
 # How long to cache the size and capacity of the filesystem. These are the
 # values reported by `df`.
@@ -79,17 +86,19 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
         .collect::<Vec<_>>();
     options.pop();
 
-    unsafe {
-        match fuse::spawn_mount(NullFS {}, &mountpoint, &options) {
-            Ok(session) => {
-                debug!("Test mount of NullFS successful. Will mount GCSF next.");
-                drop(session);
-            }
-            Err(e) => {
-                error!("Could not mount to {}: {}", &mountpoint, e);
-                return;
-            }
-        };
+    if config.mount_check() {
+        unsafe {
+            match fuse::spawn_mount(NullFS {}, &mountpoint, &options) {
+                Ok(session) => {
+                    debug!("Test mount of NullFS successful. Will mount GCSF next.");
+                    drop(session);
+                }
+                Err(e) => {
+                    error!("Could not mount to {}: {}", &mountpoint, e);
+                    return;
+                }
+            };
+        }
     }
 
     info!("Creating and populating file system...");

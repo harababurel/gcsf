@@ -1,11 +1,11 @@
 name: GCSF
-version: "0.1.13"
+version: "0.1.14"
 author: Sergiu Puscas <srg.pscs@gmail.com>
-about: Filesystem based on Google Drive
+about: File system based on Google Drive
 subcommands:
   - mount:
     name: "mount"
-    about: "Mount the filesystem."
+    about: "Mount the file system."
     args:
       - session_name:
           short: s

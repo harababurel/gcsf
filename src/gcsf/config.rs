@@ -6,6 +6,7 @@ use std::time::Duration;
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct Config {
     pub debug: Option<bool>,
+    pub mount_check: Option<bool>,
     pub cache_max_seconds: Option<u64>,
     pub cache_max_items: Option<u64>,
     pub cache_statfs_seconds: Option<u64>,
@@ -20,6 +21,11 @@ impl Config {
     /// Whether to show additional logging info.
     pub fn debug(&self) -> bool {
         self.debug.unwrap_or(false)
+    }
+
+    /// Whether to perform a mount check before creating the file system and fail early if it fails.
+    pub fn mount_check(&self) -> bool {
+        self.mount_check.unwrap_or(true)
     }
 
     /// How long to cache the contents of a file after it has been accessed.
