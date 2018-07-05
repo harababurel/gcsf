@@ -3,11 +3,11 @@
 
 
 [![Build Status](https://travis-ci.org/harababurel/gcsf.svg?branch=master)](https://travis-ci.org/harababurel/gcsf)
-[![Crates.io](https://img.shields.io/crates/v/gcsf.svg)](https://crates.io/crates/gcsf)
+[![Crates.io](https://sergiu.ml/~sergiu/gcsf-badges/version.svg)](https://crates.io/crates/gcsf)
 [![Docs](https://docs.rs/gcsf/badge.svg)](https://docs.rs/gcsf/latest/gcsf/)<br>
-[![GitHub Issues](https://img.shields.io/github/issues/harababurel/gcsf.svg)](https://github.com/harababurel/gcsf/issues)
-[![Crates.io](https://img.shields.io/crates/d/gcsf.svg)](https://crates.io/crates/gcsf)
-[![MIT License](https://img.shields.io/crates/l/gcsf.svg)](https://github.com/harababurel/gcsf/blob/master/LICENSE)
+[![GitHub Issues](https://sergiu.ml/~sergiu/gcsf-badges/issues.svg)](https://github.com/harababurel/gcsf/issues)
+[![Downloads](https://sergiu.ml/~sergiu/gcsf-badges/downloads.svg)](https://crates.io/crates/gcsf)
+[![MIT License](https://sergiu.ml/~sergiu/gcsf-badges/license.svg)](https://github.com/harababurel/gcsf/blob/master/LICENSE)
 
 GCSF is a virtual filesystem that allows users to mount their Google Drive account locally and interact with it as a regular disk partition. You can find out more in this [paper](https://sergiu.ml/~sergiu/thesis.pdf).
 
