@@ -114,6 +114,9 @@ Or Thunar:
        width="746px" height="176px">
 </p>
 
+### Why GCSF?
+GCSF stands for "Google Conduce Sistem de Fișiere" which translated from Romanian is "Google Drive Filesystem". However [gdfs](https://github.com/robin-thomas/GDFS) already exists so it remains gcsf.
+
 ### Contributing
 
 Contributions are welcome. You can also help by reporting or fixing [issues](https://github.com/harababurel/gcsf/issues).
