@@ -51,11 +51,19 @@ lazy_static! {
 impl File {
     /// Creates a new file using a Drive file as a template.
     pub fn from_drive_file(inode: Inode, drive_file: drive3::File) -> Self {
-        let size = drive_file
+        let mut size = drive_file
             .size
             .clone()
             .map(|size| size.parse::<u64>().unwrap_or_default())
             .unwrap_or(10 * 1024 * 1024);
+
+        let kind =
+            if drive_file.mime_type == Some(String::from("application/vnd.google-apps.folder")) {
+                size = 512;
+                FileType::Directory
+            } else {
+                FileType::RegularFile
+            };
 
         let times: Vec<_> = vec![
             &drive_file.created_time,
@@ -74,21 +82,17 @@ impl File {
             .collect();
 
         let (crtime, mtime, atime) = (times[0], times[1], times[2]);
+        let bsize = 512;
 
         let mut attr = FileAttr {
             ino: inode,
             size,
-            blocks: 1,
+            blocks: size / bsize + if size % bsize > 0 { 1 } else { 0 },
             atime,
             mtime,
             ctime: mtime,   // Time of last change
             crtime: crtime, // Time of creation (macOS only)
-            kind: if drive_file.mime_type == Some("application/vnd.google-apps.folder".to_string())
-            {
-                FileType::Directory
-            } else {
-                FileType::RegularFile
-            },
+            kind,
             perm: 0o755,
             nlink: 2,
             uid: 0,
@@ -98,7 +102,7 @@ impl File {
         };
 
         if attr.kind == FileType::Directory {
-            attr.size = 4096;
+            attr.size = 512;
         }
 
         let mut filename = drive_file.name.clone().unwrap();

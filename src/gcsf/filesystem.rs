@@ -366,8 +366,8 @@ impl Filesystem for GCSF {
             attr: FileAttr {
                 ino: self.manager.next_available_inode(),
                 kind: FileType::Directory,
-                size: 0,
-                blocks: 123,
+                size: 512,
+                blocks: 1,
                 atime: Timespec::new(1, 0),
                 mtime: Timespec::new(1, 0),
                 ctime: Timespec::new(1, 0),
@@ -444,15 +444,19 @@ impl Filesystem for GCSF {
             (size, capacity)
         };
 
+        let bsize = 512;
+        let blocks: u64 = capacity / bsize + if capacity % bsize > 0 { 1 } else { 0 };
+        let bfree: u64 = (capacity - size) / bsize;
+
         reply.statfs(
-            /* blocks:*/ capacity,
-            /* bfree: */ capacity - size,
-            /* bavail: */ capacity - size,
+            /* blocks:*/ blocks,
+            /* bfree: */ bfree,
+            /* bavail: */ bfree,
             /* files: */ std::u64::MAX,
             /* ffree: */ std::u64::MAX - self.manager.files.len() as u64,
-            /* bsize: */ 1,
+            /* bsize: */ bsize as u32,
             /* namelen: */ 1024,
-            /* frsize: */ 1,
+            /* frsize: */ bsize as u32,
         );
     }
 }
