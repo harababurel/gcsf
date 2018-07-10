@@ -115,7 +115,7 @@ Or Thunar:
 </p>
 
 ### Why GCSF?
-GCSF stands for "Google Conduce Sistem de Fișiere" which translated from Romanian is "Google Drive Filesystem". However [gdfs](https://github.com/robin-thomas/GDFS) already exists so it remains gcsf.
+GCSF stands for "Google Conduce Sistem de Fișiere" which translated from Romanian is "Google Drive Filesystem". However [GDFS](https://github.com/robin-thomas/GDFS) already exists so it remains GCSF.
 
 ### Contributing
 
