@@ -27,11 +27,10 @@ use std::time;
 
 use gcsf::{Config, DriveFacade, NullFS, GCSF};
 
-const DEBUG_LOG: &str =
-    "hyper::client=error,rustls::client_hs=error,hyper::http=error,hyper::net=error,debug";
+const DEBUG_LOG: &str = "hyper::client=error,hyper::http=error,hyper::net=error,debug";
 
 const INFO_LOG: &str =
-    "hyper::client=error,rustls::client_hs=error,hyper::http=error,hyper::net=error,fuse::session=error,info";
+    "hyper::client=error,hyper::http=error,hyper::net=error,fuse::session=error,info";
 
 const DEFAULT_CONFIG: &str = "\
 ### This is the configuration file that GCSF uses.
