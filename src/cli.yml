@@ -1,5 +1,5 @@
 name: GCSF
-version: "0.1.15"
+version: "0.1.16"
 author: Sergiu Puscas <srg.pscs@gmail.com>
 about: File system based on Google Drive
 subcommands:
