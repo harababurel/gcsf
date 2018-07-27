@@ -3,7 +3,7 @@ use drive3;
 use failure::{err_msg, Error};
 use hyper;
 use hyper::client::Response;
-use hyper_rustls;
+use hyper_native_tls::NativeTlsClient;
 use lru_time_cache::LruCache;
 use mime_sniffer::MimeTypeSniffer;
 use oauth2;
@@ -90,9 +90,7 @@ impl DriveFacade {
         let auth = oauth2::Authenticator::new(
             &secret,
             oauth2::DefaultAuthenticatorDelegate,
-            hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-                hyper_rustls::TlsClient::new(),
-            )),
+            hyper::Client::with_connector(hyper::net::HttpsConnector::new(NativeTlsClient::new()?)),
             oauth2::DiskTokenStorage::new(&config.token_file().to_str().unwrap().to_string())
                 .unwrap(),
             Some(if config.authorize_using_code() {
@@ -109,9 +107,7 @@ impl DriveFacade {
     fn create_drive(config: &Config) -> Result<GCDrive, Error> {
         let auth = Self::create_drive_auth(config)?;
         Ok(drive3::Drive::new(
-            hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-                hyper_rustls::TlsClient::new(),
-            )),
+            hyper::Client::with_connector(hyper::net::HttpsConnector::new(NativeTlsClient::new()?)),
             auth,
         ))
     }

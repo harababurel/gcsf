@@ -10,7 +10,7 @@ keywords = ["google", "drive", "fuse", "filesystem"]
 [dependencies]
 chrono = "0.4.3"
 clap = { version = "2.31.2", features = ["yaml"]}
-config = "0.8"
+config = "0.9"
 ctrlc = "3.1.0"
 failure = "0.1.1"
 fuse = "0.3.1"
@@ -35,4 +35,4 @@ yup-oauth2 = "1.0.7"
 
 # These versions required by google-drive3
 hyper = "0.10"
-hyper-rustls = "0.6"
+hyper-native-tls = "0.2"
