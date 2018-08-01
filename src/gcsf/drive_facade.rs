@@ -320,6 +320,7 @@ impl DriveFacade {
     ) -> Result<Vec<drive3::File>, Error> {
         let mut all_files = Vec::new();
         let mut page_token: Option<String> = None;
+        let mut current_page = 1;
         loop {
             let mut request = self.hub.files()
                 .list()
@@ -353,10 +354,18 @@ impl DriveFacade {
                 .map_err(|e| err_msg(format!("{:#?}", e)))?;
 
             match filelist.files {
-                Some(files) => all_files.extend(files),
+                Some(files) => {
+                    info!(
+                        "Received page {} containing {} files",
+                        current_page,
+                        files.len()
+                    );
+                    all_files.extend(files);
+                }
                 _ => warn!("Filelist does not contain any files!"),
             };
 
+            current_page += 1;
             page_token = filelist.next_page_token;
             if page_token.is_none() {
                 break;

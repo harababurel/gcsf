@@ -18,6 +18,7 @@ pub type DriveId = String;
 
 const ROOT_INODE: Inode = 1;
 const TRASH_INODE: Inode = 2;
+const SHARED_INODE: Inode = 3;
 
 macro_rules! unwrap_or_continue {
     ($res:expr) => {
@@ -152,40 +153,31 @@ impl FileManager {
         Ok(())
     }
 
-    /// Retrieves all files and directories shown in "My Drive" and adds them locally.
+    /// Retrieves all files and directories shown in "My Drive" and "Shared with me" and adds them locally.
     fn populate(&mut self) -> Result<(), Error> {
         let root = self.new_root_file()?;
         self.add_file_locally(root, None)?;
 
-        let mut queue: LinkedList<DriveId> = LinkedList::new();
-        queue.push_back(self.df.root_id().unwrap_or(&"root".to_string()).to_string());
+        let shared = self.new_special_dir("Shared with me", Some(SHARED_INODE));
+        self.add_file_locally(shared, Some(FileId::Inode(ROOT_INODE)))?;
 
-        while !queue.is_empty() {
-            let mut parents = Vec::new();
-            while !queue.is_empty() {
-                parents.push(queue.pop_front().unwrap());
+        for drive_file in self.df.get_all_files(None, Some(false))? {
+            let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
+            self.add_file_locally(file, Some(FileId::Inode(3)))?;
+        }
+
+        let mut moves: LinkedList<(FileId, FileId)> = LinkedList::new();
+        for (inode, file) in &self.files {
+            if let Some(parent) = file.drive_parent() {
+                if self.contains(&FileId::DriveId(parent.clone())) {
+                    moves.push_back((FileId::Inode(*inode), FileId::DriveId(parent)));
+                }
             }
+        }
 
-            for drive_file in self.df.get_all_files(Some(parents), Some(false))? {
-                let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
-
-                if file.kind() == FileType::Directory {
-                    queue.push_back(file.drive_id().unwrap());
-                }
-
-                // TODO: this makes everything slow; find a better solution
-                // if file.is_drive_document() {
-                //     let size = drive_facade
-                //         .get_file_size(file.drive_id().as_ref().unwrap(), file.mime_type());
-                //     file.attr.size = size;
-                // }
-
-                let file_parent = file.drive_parent().unwrap();
-                if self.contains(&FileId::DriveId(file_parent.clone())) {
-                    self.add_file_locally(file, Some(FileId::DriveId(file_parent.clone())))?;
-                } else {
-                    self.add_file_locally(file, None)?;
-                }
+        for (inode, parent) in &moves {
+            if let Err(e) = self.move_locally(inode, parent) {
+                error!("{}", e);
             }
         }
 
