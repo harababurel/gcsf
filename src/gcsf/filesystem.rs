@@ -87,10 +87,12 @@ impl Filesystem for GCSF {
             return;
         }
 
-        let (mime, id) = self.manager
+        let (mime, id) = self
+            .manager
             .get_file(&FileId::Inode(ino))
             .map(|f| {
-                let mime = f.drive_file
+                let mime = f
+                    .drive_file
                     .as_ref()
                     .and_then(|f| f.mime_type.as_ref())
                     .cloned();

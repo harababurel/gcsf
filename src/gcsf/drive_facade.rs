@@ -114,7 +114,8 @@ impl DriveFacade {
 
     /// Will still detect a file even if it is in Trash.
     fn contains(&self, id: &DriveId) -> Result<bool, Error> {
-        let response = self.hub
+        let response = self
+            .hub
             .files()
             .get(&id)
             .add_scope(drive3::Scope::Full)
@@ -156,7 +157,8 @@ impl DriveFacade {
 
         let mut response = match export_type {
             Some(t) => {
-                let mut response = self.hub
+                let mut response = self
+                    .hub
                     .files()
                     .export(drive_id, &t)
                     .add_scope(drive3::Scope::Full)
@@ -167,7 +169,8 @@ impl DriveFacade {
                 response
             }
             None => {
-                let (mut response, _empty_file) = self.hub
+                let (mut response, _empty_file) = self
+                    .hub
                     .files()
                     .get(&drive_id)
                     .supports_team_drives(false)
@@ -213,7 +216,8 @@ impl DriveFacade {
             return Ok(self.root_id.as_ref().unwrap());
         }
 
-        let parent = self.hub
+        let parent = self
+            .hub
             .files()
             .list()
             .param("fields", "files(parents)")
@@ -336,7 +340,8 @@ impl DriveFacade {
 
             let mut query_chain: Vec<String> = Vec::new();
             if let Some(ref p) = parents {
-                let q = p.into_iter()
+                let q = p
+                    .into_iter()
                     .map(|id| format!("'{}' in parents", id))
                     .collect::<Vec<_>>()
                     .join(" or ");
@@ -449,7 +454,8 @@ impl DriveFacade {
         parent: &DriveId,
         new_name: &str,
     ) -> Result<(Response, drive3::File), Error> {
-        let current_parents = self.get_file_metadata(id)?
+        let current_parents = self
+            .get_file_metadata(id)?
             .parents
             .unwrap_or(vec![String::from("root")])
             .join(",");
@@ -526,7 +532,8 @@ impl DriveFacade {
 
     /// Returns the size and capacity of the Drive account. In some cases, the limit can be absent.
     pub fn size_and_capacity(&mut self) -> Result<(u64, Option<u64>), Error> {
-        let (_response, about) = self.hub
+        let (_response, about) = self
+            .hub
             .about()
             .get()
             .param("fields", "storageQuota")

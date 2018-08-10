@@ -96,7 +96,8 @@ impl FileManager {
         info!("Checking for changes and possibly applying them.");
         self.last_sync = SystemTime::now();
 
-        for change in self.df
+        for change in self
+            .df
             .get_all_changes()?
             .into_iter()
             .filter(|change| (&change).file.is_some())
@@ -274,9 +275,10 @@ impl FileManager {
     pub fn get_node_id(&self, file_id: &FileId) -> Option<NodeId> {
         match file_id {
             FileId::Inode(inode) => self.node_ids.get(&inode).cloned(),
-            FileId::DriveId(drive_id) => self.get_node_id(&FileId::Inode(self.get_inode(
-                &FileId::DriveId(drive_id.to_string()),
-            ).unwrap())),
+            FileId::DriveId(drive_id) => self.get_node_id(&FileId::Inode(
+                self.get_inode(&FileId::DriveId(drive_id.to_string()))
+                    .unwrap(),
+            )),
             FileId::NodeId(node_id) => Some(node_id.clone()),
             ref pn @ FileId::ParentAndName { .. } => {
                 let inode = self.get_inode(&pn)?;
@@ -293,7 +295,8 @@ impl FileManager {
         match id {
             FileId::Inode(inode) => Some(*inode),
             FileId::DriveId(drive_id) => self.drive_ids.get(drive_id).cloned(),
-            FileId::NodeId(node_id) => self.tree
+            FileId::NodeId(node_id) => self
+                .tree
                 .get(&node_id)
                 .map(|node| node.data())
                 .ok()
@@ -301,7 +304,8 @@ impl FileManager {
             FileId::ParentAndName {
                 ref parent,
                 ref name,
-            } => self.get_children(&FileId::Inode(*parent))?
+            } => self
+                .get_children(&FileId::Inode(*parent))?
                 .into_iter()
                 .find(|child| child.name() == *name)
                 .map(|child| child.inode()),
@@ -310,7 +314,8 @@ impl FileManager {
 
     pub fn get_children(&self, id: &FileId) -> Option<Vec<&File>> {
         let node_id = self.get_node_id(&id)?;
-        let children: Vec<&File> = self.tree
+        let children: Vec<&File> = self
+            .tree
             .children(&node_id)
             .unwrap()
             .map(|child| self.get_file(&FileId::Inode(*child.data())))
@@ -342,7 +347,8 @@ impl FileManager {
 
     /// Passes along the FLUSH system call to the `DriveFacade`.
     pub fn flush(&mut self, id: &FileId) -> Result<(), Error> {
-        let file = self.get_drive_id(&id)
+        let file = self
+            .get_drive_id(&id)
             .ok_or(err_msg(format!("Cannot find drive id of {:?}", &id)))?;
         self.df.flush(&file)
     }
@@ -355,7 +361,8 @@ impl FileManager {
                     "FileManager::add_file_locally() could not find parent by FileId",
                 ))?;
 
-                let identical_filename_count = self.get_children(&id)
+                let identical_filename_count = self
+                    .get_children(&id)
                     .ok_or(err_msg(
                         "FileManager::add_file_locally() could not get file siblings",
                     ))?
@@ -383,9 +390,11 @@ impl FileManager {
 
     /// Moves a file somewhere else in the local file tree. Does not communicate with Drive.
     fn move_locally(&mut self, id: &FileId, new_parent: &FileId) -> Result<(), Error> {
-        let current_node = self.get_node_id(&id)
+        let current_node = self
+            .get_node_id(&id)
             .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
-        let target_node = self.get_node_id(&new_parent)
+        let target_node = self
+            .get_node_id(&new_parent)
             .ok_or(err_msg("Target node doesn't exist"))?;
 
         self.tree.move_node(&current_node, ToParent(&target_node))?;
@@ -394,11 +403,14 @@ impl FileManager {
 
     /// Deletes a file and its children from the local file tree. Does not communicate with Drive.
     fn delete_locally(&mut self, id: &FileId) -> Result<(), Error> {
-        let node_id = self.get_node_id(id)
+        let node_id = self
+            .get_node_id(id)
             .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
-        let inode = self.get_inode(id)
+        let inode = self
+            .get_inode(id)
             .ok_or(err_msg(format!("Cannot find inode of {:?}", &id)))?;
-        let drive_id = self.get_drive_id(id)
+        let drive_id = self
+            .get_drive_id(id)
             .ok_or(err_msg(format!("Cannot find drive id of {:?}", &id)))?;
 
         self.tree.remove_node(node_id, DropChildren)?;
@@ -426,11 +438,14 @@ impl FileManager {
     /// Moves a file to the Trash directory locally *and* on Drive.
     pub fn move_file_to_trash(&mut self, id: &FileId, also_on_drive: bool) -> Result<(), Error> {
         debug!("Moving {:?} to trash.", &id);
-        let node_id = self.get_node_id(id)
+        let node_id = self
+            .get_node_id(id)
             .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
-        let drive_id = self.get_drive_id(id)
+        let drive_id = self
+            .get_drive_id(id)
             .ok_or(err_msg(format!("Cannot find drive_id of {:?}", &id)))?;
-        let trash_id = self.get_node_id(&FileId::Inode(TRASH_INODE))
+        let trash_id = self
+            .get_node_id(&FileId::Inode(TRASH_INODE))
             .ok_or(err_msg("Cannot find node_id of Trash dir"))?;
 
         self.tree.move_node(&node_id, ToParent(&trash_id))?;
@@ -451,18 +466,23 @@ impl FileManager {
     ) -> Result<(), Error> {
         // Identify the file by its inode instead of (parent, name) because both the parent and
         // name will probably change in this method.
-        let id = FileId::Inode(self.get_inode(id)
-            .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?);
+        let id = FileId::Inode(
+            self.get_inode(id)
+                .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?,
+        );
 
-        let current_node = self.get_node_id(&id)
+        let current_node = self
+            .get_node_id(&id)
             .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
-        let target_node = self.get_node_id(&FileId::Inode(new_parent))
+        let target_node = self
+            .get_node_id(&FileId::Inode(new_parent))
             .ok_or(err_msg("Target node doesn't exist"))?;
 
         self.tree.move_node(&current_node, ToParent(&target_node))?;
 
         {
-            let identical_filename_count = self.get_children(&FileId::Inode(new_parent))
+            let identical_filename_count = self
+                .get_children(&FileId::Inode(new_parent))
                 .ok_or(err_msg("FileManager::rename() could not get file siblings"))?
                 .iter()
                 .filter(|child| child.name == new_name)
@@ -478,9 +498,11 @@ impl FileManager {
             }
         }
 
-        let drive_id = self.get_drive_id(&id)
+        let drive_id = self
+            .get_drive_id(&id)
             .ok_or(err_msg(format!("Cannot find drive_id of {:?}", &id)))?;
-        let parent_id = self.get_drive_id(&FileId::Inode(new_parent))
+        let parent_id = self
+            .get_drive_id(&FileId::Inode(new_parent))
             .ok_or(err_msg(format!(
                 "Cannot find drive_id of {:?}",
                 &FileId::Inode(new_parent)
