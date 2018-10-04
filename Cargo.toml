@@ -35,4 +35,4 @@ yup-oauth2 = "1.0.7"
 
 # These versions required by google-drive3
 hyper = "0.10"
-hyper-native-tls = "0.2"
+hyper-native-tls = "0.3"
