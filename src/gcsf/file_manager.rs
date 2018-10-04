@@ -365,8 +365,7 @@ impl FileManager {
                     .get_children(&id)
                     .ok_or(err_msg(
                         "FileManager::add_file_locally() could not get file siblings",
-                    ))?
-                    .iter()
+                    ))?.iter()
                     .filter(|child| child.name == file.name)
                     .count();
 
@@ -488,7 +487,9 @@ impl FileManager {
                 .filter(|child| child.name == new_name)
                 .count();
 
-            let file = self.get_mut_file(&id).ok_or(err_msg("File doesn't exist"))?;
+            let file = self
+                .get_mut_file(&id)
+                .ok_or(err_msg("File doesn't exist"))?;
             file.name = new_name.clone();
 
             if identical_filename_count > 0 {

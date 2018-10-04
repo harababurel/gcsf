@@ -236,12 +236,10 @@ impl DriveFacade {
             .next()
             .ok_or(err_msg(
                 "No files on drive. Can't deduce drive id for 'My Drive'",
-            ))?
-            .parents
+            ))?.parents
             .ok_or(err_msg(
                 "Probed file has no parents. Can't deduce drive id for 'My Drive'",
-            ))?
-            .into_iter()
+            ))?.into_iter()
             .take(1)
             .next()
             .ok_or(err_msg(

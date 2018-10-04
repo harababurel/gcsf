@@ -99,8 +99,7 @@ impl Filesystem for GCSF {
                 let id = f.drive_id().unwrap();
 
                 (mime, id)
-            })
-            .unwrap();
+            }).unwrap();
 
         reply.data(
             self.manager

@@ -70,16 +70,15 @@ impl File {
             &drive_file.modified_time,
             &drive_file.viewed_by_me_time,
         ].iter()
-            .map(|time| {
-                match DateTime::parse_from_rfc3339(time.as_ref().unwrap_or(&String::new())) {
-                    Ok(t) => Timespec {
-                        sec: t.timestamp(),
-                        nsec: t.timestamp_subsec_nanos() as i32,
-                    },
-                    Err(_) => Timespec { sec: 0, nsec: 0 },
-                }
-            })
-            .collect();
+        .map(
+            |time| match DateTime::parse_from_rfc3339(time.as_ref().unwrap_or(&String::new())) {
+                Ok(t) => Timespec {
+                    sec: t.timestamp(),
+                    nsec: t.timestamp_subsec_nanos() as i32,
+                },
+                Err(_) => Timespec { sec: 0, nsec: 0 },
+            },
+        ).collect();
 
         let (crtime, mtime, atime) = (times[0], times[1], times[2]);
         let bsize = 512;
@@ -146,7 +145,8 @@ impl File {
         self.drive_file
             .as_ref()
             .and_then(|f| f.mime_type.clone())
-            .map(|t| EXTENSIONS.contains_key::<str>(&t)) == Some(true)
+            .map(|t| EXTENSIONS.contains_key::<str>(&t))
+            == Some(true)
     }
 
     pub fn name(&self) -> String {
