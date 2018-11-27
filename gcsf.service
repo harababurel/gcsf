@@ -1,0 +1,25 @@
+# Systemd service configuration for mounting GCSF.
+# Can be placed in /etc/systemd/system/ or in other places[0]. Remember to set
+# GCSF_(SESSION|MOUNTPOINT) to the correct values, and also set the full path
+# to the gcsf binary.
+#
+# [0](https://unix.stackexchange.com/questions/224992/where-do-i-put-my-systemd-unit-file)
+
+[Unit]
+Description=GCSF
+Documentation="https://github.com/harababurel/gcsf"
+After=network.target
+
+[Service]
+Type=simple
+Environment=RUST_BACKTRACE=1
+Environment=GCSF_MOUNTPOINT="/path/to/some/mount/point"
+Environment=GCSF_SESSION="some_session_name"
+ExecStart=/full/path/to/gcsf mount $GCSF_MOUNTPOINT -s $GCSF_SESSION
+ExecStop=fusermount -u $GCSF_MOUNTPOINT
+# GCSF will die by itself after the fusermount command
+KillMode=none
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
