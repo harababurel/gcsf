@@ -99,7 +99,8 @@ impl Filesystem for GCSF {
                 let id = f.drive_id().unwrap();
 
                 (mime, id)
-            }).unwrap();
+            })
+            .unwrap();
 
         reply.data(
             self.manager
@@ -287,9 +288,10 @@ impl Filesystem for GCSF {
             drive_file: Some(drive3::File {
                 name: Some(filename.clone()),
                 mime_type: None,
-                parents: Some(vec![
-                    self.manager.get_drive_id(&FileId::Inode(parent)).unwrap(),
-                ]),
+                parents: Some(vec![self
+                    .manager
+                    .get_drive_id(&FileId::Inode(parent))
+                    .unwrap()]),
                 ..Default::default()
             }),
         };
@@ -384,9 +386,10 @@ impl Filesystem for GCSF {
             drive_file: Some(drive3::File {
                 name: Some(dirname.clone()),
                 mime_type: Some("application/vnd.google-apps.folder".to_string()),
-                parents: Some(vec![
-                    self.manager.get_drive_id(&FileId::Inode(parent)).unwrap(),
-                ]),
+                parents: Some(vec![self
+                    .manager
+                    .get_drive_id(&FileId::Inode(parent))
+                    .unwrap()]),
                 ..Default::default()
             }),
         };

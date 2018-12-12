@@ -41,7 +41,7 @@ pub enum FileId {
 }
 
 lazy_static! {
-    static ref EXTENSIONS: HashMap<&'static str, &'static str> = hashmap!{
+    static ref EXTENSIONS: HashMap<&'static str, &'static str> = hashmap! {
             "application/vnd.google-apps.document" => "#.odt",
             "application/vnd.google-apps.presentation" => "#.odp",
             "application/vnd.google-apps.spreadsheet" => "#.ods",
@@ -69,7 +69,8 @@ impl File {
             &drive_file.created_time,
             &drive_file.modified_time,
             &drive_file.viewed_by_me_time,
-        ].iter()
+        ]
+        .iter()
         .map(
             |time| match DateTime::parse_from_rfc3339(time.as_ref().unwrap_or(&String::new())) {
                 Ok(t) => Timespec {
@@ -78,7 +79,8 @@ impl File {
                 },
                 Err(_) => Timespec { sec: 0, nsec: 0 },
             },
-        ).collect();
+        )
+        .collect();
 
         let (crtime, mtime, atime) = (times[0], times[1], times[2]);
         let bsize = 512;

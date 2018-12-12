@@ -116,7 +116,8 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
                 ctrlc::set_handler(move || {
                     info!("Ctrl-C detected");
                     r.store(false, Ordering::SeqCst);
-                }).expect("Error setting Ctrl-C handler");
+                })
+                .expect("Error setting Ctrl-C handler");
 
                 while running.load(Ordering::SeqCst) {
                     thread::sleep(time::Duration::from_millis(50));

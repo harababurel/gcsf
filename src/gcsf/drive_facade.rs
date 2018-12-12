@@ -57,7 +57,7 @@ struct PendingWrite {
 }
 
 lazy_static! {
-    static ref MIME_TYPES: HashMap<&'static str, &'static str> = hashmap!{
+    static ref MIME_TYPES: HashMap<&'static str, &'static str> = hashmap! {
         "application/vnd.google-apps.document" => "application/vnd.oasis.opendocument.text",
         "application/vnd.google-apps.presentation" => "application/vnd.oasis.opendocument.presentation",
         "application/vnd.google-apps.spreadsheet" => "application/vnd.oasis.opendocument.spreadsheet",
@@ -236,10 +236,12 @@ impl DriveFacade {
             .next()
             .ok_or(err_msg(
                 "No files on drive. Can't deduce drive id for 'My Drive'",
-            ))?.parents
+            ))?
+            .parents
             .ok_or(err_msg(
                 "Probed file has no parents. Can't deduce drive id for 'My Drive'",
-            ))?.into_iter()
+            ))?
+            .into_iter()
             .take(1)
             .next()
             .ok_or(err_msg(
@@ -262,7 +264,8 @@ impl DriveFacade {
                 result.1.start_page_token.unwrap_or(
                     err_msg(
                         "Received OK response from drive but there is no startPageToken included.",
-                    ).to_string(),
+                    )
+                    .to_string(),
                 )
             })
     }

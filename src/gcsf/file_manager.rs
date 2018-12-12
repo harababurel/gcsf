@@ -365,7 +365,8 @@ impl FileManager {
                     .get_children(&id)
                     .ok_or(err_msg(
                         "FileManager::add_file_locally() could not get file siblings",
-                    ))?.iter()
+                    ))?
+                    .iter()
                     .filter(|child| child.name == file.name)
                     .count();
 
