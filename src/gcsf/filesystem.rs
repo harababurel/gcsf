@@ -319,16 +319,35 @@ impl Filesystem for GCSF {
             return;
         }
 
-        match self.manager.move_file_to_trash(&id, true) {
-            Ok(response) => {
-                debug!("{:?}", response);
-                reply.ok();
+        match self.manager.file_is_trashed(&id) {
+            Ok(trashed) => {
+                let ret = if trashed {
+                    debug!("{:?} is already trashed. Deleting permanently.", id);
+                    self.manager.delete(&id)
+                } else {
+                    debug!(
+                        "{:?} was not trashed. Moving it to Trash instead of deleting permanently.",
+                        id
+                    );
+                    self.manager.move_file_to_trash(&id, true)
+                };
+
+                match ret {
+                    Ok(response) => {
+                        debug!("{:?}", response);
+                        reply.ok();
+                    }
+                    Err(e) => {
+                        error!("{:?}", e);
+                        reply.error(EREMOTE);
+                    }
+                };
             }
             Err(e) => {
                 error!("{:?}", e);
                 reply.error(EREMOTE);
             }
-        };
+        }
     }
 
     fn forget(&mut self, _req: &Request, _ino: u64, _nlookup: u64) {}

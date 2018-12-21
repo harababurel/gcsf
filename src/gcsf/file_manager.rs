@@ -450,11 +450,25 @@ impl FileManager {
 
         self.tree.move_node(&node_id, ToParent(&trash_id))?;
 
+        // File cannot be identified by FileId::ParentAndName now because the parent has changed.
+        // Using DriveId instead.
         if also_on_drive {
+            self.get_mut_file(&FileId::DriveId(drive_id.clone()))
+                .ok_or(err_msg(format!("Cannot find {:?}", &drive_id)))?
+                .set_trashed(true)?;
             self.df.move_to_trash(drive_id)?;
         }
 
         Ok(())
+    }
+
+    /// Whether a file is trashed on Drive.
+    pub fn file_is_trashed(&mut self, id: &FileId) -> Result<bool, Error> {
+        let file = self
+            .get_file(id)
+            .ok_or(err_msg(format!("Cannot find node_id of {:?}", &id)))?;
+
+        Ok(file.is_trashed())
     }
 
     /// Moves/renames a file locally *and* on Drive.

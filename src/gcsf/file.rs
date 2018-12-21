@@ -1,5 +1,6 @@
 use chrono::DateTime;
 use drive3;
+use failure::{err_msg, Error};
 use fuse::{FileAttr, FileType};
 use id_tree::NodeId;
 use std::collections::HashMap;
@@ -140,6 +141,32 @@ impl File {
     fn is_posix(c: &char) -> bool {
         let forbidden = String::from("*/:<>?\\|");
         !forbidden.contains(*c)
+    }
+
+    /// Whether this file is trashed on Drive.
+    pub fn is_trashed(&self) -> bool {
+        self.drive_file
+            .as_ref()
+            .map(|f| f.trashed)
+            .unwrap_or_default()
+            .unwrap_or(false)
+    }
+
+    // Trashing a file does not trigger a file update from Drive. Therefore this field must be
+    // set manually so that GCSF knows that this particular file is trashed and should be deleted
+    // permanently the next time unlink() is called.
+    pub fn set_trashed(&mut self, trashed: bool) -> Result<(), Error> {
+        let ino = self.inode();
+        if let Some(ref mut drive_file) = self.drive_file.as_mut() {
+            drive_file.trashed = Some(trashed);
+            Ok(())
+        } else {
+            Err(err_msg(format!(
+                "Could not set trashed={} because there is no drive file associated to {:?}",
+                trashed,
+                FileId::Inode(ino)
+            )))
+        }
     }
 
     #[allow(dead_code)]

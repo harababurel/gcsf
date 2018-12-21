@@ -483,7 +483,7 @@ impl DriveFacade {
             .add_scope(drive3::Scope::Full)
             .doit_without_upload()
             .map(|_| ())
-            .map_err(|e| err_msg(format!("DriveFacade::move_to() {}", e)))
+            .map_err(|e| err_msg(format!("DriveFacade::move_to_trash() {}", e)))
     }
 
     pub fn flush(&mut self, id: &DriveId) -> Result<(), Error> {
