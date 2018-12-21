@@ -6,6 +6,8 @@ repository = "https://github.com/harababurel/gcsf"
 authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
 license = "MIT"
 keywords = ["google", "drive", "fuse", "filesystem"]
+exclude = ["build/**/*.o", "doc/**/*.html", "client_secret.json"]
+
 
 [dependencies]
 chrono = "0.4.5"
