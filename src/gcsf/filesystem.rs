@@ -218,7 +218,6 @@ impl Filesystem for GCSF {
             let trash_res = self.manager.move_file_to_trash(&id, true);
             log_result!(&trash_res);
 
-
             if rename_res.is_ok() && trash_res.is_ok() {
                 reply.ok();
             } else {
