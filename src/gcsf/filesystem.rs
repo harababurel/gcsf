@@ -4,7 +4,7 @@ use fuse::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
     ReplyEntry, ReplyStatfs, ReplyWrite, Request,
 };
-use libc::{ENOENT, ENOTDIR, EREMOTE};
+use libc::{ENOENT, ENOTDIR, ENOTRECOVERABLE, EREMOTE};
 use lru_time_cache::LruCache;
 use std;
 use std::clone::Clone;
@@ -14,6 +14,37 @@ use time::Timespec;
 use DriveFacade;
 
 pub type Inode = u64;
+
+const TRASH_INODE: Inode = 2;
+
+macro_rules! log_result {
+    ($expr:expr) => {
+        match $expr {
+            Ok(t) => {
+                debug!("{:?}", t);
+            }
+            Err(e) => {
+                error!("{:?}", e);
+            }
+        }
+    };
+}
+
+macro_rules! log_result_and_fill_reply {
+    ($expr:expr,$reply:ident) => {
+        match $expr {
+            Ok(t) => {
+                debug!("{:?}", t);
+                $reply.ok();
+            }
+            Err(e) => {
+                error!("{:?}", e);
+                $reply.error(ENOTRECOVERABLE);
+                return;
+            }
+        }
+    };
+}
 
 /// An empty FUSE file system. It can be used in a mounting test aimed to determine whether or
 /// not the real file system can be mounted as well. If the test fails, the application can fail
@@ -174,19 +205,28 @@ impl Filesystem for GCSF {
         let name = name.to_str().unwrap().to_string();
         let new_name = new_name.to_str().unwrap().to_string();
 
-        match self.manager.rename(
-            &FileId::ParentAndName { parent, name },
-            new_parent,
-            new_name,
-        ) {
-            Ok(_) => {
+        let id = FileId::Inode(
+            self.manager
+                .get_inode(&FileId::ParentAndName { parent, name })
+                .unwrap_or(0),
+        );
+
+        if new_parent == TRASH_INODE {
+            let rename_res = self.manager.rename(&id, parent, new_name);
+            log_result!(&rename_res);
+
+            let trash_res = self.manager.move_file_to_trash(&id, true);
+            log_result!(&trash_res);
+
+
+            if rename_res.is_ok() && trash_res.is_ok() {
                 reply.ok();
+            } else {
+                reply.error(EREMOTE);
             }
-            Err(e) => {
-                error!("{}", e);
-                reply.error(ENOENT);
-            }
-        };
+        } else {
+            log_result_and_fill_reply!(self.manager.rename(&id, new_parent, new_name), reply);
+        }
     }
 
     fn setattr(
@@ -322,7 +362,7 @@ impl Filesystem for GCSF {
 
         match self.manager.file_is_trashed(&id) {
             Ok(trashed) => {
-                let ret = if trashed {
+                let res = if trashed {
                     debug!("{:?} is already trashed. Deleting permanently.", id);
                     self.manager.delete(&id)
                 } else {
@@ -333,16 +373,7 @@ impl Filesystem for GCSF {
                     self.manager.move_file_to_trash(&id, true)
                 };
 
-                match ret {
-                    Ok(response) => {
-                        debug!("{:?}", response);
-                        reply.ok();
-                    }
-                    Err(e) => {
-                        error!("{:?}", e);
-                        reply.error(EREMOTE);
-                    }
-                };
+                log_result_and_fill_reply!(res, reply);
             }
             Err(e) => {
                 error!("{:?}", e);
