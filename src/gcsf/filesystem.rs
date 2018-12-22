@@ -145,6 +145,7 @@ impl Filesystem for GCSF {
         if let Err(e) = self.manager.sync() {
             debug!("Could not perform sync: {}", e);
         }
+        // println!("current state: {:#?}", self.manager);
 
         let mut curr_offs = offset + 1;
         match self.manager.get_children(&FileId::Inode(ino)) {
@@ -426,19 +427,7 @@ impl Filesystem for GCSF {
     }
 
     fn rmdir(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
-        match self.manager.delete(&FileId::ParentAndName {
-            parent,
-            name: name.to_str().unwrap().to_string(),
-        }) {
-            Ok(response) => {
-                debug!("{:?}", response);
-                reply.ok();
-            }
-            Err(e) => {
-                error!("{:?}", e);
-                reply.error(EREMOTE);
-            }
-        };
+        self.unlink(_req, parent, name, reply);
     }
 
     fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
