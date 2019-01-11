@@ -17,6 +17,7 @@ Environment=GCSF_MOUNTPOINT="/path/to/some/mount/point"
 Environment=GCSF_SESSION="some_session_name"
 ExecStart=/full/path/to/gcsf mount $GCSF_MOUNTPOINT -s $GCSF_SESSION
 ExecStop=fusermount -u $GCSF_MOUNTPOINT
+User=some_user_name
 # GCSF will die by itself after the fusermount command
 KillMode=none
 Restart=on-failure
