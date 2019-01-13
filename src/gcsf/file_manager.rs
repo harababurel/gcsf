@@ -61,7 +61,7 @@ pub struct FileManager {
 impl FileManager {
     /// Creates a new FileManager with a specific `sync_interval` and an injected `DriveFacade`.
     /// Also populates the manager's file tree with files contained in "My Drive" and "Trash".
-    pub fn with_drive_facade(sync_interval: Duration, df: DriveFacade) -> Self {
+    pub fn with_drive_facade(sync_interval: Duration, df: DriveFacade) -> Result<Self, Error> {
         let mut manager = FileManager {
             tree: TreeBuilder::new().with_node_capacity(500).build(),
             files: HashMap::new(),
@@ -73,15 +73,13 @@ impl FileManager {
             last_inode: 2,
         };
 
-        if let Err(e) = manager.populate() {
-            error!("Could not populate filesystem: {}", e);
-        }
-
-        if let Err(e) = manager.populate_trash() {
-            error!("Could not populate trash dir: {}", e);
-        }
-
         manager
+            .populate()
+            .map_err(|e| err_msg(format!("Could not populate file system:\n{}", e)))?;
+        manager
+            .populate_trash()
+            .map_err(|e| err_msg(format!("Could not populate trash dir:\n{}", e)))?;
+        Ok(manager)
     }
 
     /// Tries to retrieve recent changes from the `DriveFacade` and apply them locally in order to

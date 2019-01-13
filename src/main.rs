@@ -53,9 +53,9 @@ cache_max_seconds = 300
 # How how many files to cache.
 cache_max_items = 10
 
-# How long to cache the size and capacity of the filesystem. These are the
+# How long to cache the size and capacity of the file system. These are the
 # values reported by `df`.
-cache_statfs_seconds = 10
+cache_statfs_seconds = 60
 
 # How many seconds to wait before checking for remote changes and updating them
 # locally.
@@ -64,6 +64,8 @@ sync_interval = 10
 # Mount options
 mount_options = [
     \"fsname=GCSF\",
+    # Allow file system access to root. This only works if `user_allow_other`
+    # is set in /etc/fuse.conf
     \"allow_root\",
     \"big_writes\",
     \"max_write=131072\"
@@ -101,7 +103,13 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
     }
 
     info!("Creating and populating file system...");
-    let fs: GCSF = GCSF::with_config(config);
+    let fs: GCSF = match GCSF::with_config(config) {
+        Ok(fs) => fs,
+        Err(e) => {
+            error!("{}", e);
+            return;
+        }
+    };
     info!("File sytem created.");
 
     unsafe {

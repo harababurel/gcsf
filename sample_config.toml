@@ -18,9 +18,9 @@ cache_max_seconds = 300
 # How how many files to cache.
 cache_max_items = 10
 
-# How long to cache the size and capacity of the filesystem. These are the
+# How long to cache the size and capacity of the file system. These are the
 # values reported by `df`.
-cache_statfs_seconds = 10
+cache_statfs_seconds = 60
 
 # How many seconds to wait before checking for remote changes and updating them
 # locally.

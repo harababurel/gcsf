@@ -1,5 +1,6 @@
 use super::{Config, File, FileId, FileManager};
 use drive3;
+use failure::Error;
 use fuse::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
     ReplyEntry, ReplyStatfs, ReplyWrite, Request,
@@ -61,17 +62,17 @@ pub struct GCSF {
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
 impl GCSF {
-    pub fn with_config(config: Config) -> Self {
-        GCSF {
+    pub fn with_config(config: Config) -> Result<Self, Error> {
+        Ok(GCSF {
             manager: FileManager::with_drive_facade(
                 config.sync_interval(),
                 DriveFacade::new(&config),
-            ),
+            )?,
             statfs_cache: LruCache::<String, u64>::with_expiry_duration_and_capacity(
                 config.cache_statfs_seconds(),
                 2,
             ),
-        }
+        })
     }
 }
 
