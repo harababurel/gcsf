@@ -43,6 +43,10 @@ An AUR package is maintained by [axionl](https://github.com/axionl): [gcsf-git](
 
 Make sure you have `pkg-config` and the `fuse` library installed. These are usually found in the package repositories of major distributions.
 
+#### FreeBSD
+
+Rust can be installed via the `lang/rust` port. You will need to install `sysutils/fusefs-libs` for the `cairo install` command to succeed. 
+
 #### Windows
 
 Unfortunately, Windows is not supported at the time being. See issue [#19](https://github.com/harababurel/gcsf/issues/19).
