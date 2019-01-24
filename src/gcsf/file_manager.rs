@@ -1,4 +1,4 @@
-use super::{Config, File, FileId};
+use super::{File, FileId};
 use drive3;
 use failure::{err_msg, Error};
 use fuse::{FileAttr, FileType};
