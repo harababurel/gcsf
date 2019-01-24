@@ -5,6 +5,9 @@
 # Show additional logging info?
 debug = false
 
+# Append numbers to identical filenames?
+rename_identical_files = false
+
 # Perform a mount check and fail early if it fails. Disable this if you
 # encounter this error:
 #
