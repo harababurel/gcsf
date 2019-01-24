@@ -1,4 +1,4 @@
-use super::{File, FileId};
+use super::{Config, File, FileId};
 use drive3;
 use failure::{err_msg, Error};
 use fuse::{FileAttr, FileType};
@@ -54,6 +54,9 @@ pub struct FileManager {
 
     /// Specifies how much time is needed to pass since `last_sync` for a new sync to be performed.
     pub sync_interval: Duration,
+    
+    /// Renamed duplicate files if enabled
+    pub rename_identical_files: bool, 
 
     last_inode: Inode,
 }
@@ -61,13 +64,14 @@ pub struct FileManager {
 impl FileManager {
     /// Creates a new FileManager with a specific `sync_interval` and an injected `DriveFacade`.
     /// Also populates the manager's file tree with files contained in "My Drive" and "Trash".
-    pub fn with_drive_facade(sync_interval: Duration, df: DriveFacade) -> Result<Self, Error> {
+    pub fn with_drive_facade(rename_identical_files: bool, sync_interval: Duration, df: DriveFacade) -> Result<Self, Error> {
         let mut manager = FileManager {
             tree: TreeBuilder::new().with_node_capacity(500).build(),
             files: HashMap::new(),
             node_ids: HashMap::new(),
             drive_ids: HashMap::new(),
             last_sync: SystemTime::now(),
+            rename_identical_files: rename_identical_files,
             sync_interval,
             df,
             last_inode: 2,
@@ -359,9 +363,7 @@ impl FileManager {
                     "FileManager::add_file_locally() could not find parent by FileId",
                 ))?;
 
-                /// Append a number to identical files, if enabled in config
-                let rename_identical_files = config.rename_identical_files();
-                if(rename_identical_files) {
+                if self.rename_identical_files {
                     let identical_filename_count = self
                         .get_children(&id)
                         .ok_or(err_msg(
@@ -497,22 +499,24 @@ impl FileManager {
         self.tree.move_node(&current_node, ToParent(&target_node))?;
 
         {
-            let identical_filename_count = self
-                .get_children(&FileId::Inode(new_parent))
-                .ok_or(err_msg("FileManager::rename() could not get file siblings"))?
-                .iter()
-                .filter(|child| child.name == new_name)
-                .count();
+            if self.rename_identical_files {
+                let identical_filename_count = self
+                    .get_children(&FileId::Inode(new_parent))
+                    .ok_or(err_msg("FileManager::rename() could not get file siblings"))?
+                    .iter()
+                    .filter(|child| child.name == new_name)
+                    .count();
 
-            let file = self
-                .get_mut_file(&id)
-                .ok_or(err_msg("File doesn't exist"))?;
-            file.name = new_name.clone();
+               let file = self
+                    .get_mut_file(&id)
+                  .ok_or(err_msg("File doesn't exist"))?;
+               file.name = new_name.clone();
 
-            if identical_filename_count > 0 {
-                file.identical_name_id = Some(identical_filename_count);
-            } else {
-                file.identical_name_id = None;
+                if identical_filename_count > 0 {
+                    file.identical_name_id = Some(identical_filename_count);
+                } else {
+                    file.identical_name_id = None;
+                }
             }
         }
 
