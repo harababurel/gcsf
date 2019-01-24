@@ -77,7 +77,13 @@ mount_options = [
 #
 # If set to false, Google Drive will attempt to communicate with GCSF directly.
 # This is usually faster and more convenient.
-authorize_using_code = false\n";
+authorize_using_code = false
+
+# If set to true, all files with identical name will get an increasing number attached to the suffix.
+rename_identical_files = false
+
+# If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
+delete_permanent = false\n";
 
 fn mount_gcsf(config: Config, mountpoint: &str) {
     let vals = config.mount_options();
