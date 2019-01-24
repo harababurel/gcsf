@@ -15,6 +15,7 @@ pub struct Config {
     pub config_dir: Option<PathBuf>,
     pub session_name: Option<String>,
     pub authorize_using_code: Option<bool>,
+    pub rename_identical_files: Option<bool>,
 }
 
 impl Config {
@@ -76,5 +77,9 @@ impl Config {
     /// This is usually faster and more convenient.
     pub fn authorize_using_code(&self) -> bool {
         self.authorize_using_code.unwrap_or(true)
+    }
+    
+    pub fn rename_identical_files(&self) -> bool {
+        self.rename_identical_files.unwrap_or(false)
     }
 }
