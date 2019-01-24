@@ -359,17 +359,21 @@ impl FileManager {
                     "FileManager::add_file_locally() could not find parent by FileId",
                 ))?;
 
-                let identical_filename_count = self
-                    .get_children(&id)
-                    .ok_or(err_msg(
-                        "FileManager::add_file_locally() could not get file siblings",
-                    ))?
-                    .iter()
-                    .filter(|child| child.name == file.name)
-                    .count();
+                /// Append a number to identical files, if enabled in config
+                let rename_identical_files = config.rename_identical_files();
+                if(rename_identical_files) {
+                    let identical_filename_count = self
+                        .get_children(&id)
+                        .ok_or(err_msg(
+                            "FileManager::add_file_locally() could not get file siblings",
+                        ))?
+                       .iter()
+                        .filter(|child| child.name == file.name)
+                        .count();
 
-                if identical_filename_count > 0 {
-                    file.identical_name_id = Some(identical_filename_count);
+                    if identical_filename_count > 0 {
+                        file.identical_name_id = Some(identical_filename_count);
+                    }
                 }
 
                 self.tree
