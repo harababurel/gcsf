@@ -183,8 +183,11 @@ impl Filesystem for GCSF {
         match self.manager.get_children(&FileId::Inode(ino)) {
             Some(children) => {
                 for child in children.iter().skip(offset as usize) {
-                    reply.add(child.inode(), curr_offs, child.kind(), &child.name());
-                    curr_offs += 1;
+                    if reply.add(child.inode(), curr_offs, child.kind(), &child.name()) {
+                        break;
+                    } else {
+                        curr_offs += 1;
+                    }
                 }
                 reply.ok();
             }
