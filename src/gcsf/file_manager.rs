@@ -55,8 +55,11 @@ pub struct FileManager {
     /// Specifies how much time is needed to pass since `last_sync` for a new sync to be performed.
     pub sync_interval: Duration,
     
-    /// Renamed duplicate files if enabled
+    /// Rename duplicate files if enabled
     pub rename_identical_files: bool, 
+    
+    /// Delete files/folders permantly if enabled
+    pub delete_permanent: bool,
 
     last_inode: Inode,
 }
@@ -64,7 +67,7 @@ pub struct FileManager {
 impl FileManager {
     /// Creates a new FileManager with a specific `sync_interval` and an injected `DriveFacade`.
     /// Also populates the manager's file tree with files contained in "My Drive" and "Trash".
-    pub fn with_drive_facade(rename_identical_files: bool, sync_interval: Duration, df: DriveFacade) -> Result<Self, Error> {
+    pub fn with_drive_facade(rename_identical_files: bool, delete_permanent: bool, sync_interval: Duration, df: DriveFacade) -> Result<Self, Error> {
         let mut manager = FileManager {
             tree: TreeBuilder::new().with_node_capacity(500).build(),
             files: HashMap::new(),
@@ -72,6 +75,7 @@ impl FileManager {
             drive_ids: HashMap::new(),
             last_sync: SystemTime::now(),
             rename_identical_files: rename_identical_files,
+            delete_permanent: delete_permanent,
             sync_interval,
             df,
             last_inode: 2,
