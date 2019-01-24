@@ -16,6 +16,7 @@ pub struct Config {
     pub session_name: Option<String>,
     pub authorize_using_code: Option<bool>,
     pub rename_identical_files: Option<bool>,
+    pub delete_permanent: Option<bool>,
 }
 
 impl Config {
@@ -79,7 +80,13 @@ impl Config {
         self.authorize_using_code.unwrap_or(true)
     }
     
+    /// If set to true, all files with identical name will get an increasing number attached to the suffix.
     pub fn rename_identical_files(&self) -> bool {
         self.rename_identical_files.unwrap_or(false)
+    }
+    
+    /// If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
+    pub fn delete_permanent(&self) -> bool {
+        self.delete_permanent.unwrap_or(false)
     }
 }
