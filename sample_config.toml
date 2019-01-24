@@ -5,8 +5,11 @@
 # Show additional logging info?
 debug = false
 
-# Append numbers to identical filenames?
+# If set to true, all files with identical name will get an increasing number attached to the suffix.
 rename_identical_files = false
+
+# If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
+delete_permanent = false
 
 # Perform a mount check and fail early if it fails. Disable this if you
 # encounter this error:
