@@ -371,7 +371,7 @@ impl Filesystem for GCSF {
                     debug!("{:?} is already trashed. Deleting permanently.", id);
                     self.manager.delete(&id)
                 } else {
-                    if self.delete_permanent {
+                    if self.manager.delete_permanent {
                         debug!("{:?} was not trashed. Not moving it to Trash, instead deleting permanently.", id);
                         self.manager.delete(&id)
                     } else {
