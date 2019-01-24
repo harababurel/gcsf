@@ -81,6 +81,7 @@ impl Config {
     }
     
     /// If set to true, all files with identical name will get an increasing number attached to the suffix.
+    /// The mount-time also rises dramatically with higher file counts. Not recommended.
     pub fn rename_identical_files(&self) -> bool {
         self.rename_identical_files.unwrap_or(false)
     }
