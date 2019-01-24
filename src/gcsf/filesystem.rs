@@ -65,6 +65,8 @@ impl GCSF {
     pub fn with_config(config: Config) -> Result<Self, Error> {
         Ok(GCSF {
             manager: FileManager::with_drive_facade(
+                config.rename_identical_files(),
+                config.delete_permanent(),
                 config.sync_interval(),
                 DriveFacade::new(&config),
             )?,
@@ -369,11 +371,13 @@ impl Filesystem for GCSF {
                     debug!("{:?} is already trashed. Deleting permanently.", id);
                     self.manager.delete(&id)
                 } else {
-                    debug!(
-                        "{:?} was not trashed. Moving it to Trash instead of deleting permanently.",
-                        id
-                    );
-                    self.manager.move_file_to_trash(&id, true)
+                    if self.delete_permanent {
+                        debug!("{:?} was not trashed. Not moving it to Trash, instead deleting permanently.", id);
+                        self.manager.delete(&id)
+                    } else {
+                        debug!("{:?} was not trashed. Moving it to Trash instead of deleting permanently.", id);
+                        self.manager.move_file_to_trash(&id, true)
+                    }
                 };
 
                 log_result_and_fill_reply!(res, reply);
