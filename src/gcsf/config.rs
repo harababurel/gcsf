@@ -15,6 +15,8 @@ pub struct Config {
     pub config_dir: Option<PathBuf>,
     pub session_name: Option<String>,
     pub authorize_using_code: Option<bool>,
+    pub rename_identical_files: Option<bool>,
+    pub delete_permanent: Option<bool>,
 }
 
 impl Config {
@@ -76,5 +78,16 @@ impl Config {
     /// This is usually faster and more convenient.
     pub fn authorize_using_code(&self) -> bool {
         self.authorize_using_code.unwrap_or(true)
+    }
+    
+    /// If set to true, all files with identical name will get an increasing number attached to the suffix.
+    /// The mount-time also rises dramatically with higher file counts. Not recommended.
+    pub fn rename_identical_files(&self) -> bool {
+        self.rename_identical_files.unwrap_or(false)
+    }
+    
+    /// If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
+    pub fn delete_permanent(&self) -> bool {
+        self.delete_permanent.unwrap_or(false)
     }
 }
