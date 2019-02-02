@@ -123,4 +123,4 @@ GCSF stands for "Google Conduce Sistem de Fișiere" which translated from Romani
 
 ### Contributing
 
-Contributions are welcome. You can also help by reporting or fixing [issues](https://github.com/harababurel/gcsf/issues).
+Contributions are welcome. Documentation available on [docs.rs/gcsf](https://docs.rs/gcsf). You can also help by reporting or fixing [issues](https://github.com/harababurel/gcsf/issues).
