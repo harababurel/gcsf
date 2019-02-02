@@ -44,8 +44,10 @@ mount_options = [
 # This is usually faster and more convenient.
 authorize_using_code = false
 
-# If set to true, all files with identical name will get an increasing number attached to the suffix.
+# If set to true, all files with identical name will get an increasing number
+# attached to the suffix. This is most likely not necessary.
 rename_identical_files = false
 
-# If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
-delete_permanent = false
+# If set to true, deleted files and folder will not be moved to Trash Folder,
+# instead they get deleted permanently.
+skip_trash = false
