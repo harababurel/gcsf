@@ -66,7 +66,7 @@ impl GCSF {
         Ok(GCSF {
             manager: FileManager::with_drive_facade(
                 config.rename_identical_files(),
-                config.delete_permanent(),
+                config.skip_trash(),
                 config.sync_interval(),
                 DriveFacade::new(&config),
             )?,
@@ -371,8 +371,9 @@ impl Filesystem for GCSF {
                     debug!("{:?} is already trashed. Deleting permanently.", id);
                     self.manager.delete(&id)
                 } else {
-                    if self.manager.delete_permanent {
-                        debug!("{:?} was not trashed. Not moving it to Trash, instead deleting permanently.", id);
+                    if self.manager.skip_trash {
+                        debug!("{:?} was not trashed. Deleting it permanently instead of moving to Trash \
+                        because skip_trash is enabled in the configuration.", id);
                         self.manager.delete(&id)
                     } else {
                         debug!("{:?} was not trashed. Moving it to Trash instead of deleting permanently.", id);

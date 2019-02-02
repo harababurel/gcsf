@@ -16,7 +16,7 @@ pub struct Config {
     pub session_name: Option<String>,
     pub authorize_using_code: Option<bool>,
     pub rename_identical_files: Option<bool>,
-    pub delete_permanent: Option<bool>,
+    pub skip_trash: Option<bool>,
 }
 
 impl Config {
@@ -87,7 +87,7 @@ impl Config {
     }
 
     /// If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
-    pub fn delete_permanent(&self) -> bool {
-        self.delete_permanent.unwrap_or(false)
+    pub fn skip_trash(&self) -> bool {
+        self.skip_trash.unwrap_or(false)
     }
 }

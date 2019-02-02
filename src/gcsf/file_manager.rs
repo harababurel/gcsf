@@ -58,8 +58,9 @@ pub struct FileManager {
     /// Rename duplicate files if enabled.
     pub rename_identical_files: bool,
 
-    /// Delete files/folders permanently if enabled.
-    pub delete_permanent: bool,
+    /// If enabled, deleting files will remove them permanently instead of moving them to Trash.
+    /// Deleting trashed files always removes them permanently.
+    pub skip_trash: bool,
 
     last_inode: Inode,
 }
@@ -69,7 +70,7 @@ impl FileManager {
     /// Also populates the manager's file tree with files contained in "My Drive" and "Trash".
     pub fn with_drive_facade(
         rename_identical_files: bool,
-        delete_permanent: bool,
+        skip_trash: bool,
         sync_interval: Duration,
         df: DriveFacade,
     ) -> Result<Self, Error> {
@@ -80,7 +81,7 @@ impl FileManager {
             drive_ids: HashMap::new(),
             last_sync: SystemTime::now(),
             rename_identical_files: rename_identical_files,
-            delete_permanent: delete_permanent,
+            skip_trash: skip_trash,
             sync_interval,
             df,
             last_inode: 2,

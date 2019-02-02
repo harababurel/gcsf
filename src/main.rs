@@ -82,8 +82,9 @@ authorize_using_code = false
 # If set to true, all files with identical name will get an increasing number attached to the suffix.
 rename_identical_files = false
 
-# If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
-delete_permanent = false\n";
+# If set to true, deleted files will remove them permanently instead of moving them to Trash.
+# Deleting trashed files always removes them permanently.
+skip_trash = false\n";
 
 fn mount_gcsf(config: Config, mountpoint: &str) {
     let vals = config.mount_options();
