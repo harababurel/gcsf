@@ -55,10 +55,10 @@ pub struct FileManager {
     /// Specifies how much time is needed to pass since `last_sync` for a new sync to be performed.
     pub sync_interval: Duration,
 
-    /// Rename duplicate files if enabled
+    /// Rename duplicate files if enabled.
     pub rename_identical_files: bool,
 
-    /// Delete files/folders permantly if enabled
+    /// Delete files/folders permanently if enabled.
     pub delete_permanent: bool,
 
     last_inode: Inode,
