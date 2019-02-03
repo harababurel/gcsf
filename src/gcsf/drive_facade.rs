@@ -9,7 +9,7 @@ use mime_sniffer::MimeTypeSniffer;
 use oauth2;
 use serde_json;
 use std::cmp;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::io::{Read, Seek, SeekFrom};
 
@@ -61,6 +61,15 @@ lazy_static! {
         "application/vnd.google-apps.document" => "application/vnd.oasis.opendocument.text",
         "application/vnd.google-apps.presentation" => "application/vnd.oasis.opendocument.presentation",
         "application/vnd.google-apps.spreadsheet" => "application/vnd.oasis.opendocument.spreadsheet",
+        "application/vnd.google-apps.drawing" => "image/png",
+        "application/vnd.google-apps.site" => "text/plain",
+    };
+}
+
+lazy_static! {
+    static ref UNEXPORTABLE_MIME_TYPES: HashSet<&'static str> = hashset! {
+        "application/vnd.google-apps.form",
+        "application/vnd.google-apps.map",
     };
 }
 
@@ -136,7 +145,7 @@ impl DriveFacade {
         self.hub
             .files()
             .get(id)
-            .param("fields", "id,name,parents,mimeType")
+            .param("fields", "id,name,parents,mimeType,webContentLink")
             .add_scope(drive3::Scope::Full)
             .doit()
             .map(|(_response, file)| file)
@@ -145,12 +154,29 @@ impl DriveFacade {
 
     /// Retrieves the content of a Drive file. If `mime_type` is specified, this method will
     /// attempt to export the file in some appropriate format rather than just download it as is.
-    /// This is the only way of retrieving Docs, Sheets and Slides.
+    /// This is the only way of retrieving Docs, Sheets, Slides, Sites and Drawings.
     fn get_file_content(
         &self,
         drive_id: &str,
         mime_type: Option<String>,
     ) -> Result<Vec<u8>, Error> {
+        if let Some(mime) = mime_type.clone() {
+            if UNEXPORTABLE_MIME_TYPES.contains::<str>(&mime) {
+                return Ok(format!(
+                    "UNEXPORTABLE_FILE: The MIME type of this \
+                     file is {:?}, which can not be exported from Drive. Web \
+                     content link provided by Drive: {:?}\n",
+                    mime,
+                    self.get_file_metadata(drive_id)
+                        .ok()
+                        .map(|metadata| metadata.web_view_link)
+                        .unwrap_or_default()
+                )
+                .as_bytes()
+                .to_vec());
+            }
+        }
+
         let export_type: Option<&'static str> = mime_type
             .and_then(|ref t| MIME_TYPES.get::<str>(&t))
             .cloned();

@@ -46,6 +46,8 @@ lazy_static! {
             "application/vnd.google-apps.document" => "#.odt",
             "application/vnd.google-apps.presentation" => "#.odp",
             "application/vnd.google-apps.spreadsheet" => "#.ods",
+            "application/vnd.google-apps.drawing" => "#.png",
+            "application/vnd.google-apps.site" => "#.txt",
     };
 }
 
