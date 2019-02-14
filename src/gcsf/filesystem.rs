@@ -490,8 +490,10 @@ impl Filesystem for GCSF {
 
             (size, capacity)
         } else {
-            let size = self.statfs_cache.get("size").unwrap().to_owned();
-            let capacity = self.statfs_cache.get("capacity").unwrap().to_owned();
+            // unwrap_or(&0) because the values might have been dropped from the cache since
+            // checking for their existence.
+            let size = self.statfs_cache.get("size").unwrap_or(&0).to_owned();
+            let capacity = self.statfs_cache.get("capacity").unwrap_or(&0).to_owned();
             (size, capacity)
         };
 
