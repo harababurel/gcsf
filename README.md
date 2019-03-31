@@ -11,6 +11,9 @@
 
 GCSF is a virtual filesystem that allows users to mount their Google Drive account locally and interact with it as a regular disk partition. You can find out more in this [paper](https://sergiu.ml/~sergiu/thesis.pdf).
 
+**Update (April 2019)**: I am currently still using and maintaining this project but I have very little time to dedicate to it. As such, it might take a while before I get around to fixing known bugs / implementing feature requests / responding to open issues. Thank you for understanding and for expressing sustained interest in this project!
+
+
 ### Requirements
 
 GCSF requires the stable branch of the Rust programming language, which can be installed following the instructions on [rustup.rs](https://rustup.rs). If you already have Rust installed, make sure that it is updated to the latest version (≥1.26):
