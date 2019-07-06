@@ -96,7 +96,7 @@ And then mount one (or more) of them:
 ```bash
 $ gcsf mount /mnt/gcsf -s some_session_name
 INFO  gcsf > Creating and populating file system...
-INFO  gcsf > File sytem created.
+INFO  gcsf > File system created.
 INFO  gcsf > Mounting to /mnt/gcsf
 INFO  gcsf > Mounted to /mnt/gcsf
 ```
