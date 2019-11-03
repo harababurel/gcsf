@@ -124,6 +124,18 @@ Or Thunar:
 ### Why GCSF?
 GCSF stands for "Google Conduce Sistem de Fișiere" which translated from Romanian is "Google Drive Filesystem". However [GDFS](https://github.com/robin-thomas/GDFS) already exists so it remains GCSF.
 
+### Troubleshooting
+
+#### Could not mount to `$mountpoint`: Operation not permitted (os error 1)
+
+This error occurs when `user_allow_other` is not set in `/etc/fuse.conf` or the file has improper permissions. Fix by running (as root):
+
+```bash
+# echo 'user_allow_other' >> /etc/fuse.conf
+# chmod 644 /etc/fuse.conf
+# sudo chown root:root /etc/fuse.conf
+```
+
 ### Contributing
 
 Contributions are welcome. Documentation available on [docs.rs/gcsf](https://docs.rs/gcsf). You can also help by reporting or fixing [issues](https://github.com/harababurel/gcsf/issues).
