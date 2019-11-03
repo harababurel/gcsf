@@ -117,7 +117,7 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
             return;
         }
     };
-    info!("File sytem created.");
+    info!("File system created.");
 
     unsafe {
         info!("Mounting to {}", &mountpoint);
