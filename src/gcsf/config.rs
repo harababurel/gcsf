@@ -17,6 +17,7 @@ pub struct Config {
     pub authorize_using_code: Option<bool>,
     pub rename_identical_files: Option<bool>,
     pub skip_trash: Option<bool>,
+    pub client_secret: Option<String>,
 }
 
 impl Config {
@@ -89,5 +90,11 @@ impl Config {
     /// If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
     pub fn skip_trash(&self) -> bool {
         self.skip_trash.unwrap_or(false)
+    }
+
+    /// The Google OAuth client secret for Google Drive APIs. Create your own
+    /// credentials at https://console.developers.google.com and paste them here
+    pub fn client_secret(&self) -> &String {
+        self.client_secret.as_ref().unwrap()
     }
 }
