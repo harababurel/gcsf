@@ -32,7 +32,7 @@ const DEBUG_LOG: &str = "hyper::client=error,hyper::http=error,hyper::net=error,
 const INFO_LOG: &str =
     "hyper::client=error,hyper::http=error,hyper::net=error,fuse::session=error,info";
 
-const DEFAULT_CONFIG: &str = "\
+const DEFAULT_CONFIG: &str = r#"
 ### This is the configuration file that GCSF uses.
 ### It should be placed in $XDG_CONFIG_HOME/gcsf/gcsf.toml, which is usually
 ### defined as $HOME/.config/gcsf/gcsf.toml
@@ -63,12 +63,12 @@ sync_interval = 10
 
 # Mount options
 mount_options = [
-    \"fsname=GCSF\",
+    "fsname=GCSF",
     # Allow file system access to root. This only works if `user_allow_other`
     # is set in /etc/fuse.conf
-    \"allow_root\",
-    \"big_writes\",
-    \"max_write=131072\"
+    "allow_root",
+    "big_writes",
+    "max_write=131072"
 ]
 
 # If set to true, Google Drive will provide a code after logging in and
@@ -84,7 +84,12 @@ rename_identical_files = false
 
 # If set to true, deleted files will remove them permanently instead of moving them to Trash.
 # Deleting trashed files always removes them permanently.
-skip_trash = false\n";
+skip_trash = false
+
+# The Google OAuth client secret for Google Drive APIs. Create your own
+# credentials at https://console.developers.google.com and paste them here
+client_secret = """{"installed":{"client_id":"726003905312-e2mq9mesjc5llclmvc04ef1k7qopv9tu.apps.googleusercontent.com","project_id":"weighty-triode-199418","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"hp83n1Rzz8UpxgCnqvX15qC2","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"""
+"#;
 
 fn mount_gcsf(config: Config, mountpoint: &str) {
     let vals = config.mount_options();
