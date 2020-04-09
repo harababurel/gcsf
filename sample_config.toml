@@ -24,7 +24,7 @@ cache_statfs_seconds = 60
 
 # How many seconds to wait before checking for remote changes and updating them
 # locally.
-sync_interval = 10
+sync_interval = 60
 
 # Mount options
 mount_options = [

@@ -53,7 +53,7 @@ lazy_static! {
 
 impl File {
     /// Creates a new file using a Drive file as a template.
-    pub fn from_drive_file(inode: Inode, drive_file: drive3::File) -> Self {
+    pub fn from_drive_file(inode: Inode, drive_file: drive3::File, add_extension: bool) -> Self {
         let mut size = drive_file
             .size
             .clone()
@@ -118,12 +118,14 @@ impl File {
         //     .map(|owner| owner.email_address.unwrap())
         //     .collect();
 
-        let ext = drive_file
-            .mime_type
-            .clone()
-            .and_then(|t| EXTENSIONS.get::<str>(&t));
-        if ext.is_some() {
-            filename = format!("{}{}", filename, ext.unwrap());
+        if add_extension {
+            let ext = drive_file
+                .mime_type
+                .clone()
+                .and_then(|t| EXTENSIONS.get::<str>(&t));
+            if ext.is_some() {
+                filename = format!("{}{}", filename, ext.unwrap());
+            }
         }
 
         File {

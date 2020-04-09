@@ -66,6 +66,7 @@ impl GCSF {
         Ok(GCSF {
             manager: FileManager::with_drive_facade(
                 config.rename_identical_files(),
+                config.add_extensions_to_special_files(),
                 config.skip_trash(),
                 config.sync_interval(),
                 DriveFacade::new(&config),

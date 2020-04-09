@@ -58,6 +58,10 @@ pub struct FileManager {
     /// Rename duplicate files if enabled.
     pub rename_identical_files: bool,
 
+    /// Add an extension to special files (docs, presentations, sheets, drawings, sites).
+    /// e.g. "#.ods" for spreadsheets.
+    pub add_extensions_to_special_files: bool,
+
     /// If enabled, deleting files will remove them permanently instead of moving them to Trash.
     /// Deleting trashed files always removes them permanently.
     pub skip_trash: bool,
@@ -70,6 +74,7 @@ impl FileManager {
     /// Also populates the manager's file tree with files contained in "My Drive" and "Trash".
     pub fn with_drive_facade(
         rename_identical_files: bool,
+        add_extensions_to_special_files: bool,
         skip_trash: bool,
         sync_interval: Duration,
         df: DriveFacade,
@@ -81,6 +86,7 @@ impl FileManager {
             drive_ids: HashMap::new(),
             last_sync: SystemTime::now(),
             rename_identical_files: rename_identical_files,
+            add_extensions_to_special_files: add_extensions_to_special_files,
             skip_trash: skip_trash,
             sync_interval,
             df,
@@ -121,7 +127,11 @@ impl FileManager {
             // New file. Create it locally
             if !self.contains(&id) {
                 debug!("New file. Create it locally");
-                let f = File::from_drive_file(self.next_available_inode(), drive_f.clone());
+                let f = File::from_drive_file(
+                    self.next_available_inode(),
+                    drive_f.clone(),
+                    self.add_extensions_to_special_files,
+                );
                 debug!("newly created file: {:#?}", &f);
 
                 let parent = f.drive_parent().unwrap();
@@ -153,8 +163,9 @@ impl FileManager {
             // Anything else: reconstruct the file locally and move it under its parent.
             debug!("Anything else: reconstruct the file locally and move it under its parent.");
             let new_parent = {
+                let add_extension = self.add_extensions_to_special_files.clone();
                 let f = unwrap_or_continue!(self.get_mut_file(&id));
-                *f = File::from_drive_file(f.inode(), drive_f.clone());
+                *f = File::from_drive_file(f.inode(), drive_f.clone(), add_extension);
                 FileId::DriveId(f.drive_parent().unwrap())
             };
             let result = self.move_locally(&id, &new_parent);
@@ -175,7 +186,11 @@ impl FileManager {
         self.add_file_locally(shared, Some(FileId::Inode(ROOT_INODE)))?;
 
         for drive_file in self.df.get_all_files(None, Some(false))? {
-            let file = File::from_drive_file(self.next_available_inode(), drive_file);
+            let file = File::from_drive_file(
+                self.next_available_inode(),
+                drive_file,
+                self.add_extensions_to_special_files,
+            );
             self.add_file_locally(file, Some(FileId::Inode(3)))?;
         }
 
@@ -204,7 +219,11 @@ impl FileManager {
         self.add_file_locally(trash.clone(), Some(FileId::DriveId(root_id.to_string())))?;
 
         for drive_file in self.df.get_all_files(None, Some(true))? {
-            let file = File::from_drive_file(self.next_available_inode(), drive_file);
+            let file = File::from_drive_file(
+                self.next_available_inode(),
+                drive_file,
+                self.add_extensions_to_special_files,
+            );
             self.add_file_locally(file, Some(FileId::Inode(trash.inode())))?;
         }
 

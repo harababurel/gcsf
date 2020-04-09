@@ -16,6 +16,7 @@ pub struct Config {
     pub session_name: Option<String>,
     pub authorize_using_code: Option<bool>,
     pub rename_identical_files: Option<bool>,
+    pub add_extensions_to_special_files: Option<bool>,
     pub skip_trash: Option<bool>,
     pub client_secret: Option<String>,
 }
@@ -85,6 +86,11 @@ impl Config {
     /// The mount-time also rises dramatically with higher file counts. Not recommended.
     pub fn rename_identical_files(&self) -> bool {
         self.rename_identical_files.unwrap_or(false)
+    }
+
+    /// If set to true, all files with identical name will get an increasing number attached to the suffix.
+    pub fn add_extensions_to_special_files(&self) -> bool {
+        self.add_extensions_to_special_files.unwrap_or(false)
     }
 
     /// If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.

@@ -82,6 +82,9 @@ authorize_using_code = false
 # If set to true, all files with identical name will get an increasing number attached to the suffix.
 rename_identical_files = false
 
+# If set to true, will add an extension to special files (docs, presentations, sheets, drawings, sites), e.g. "\#.ods" for spreadsheets.
+add_extensions_to_special_files = false
+
 # If set to true, deleted files will remove them permanently instead of moving them to Trash.
 # Deleting trashed files always removes them permanently.
 skip_trash = false
