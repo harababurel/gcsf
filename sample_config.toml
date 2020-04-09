@@ -48,10 +48,12 @@ authorize_using_code = false
 # attached to the suffix. This is most likely not necessary.
 rename_identical_files = false
 
+# If set to true, will add an extension to special files (docs, presentations, sheets, drawings, sites), e.g. "\#.ods" for spreadsheets.
+add_extensions_to_special_files = false
+
 # If set to true, deleted files and folder will not be moved to Trash Folder,
 # instead they get deleted permanently.
 skip_trash = false
-
 
 # The Google OAuth client secret for Google Drive APIs. Create your own
 # credentials at https://console.developers.google.com and paste them here
