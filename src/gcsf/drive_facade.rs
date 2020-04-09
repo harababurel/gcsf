@@ -89,7 +89,8 @@ impl DriveFacade {
     }
 
     fn create_drive_auth(config: &Config) -> Result<GCAuthenticator, Error> {
-        let secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(config.client_secret())?;
+        let secret: oauth2::ConsoleApplicationSecret =
+            serde_json::from_str(config.client_secret())?;
         let secret = secret
             .installed
             .ok_or(err_msg("ConsoleApplicationSecret.installed is None"))?;
@@ -181,7 +182,7 @@ impl DriveFacade {
 
         let mut response = match export_type {
             Some(t) => {
-                let mut response = self
+                let response = self
                     .hub
                     .files()
                     .export(drive_id, &t)
@@ -193,7 +194,7 @@ impl DriveFacade {
                 response
             }
             None => {
-                let (mut response, _empty_file) = self
+                let (response, _empty_file) = self
                     .hub
                     .files()
                     .get(&drive_id)

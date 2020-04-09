@@ -153,7 +153,7 @@ impl FileManager {
             // Anything else: reconstruct the file locally and move it under its parent.
             debug!("Anything else: reconstruct the file locally and move it under its parent.");
             let new_parent = {
-                let mut f = unwrap_or_continue!(self.get_mut_file(&id));
+                let f = unwrap_or_continue!(self.get_mut_file(&id));
                 *f = File::from_drive_file(f.inode(), drive_f.clone());
                 FileId::DriveId(f.drive_parent().unwrap())
             };
@@ -175,7 +175,7 @@ impl FileManager {
         self.add_file_locally(shared, Some(FileId::Inode(ROOT_INODE)))?;
 
         for drive_file in self.df.get_all_files(None, Some(false))? {
-            let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
+            let file = File::from_drive_file(self.next_available_inode(), drive_file);
             self.add_file_locally(file, Some(FileId::Inode(3)))?;
         }
 
@@ -204,7 +204,7 @@ impl FileManager {
         self.add_file_locally(trash.clone(), Some(FileId::DriveId(root_id.to_string())))?;
 
         for drive_file in self.df.get_all_files(None, Some(true))? {
-            let mut file = File::from_drive_file(self.next_available_inode(), drive_file);
+            let file = File::from_drive_file(self.next_available_inode(), drive_file);
             self.add_file_locally(file, Some(FileId::Inode(trash.inode())))?;
         }
 

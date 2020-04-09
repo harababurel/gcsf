@@ -195,7 +195,7 @@ fn main() {
     let mut config = load_conf().expect("Could not load configuration file.");
 
     pretty_env_logger::formatted_builder()
-        .parse(if config.debug() { DEBUG_LOG } else { INFO_LOG })
+        .parse_filters(if config.debug() { DEBUG_LOG } else { INFO_LOG })
         .init();
 
     let yaml = load_yaml!("cli.yml");
