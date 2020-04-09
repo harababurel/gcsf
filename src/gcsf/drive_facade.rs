@@ -14,8 +14,6 @@ use std::io;
 use std::io::{Read, Seek, SeekFrom};
 
 const PAGE_SIZE: i32 = 1000;
-const CLIENT_SECRET: &str = "{\"installed\":{\"client_id\":\"726003905312-e2mq9mesjc5llclmvc04ef1k7qopv9tu.apps.googleusercontent.com\",\"project_id\":\"weighty-triode-199418\",\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"token_uri\":\"https://accounts.google.com/o/oauth2/token\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\",\"client_secret\":\"hp83n1Rzz8UpxgCnqvX15qC2\",\"redirect_uris\":[\"urn:ietf:wg:oauth:2.0:oob\",\"http://localhost\"]}}";
-
 type DriveId = String;
 
 type GCClient = hyper::Client;
@@ -91,7 +89,7 @@ impl DriveFacade {
     }
 
     fn create_drive_auth(config: &Config) -> Result<GCAuthenticator, Error> {
-        let secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(CLIENT_SECRET)?;
+        let secret: oauth2::ConsoleApplicationSecret = serde_json::from_str(config.client_secret())?;
         let secret = secret
             .installed
             .ok_or(err_msg("ConsoleApplicationSecret.installed is None"))?;

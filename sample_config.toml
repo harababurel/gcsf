@@ -51,3 +51,8 @@ rename_identical_files = false
 # If set to true, deleted files and folder will not be moved to Trash Folder,
 # instead they get deleted permanently.
 skip_trash = false
+
+
+# The Google OAuth client secret for Google Drive APIs. Create your own
+# credentials at https://console.developers.google.com and paste them here
+client_secret = """{"installed":{"client_id":"726003905312-e2mq9mesjc5llclmvc04ef1k7qopv9tu.apps.googleusercontent.com","project_id":"weighty-triode-199418","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"hp83n1Rzz8UpxgCnqvX15qC2","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"""
