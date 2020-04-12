@@ -24,7 +24,7 @@ matrix:
 before_install:
   - if [[ ${TRAVIS_OS_NAME} == "osx" ]]; then brew update; brew install pkg-config;
     brew tap homebrew/cask; brew cask install osxfuse; fi
-  - if [[ ${TRAVIS_OS_NAME} == "linux" ]]; then sudo apt-get -qq update; sudo apt-get
+  - if [[ ${TRAVIS_OS_NAME} == "linux" ]]; then apt-get -qq update; apt-get
     install -y libfuse-dev pkg-config; fi
 
 before_script:
@@ -47,7 +47,7 @@ deploy:
   on:
     tags: true
   provider: releases
-  skip_cleanup: true
+  cleanup: true
 
 cache: cargo
 before_cache:
