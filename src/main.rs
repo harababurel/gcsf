@@ -263,6 +263,13 @@ fn main() {
             return;
         }
 
+        if config.client_secret.is_none() {
+            error!("No Google OAuth client secret was provided.");
+            error!("Try deleting your config file to force GCSF to generate it with the default credentials.");
+            error!("Alternatively, you can create your own credentials or manually set the default ones from https://github.com/harababurel/gcsf/blob/master/sample_config.toml");
+            return;
+        }
+
         mount_gcsf(config, mountpoint);
     }
 }
