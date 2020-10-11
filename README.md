@@ -48,7 +48,7 @@ Make sure you have `pkg-config` and the `fuse` library installed. These are usua
 
 #### FreeBSD
 
-Rust can be installed via the `lang/rust` port. You will need to install `sysutils/fusefs-libs` for the `cairo install` command to succeed. 
+Rust can be installed via the `lang/rust` port. You will need to install `sysutils/fusefs-libs` for the `cairo install` command to succeed.
 
 #### Windows
 
@@ -70,6 +70,17 @@ Alternatively, you can download a [release binary](https://github.com/harababure
 ### Configuration
 
 GCSF will attempt to create a configuration file in `$XDG_CONFIG_HOME/gcsf/gcsf.toml`, which is usually defined as `$HOME/.config/gcsf/gcsf.toml`. Credentials are stored in the same directory.
+
+#### GCP
+
+1. Visit [console.developers.google.com](https://console.developers.google.com) and create a new project
+2. Add the Google Drive API to the project
+3. Configure an OAuth consent screen. Verification should not be required. Should be external unless this project is something internal to your GSuite
+4. Configure an OAuth2.0 credential. Do not use WEB as the token type if adding `gcsf` to a headless server - you want to be using the `urn:*` URI (note: if using WEB, you'll need to set the accepted domains to include `http://localhost:8081`)
+5. Configure GCSF to use the new `client_id`, `client_secret`, and `project_id`. You should have all these values after creating the credential.
+6. Configure GCSF `authorize_using_code=True` if configuring for headless servers. If you do this, completing the OAuth flow in a different browser will provide you a code that you can give to GCSF.
+
+Running `gcsf login some_session_name` at this point should show a URL with your `client_id` query parameter.
 
 ### Usage
 
@@ -135,6 +146,10 @@ This error occurs when `user_allow_other` is not set in `/etc/fuse.conf` or the 
 # chmod 644 /etc/fuse.conf
 # sudo chown root:root /etc/fuse.conf
 ```
+
+#### `libssl.so.1.0.0`
+
+You installed the prebuilt binaries but couldn't run it. Fix by installing rust and building from source.
 
 ### Contributing
 
