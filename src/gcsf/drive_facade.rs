@@ -15,19 +15,20 @@ use std::io::{Read, Seek, SeekFrom};
 
 const PAGE_SIZE: i32 = 1000;
 type DriveId = String;
+type DriveIdRef<'a> = &'a str;
 
-type GCClient = hyper::Client;
-type GCAuthenticator = oauth2::Authenticator<
+type GcClient = hyper::Client;
+type GcAuthenticator = oauth2::Authenticator<
     oauth2::DefaultAuthenticatorDelegate,
     oauth2::DiskTokenStorage,
     hyper::Client,
 >;
-type GCDrive = drive3::Drive<GCClient, GCAuthenticator>;
+type GcDrive = drive3::Drive<GcClient, GcAuthenticator>;
 
 /// Provides a simple high-level interface for interacting with the Google Drive API.
 pub struct DriveFacade {
     /// The `drive3::Drive` hub used for interacting with the API.
-    pub hub: GCDrive,
+    pub hub: GcDrive,
 
     /// A buffer used for temporarily caching read blocks. Storing this inside the struct makes it possible to return a reference to the data without the danger of the data outliving the struct.
     buff: Vec<u8>,
@@ -88,12 +89,12 @@ impl DriveFacade {
         }
     }
 
-    fn create_drive_auth(config: &Config) -> Result<GCAuthenticator, Error> {
+    fn create_drive_auth(config: &Config) -> Result<GcAuthenticator, Error> {
         let secret: oauth2::ConsoleApplicationSecret =
             serde_json::from_str(config.client_secret())?;
         let secret = secret
             .installed
-            .ok_or(err_msg("ConsoleApplicationSecret.installed is None"))?;
+            .ok_or_else(|| err_msg("ConsoleApplicationSecret.installed is None"))?;
 
         let auth = oauth2::Authenticator::new(
             &secret,
@@ -112,7 +113,7 @@ impl DriveFacade {
     }
 
     /// Creates a drive hub.
-    fn create_drive(config: &Config) -> Result<GCDrive, Error> {
+    fn create_drive(config: &Config) -> Result<GcDrive, Error> {
         let auth = Self::create_drive_auth(config)?;
         Ok(drive3::Drive::new(
             hyper::Client::with_connector(hyper::net::HttpsConnector::new(NativeTlsClient::new()?)),
@@ -121,7 +122,7 @@ impl DriveFacade {
     }
 
     /// Will still detect a file even if it is in Trash.
-    fn contains(&self, id: &DriveId) -> Result<bool, Error> {
+    fn contains(&self, id: DriveIdRef) -> Result<bool, Error> {
         let response = self
             .hub
             .files()
@@ -218,7 +219,7 @@ impl DriveFacade {
     fn apply_pending_writes_on_data(&mut self, id: DriveId, data: &mut Vec<u8>) {
         self.pending_writes
             .entry(id.clone())
-            .or_insert(Vec::new())
+            .or_insert_with(Vec::new)
             .iter()
             .filter(|write| write.id == id)
             .for_each(|pending_write| {
@@ -255,23 +256,19 @@ impl DriveFacade {
             .map_err(|e| err_msg(format!("{:#?}", e)))?
             .1
             .files
-            .ok_or(err_msg("No files received"))?
+            .ok_or_else(|| err_msg("No files received"))?
             .into_iter()
             .take(1)
             .next()
-            .ok_or(err_msg(
-                "No files on drive. Can't deduce drive id for 'My Drive'",
-            ))?
+            .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?
             .parents
-            .ok_or(err_msg(
-                "Probed file has no parents. Can't deduce drive id for 'My Drive'",
-            ))?
+            .ok_or_else(|| {
+                err_msg("Probed file has no parents. Can't deduce drive id for 'My Drive'")
+            })?
             .into_iter()
             .take(1)
             .next()
-            .ok_or(err_msg(
-                "No files on drive. Can't deduce drive id for 'My Drive'",
-            ))?;
+            .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?;
 
         self.root_id = Some(parent);
         Ok(self.root_id.as_ref().unwrap())
@@ -286,12 +283,12 @@ impl DriveFacade {
             .doit()
             .map_err(|e| err_msg(format!("{:#?}", e)))
             .map(|result| {
-                result.1.start_page_token.unwrap_or(
+                result.1.start_page_token.unwrap_or_else(|| {
                     err_msg(
                         "Received OK response from drive but there is no startPageToken included.",
                     )
-                    .to_string(),
-                )
+                    .to_string()
+                })
             })
     }
 
@@ -367,7 +364,7 @@ impl DriveFacade {
             let mut query_chain: Vec<String> = Vec::new();
             if let Some(ref p) = parents {
                 let q = p
-                    .into_iter()
+                    .iter()
                     .map(|id| format!("'{}' in parents", id))
                     .collect::<Vec<_>>()
                     .join(" or ");
@@ -402,7 +399,7 @@ impl DriveFacade {
                 break;
             }
         }
-        return Ok(all_files);
+        Ok(all_files)
     }
 
     pub fn read(
@@ -444,9 +441,9 @@ impl DriveFacade {
             .upload(dummy_file, "application/octet-stream".parse().unwrap())
             .map_err(|e| err_msg(format!("{:#?}", e)))
             .map(|(_, file)| {
-                file.id.unwrap_or(
-                    err_msg("Received file from drive but it has no drive id.").to_string(),
-                )
+                file.id.unwrap_or_else(|| {
+                    err_msg("Received file from drive but it has no drive id.").to_string()
+                })
             })
     }
 
@@ -458,12 +455,12 @@ impl DriveFacade {
         };
 
         self.pending_writes
-            .entry(id.clone())
-            .or_insert(Vec::with_capacity(3000))
+            .entry(id)
+            .or_insert_with(|| Vec::with_capacity(3000))
             .push(pending_write);
     }
 
-    pub fn delete_permanently(&mut self, id: &DriveId) -> Result<bool, Error> {
+    pub fn delete_permanently(&mut self, id: DriveIdRef) -> Result<bool, Error> {
         self.hub
             .files()
             .delete(&id)
@@ -476,21 +473,23 @@ impl DriveFacade {
 
     pub fn move_to(
         &mut self,
-        id: &DriveId,
-        parent: &DriveId,
+        id: DriveIdRef,
+        parent: DriveIdRef,
         new_name: &str,
     ) -> Result<(Response, drive3::File), Error> {
         let current_parents = self
             .get_file_metadata(id)?
             .parents
-            .unwrap_or(vec![String::from("root")])
+            .unwrap_or_else(|| vec![String::from("root")])
             .join(",");
 
-        let mut file = drive3::File::default();
-        file.name = Some(new_name.to_string());
+        let f = drive3::File {
+            name: Some(new_name.to_string()),
+            ..Default::default()
+        };
         self.hub
             .files()
-            .update(file, id)
+            .update(f, id)
             .remove_parents(&current_parents)
             .add_parents(parent)
             .add_scope(drive3::Scope::Full)
@@ -499,8 +498,10 @@ impl DriveFacade {
     }
 
     pub fn move_to_trash(&mut self, id: DriveId) -> Result<(), Error> {
-        let mut f = drive3::File::default();
-        f.trashed = Some(true);
+        let f = drive3::File {
+            trashed: Some(true),
+            ..Default::default()
+        };
 
         self.hub
             .files()
@@ -511,7 +512,7 @@ impl DriveFacade {
             .map_err(|e| err_msg(format!("DriveFacade::move_to_trash() {}", e)))
     }
 
-    pub fn flush(&mut self, id: &DriveId) -> Result<(), Error> {
+    pub fn flush(&mut self, id: DriveIdRef) -> Result<(), Error> {
         if !self.pending_writes.contains_key(id) {
             debug!("flush({}): no pending writes", id);
             return Ok(());
@@ -526,8 +527,8 @@ impl DriveFacade {
         }
 
         let mut file_data = self.get_file_content(&id, None).unwrap_or_default();
-        self.apply_pending_writes_on_data(id.clone(), &mut file_data);
-        self.update_file_content(id.clone(), &file_data)?;
+        self.apply_pending_writes_on_data(DriveId::from(id), &mut file_data);
+        self.update_file_content(DriveId::from(id), &file_data)?;
 
         Ok(())
     }
@@ -545,8 +546,10 @@ impl DriveFacade {
             &id, &mime_guess
         );
 
-        let mut file = drive3::File::default();
-        file.mime_type = Some(mime_guess.to_string());
+        let file = drive3::File {
+            mime_type: Some(mime_guess.to_string()),
+            ..Default::default()
+        };
 
         self.hub
             .files()
@@ -569,7 +572,7 @@ impl DriveFacade {
 
         let storage_quota = about
             .storage_quota
-            .ok_or(err_msg("size_and_capacity(): no storage quota in response"))?;
+            .ok_or_else(|| err_msg("size_and_capacity(): no storage quota in response"))?;
 
         let usage = storage_quota.usage.unwrap().parse::<u64>().unwrap();
         let limit = storage_quota.limit.map(|s| s.parse::<u64>().unwrap());

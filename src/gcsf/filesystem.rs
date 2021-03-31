@@ -50,20 +50,20 @@ macro_rules! log_result_and_fill_reply {
 /// An empty FUSE file system. It can be used in a mounting test aimed to determine whether or
 /// not the real file system can be mounted as well. If the test fails, the application can fail
 /// early instead of wasting time constructing the real file system.
-pub struct NullFS;
-impl Filesystem for NullFS {}
+pub struct NullFs;
+impl Filesystem for NullFs {}
 
 /// A FUSE file system which is linked to a Google Drive account.
-pub struct GCSF {
+pub struct Gcsf {
     manager: FileManager,
     statfs_cache: LruCache<String, u64>,
 }
 
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
-impl GCSF {
+impl Gcsf {
     pub fn with_config(config: Config) -> Result<Self, Error> {
-        Ok(GCSF {
+        Ok(Gcsf {
             manager: FileManager::with_drive_facade(
                 config.rename_identical_files(),
                 config.add_extensions_to_special_files(),
@@ -79,7 +79,7 @@ impl GCSF {
     }
 }
 
-impl Filesystem for GCSF {
+impl Filesystem for Gcsf {
     fn lookup(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
         // self.manager.sync();
 
@@ -333,7 +333,7 @@ impl Filesystem for GCSF {
             },
             identical_name_id: None,
             drive_file: Some(drive3::File {
-                name: Some(filename.clone()),
+                name: Some(filename),
                 mime_type: None,
                 parents: Some(vec![self
                     .manager
@@ -343,7 +343,7 @@ impl Filesystem for GCSF {
             }),
         };
 
-        let attr = file.attr.clone();
+        let attr = file.attr;
         match self.manager.create_file(file, Some(FileId::Inode(parent))) {
             Ok(()) => {
                 reply.created(&TTL, &attr, 0, 0, 0);
@@ -371,15 +371,19 @@ impl Filesystem for GCSF {
                 let res = if trashed {
                     debug!("{:?} is already trashed. Deleting permanently.", id);
                     self.manager.delete(&id)
+                } else if self.manager.skip_trash {
+                    debug!(
+                        "{:?} was not trashed. Deleting it permanently instead of moving to Trash \
+                    because skip_trash is enabled in the configuration.",
+                        id
+                    );
+                    self.manager.delete(&id)
                 } else {
-                    if self.manager.skip_trash {
-                        debug!("{:?} was not trashed. Deleting it permanently instead of moving to Trash \
-                        because skip_trash is enabled in the configuration.", id);
-                        self.manager.delete(&id)
-                    } else {
-                        debug!("{:?} was not trashed. Moving it to Trash instead of deleting permanently.", id);
-                        self.manager.move_file_to_trash(&id, true)
-                    }
+                    debug!(
+                        "{:?} was not trashed. Moving it to Trash instead of deleting permanently.",
+                        id
+                    );
+                    self.manager.move_file_to_trash(&id, true)
                 };
 
                 log_result_and_fill_reply!(res, reply);
@@ -444,7 +448,7 @@ impl Filesystem for GCSF {
             },
             identical_name_id: None,
             drive_file: Some(drive3::File {
-                name: Some(dirname.clone()),
+                name: Some(dirname),
                 mime_type: Some("application/vnd.google-apps.folder".to_string()),
                 parents: Some(vec![self
                     .manager
@@ -454,7 +458,7 @@ impl Filesystem for GCSF {
             }),
         };
 
-        let attr = dir.attr.clone();
+        let attr = dir.attr;
         match self.manager.create_file(dir, Some(FileId::Inode(parent))) {
             Ok(()) => {
                 reply.entry(&TTL, &attr, 0);

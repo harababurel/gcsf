@@ -94,8 +94,8 @@ impl File {
             blocks: size / bsize + if size % bsize > 0 { 1 } else { 0 },
             atime,
             mtime,
-            ctime: mtime,   // Time of last change
-            crtime: crtime, // Time of creation (macOS only)
+            ctime: mtime, // Time of last change
+            crtime,       // Time of creation (macOS only)
             kind,
             perm: 0o755,
             nlink: 2,
@@ -198,9 +198,7 @@ impl File {
     }
 
     pub fn drive_parent(&self) -> Option<String> {
-        if self.drive_file.is_none() {
-            return None;
-        }
+        self.drive_file.as_ref()?;
 
         self.drive_file
             .clone()
@@ -210,9 +208,7 @@ impl File {
     }
 
     pub fn drive_id(&self) -> Option<String> {
-        if self.drive_file.is_none() {
-            return None;
-        }
+        self.drive_file.as_ref()?;
 
         self.drive_file.as_ref().unwrap().id.clone()
     }
@@ -227,9 +223,7 @@ impl File {
 
     #[allow(dead_code)]
     pub fn mime_type(&self) -> Option<String> {
-        if self.drive_file.is_none() {
-            return None;
-        }
+        self.drive_file.as_ref()?;
 
         self.drive_file.as_ref().unwrap().mime_type.clone()
     }

@@ -25,7 +25,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time;
 
-use gcsf::{Config, DriveFacade, NullFS, GCSF};
+use gcsf::{Config, DriveFacade, Gcsf, NullFs};
 
 const DEBUG_LOG: &str = "hyper::client=error,hyper::http=error,hyper::net=error,debug";
 
@@ -104,9 +104,9 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
 
     if config.mount_check() {
         unsafe {
-            match fuse::spawn_mount(NullFS {}, &mountpoint, &options) {
+            match fuse::spawn_mount(NullFs {}, &mountpoint, &options) {
                 Ok(session) => {
-                    debug!("Test mount of NullFS successful. Will mount GCSF next.");
+                    debug!("Test mount of NullFs successful. Will mount GCSF next.");
                     drop(session);
                 }
                 Err(e) => {
@@ -118,7 +118,7 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
     }
 
     info!("Creating and populating file system...");
-    let fs: GCSF = match GCSF::with_config(config) {
+    let fs: Gcsf = match Gcsf::with_config(config) {
         Ok(fs) => fs,
         Err(e) => {
             error!("{}", e);
