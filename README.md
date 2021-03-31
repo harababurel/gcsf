@@ -42,6 +42,12 @@ sudo apt-get install -y libfuse-dev libssl-dev pkg-config
 
 An AUR package is maintained by [axionl](https://github.com/axionl): [gcsf-git](https://aur.archlinux.org/packages/gcsf-git/).
 
+#### SUSE
+
+```bash
+sudo zypper install -y fuse-devel fuse rust pkgconf-pkg-config
+```
+
 #### Other linux distros
 
 Make sure you have `pkg-config` and the `fuse` library installed. These are usually found in the package repositories of major distributions.
