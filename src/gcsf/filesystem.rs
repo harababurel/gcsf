@@ -62,6 +62,7 @@ pub struct Gcsf {
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
 impl Gcsf {
+    /// Constructs a Gcsf instance using a given Config.
     pub fn with_config(config: Config) -> Result<Self, Error> {
         Ok(Gcsf {
             manager: FileManager::with_drive_facade(

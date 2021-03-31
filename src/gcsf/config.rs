@@ -5,19 +5,33 @@ use std::time::Duration;
 /// defaults for the absent values.
 #[derive(Deserialize, Clone, Debug, Default)]
 pub struct Config {
+    /// Show additional logging info?
     pub debug: Option<bool>,
+    /// Perform a mount check and fail early if it fails.
     pub mount_check: Option<bool>,
+    /// How long to cache the contents of a file after it has been accessed.
     pub cache_max_seconds: Option<u64>,
+    /// How how many files to cache.
     pub cache_max_items: Option<u64>,
+    /// How long to cache the size and capacity of the file system.
     pub cache_statfs_seconds: Option<u64>,
+    /// How many seconds to wait before checking for remote changes and updating them locally.
     pub sync_interval: Option<u64>,
+    /// Mount options.
     pub mount_options: Option<Vec<String>>,
+    /// Config directory (see XDG_CONFIG_HOME).
     pub config_dir: Option<PathBuf>,
+    /// Session name.
     pub session_name: Option<String>,
+    /// If true, use InstalledRedirect auth flow instead of InstalledInteractive.
     pub authorize_using_code: Option<bool>,
+    /// If set to true, all files with identical name will get an increasing number attached to the suffix.
     pub rename_identical_files: Option<bool>,
+    /// If set to true, will add an extension to special files (docs, presentations, sheets, drawings, sites), e.g. "\#.ods" for spreadsheets.
     pub add_extensions_to_special_files: Option<bool>,
+    /// If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
     pub skip_trash: Option<bool>,
+    /// The Google OAuth client secret for Google Drive APIs (see https://console.developers.google.com)
     pub client_secret: Option<String>,
 }
 
@@ -52,6 +66,7 @@ impl Config {
         Duration::from_secs(self.sync_interval.unwrap_or(10))
     }
 
+    /// A list of mount options.
     pub fn mount_options(&self) -> Vec<String> {
         match self.mount_options {
             Some(ref options) => options.clone(),
@@ -59,6 +74,7 @@ impl Config {
         }
     }
 
+    /// The session name.
     pub fn session_name(&self) -> &String {
         self.session_name.as_ref().unwrap()
     }
@@ -68,6 +84,7 @@ impl Config {
         Path::new(self.config_dir.as_ref().unwrap()).join(Path::new(self.session_name()))
     }
 
+    /// The path to the config dir.
     pub fn config_dir(&self) -> &PathBuf {
         self.config_dir.as_ref().unwrap()
     }

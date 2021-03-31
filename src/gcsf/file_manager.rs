@@ -294,6 +294,7 @@ impl FileManager {
         self.last_inode
     }
 
+    /// Returns true if the file identified by a given id exists in the filesystem.
     pub fn contains(&self, file_id: &FileId) -> bool {
         match file_id {
             FileId::Inode(inode) => self.node_ids.contains_key(&inode),
@@ -303,6 +304,8 @@ impl FileManager {
         }
     }
 
+    /// Returns the NodeId of a file identified by a given id.
+    /// The NodeId indicates the placement of the file in the file tree.
     pub fn get_node_id(&self, file_id: &FileId) -> Option<NodeId> {
         match file_id {
             FileId::Inode(inode) => self.node_ids.get(&inode).cloned(),
@@ -318,10 +321,13 @@ impl FileManager {
         }
     }
 
+    /// Returns the DriveId of a file identified by a given id.
+    /// The DriveId points to a Google Drive file.
     pub fn get_drive_id(&self, id: &FileId) -> Option<DriveId> {
         self.get_file(id)?.drive_id()
     }
 
+    /// Returns the inode of a file identified by a given id.
     pub fn get_inode(&self, id: &FileId) -> Option<Inode> {
         match id {
             FileId::Inode(inode) => Some(*inode),
@@ -343,6 +349,7 @@ impl FileManager {
         }
     }
 
+    /// Returns the children of a directory identified by a given id.
     pub fn get_children(&self, id: &FileId) -> Option<Vec<&File>> {
         let node_id = self.get_node_id(&id)?;
         let children: Vec<&File> = self
@@ -357,11 +364,13 @@ impl FileManager {
         Some(children)
     }
 
+    /// Returns a const reference to a file identified by a given id.
     pub fn get_file(&self, id: &FileId) -> Option<&File> {
         let inode = self.get_inode(id)?;
         self.files.get(&inode)
     }
 
+    /// Returns a mutable reference to a file identified by a given id.
     pub fn get_mut_file(&mut self, id: &FileId) -> Option<&mut File> {
         let inode = self.get_inode(&id)?;
         self.files.get_mut(&inode)

@@ -73,6 +73,7 @@ lazy_static! {
 }
 
 impl DriveFacade {
+    /// Creates a new DriveFacade with a given config.
     pub fn new(config: &Config) -> Self {
         debug!("DriveFacade::new()");
 
@@ -89,6 +90,7 @@ impl DriveFacade {
         }
     }
 
+    /// Creates a Drive authenticator.
     fn create_drive_auth(config: &Config) -> Result<GcAuthenticator, Error> {
         let secret: oauth2::ConsoleApplicationSecret =
             serde_json::from_str(config.client_secret())?;
@@ -137,11 +139,11 @@ impl DriveFacade {
     }
 
     #[allow(dead_code)]
-    fn get_file_size(&self, drive_id: &str, mime_type: Option<String>) -> u64 {
+    fn get_file_size(&self, drive_id: DriveIdRef, mime_type: Option<String>) -> u64 {
         self.get_file_content(drive_id, mime_type).unwrap().len() as u64
     }
 
-    fn get_file_metadata(&self, id: &str) -> Result<drive3::File, Error> {
+    fn get_file_metadata(&self, id: DriveIdRef) -> Result<drive3::File, Error> {
         self.hub
             .files()
             .get(id)
@@ -402,9 +404,11 @@ impl DriveFacade {
         Ok(all_files)
     }
 
+    /// Reads the contents of a Drive file starting at a certain offset.
+    /// Prefers reading from cache if possible, otherwise fetches the content from Drive.
     pub fn read(
         &mut self,
-        drive_id: &str,
+        drive_id: DriveIdRef,
         mime_type: Option<String>,
         offset: usize,
         size: usize,
@@ -430,6 +434,7 @@ impl DriveFacade {
         }
     }
 
+    /// Creates a new file on Drive. If successful, returns the file id.
     pub fn create(&mut self, drive_file: &drive3::File) -> Result<DriveId, Error> {
         let dummy_file = DummyFile::new(&[]);
         self.hub
@@ -447,6 +452,9 @@ impl DriveFacade {
             })
     }
 
+    /// Writes some data to a Drive file starting at a certain offset.
+    /// This is a lazy operation. It creates a pending write which only gets executed when flus()
+    /// is called.
     pub fn write(&mut self, id: DriveId, offset: usize, data: &[u8]) {
         let pending_write = PendingWrite {
             id: id.clone(),
@@ -460,6 +468,7 @@ impl DriveFacade {
             .push(pending_write);
     }
 
+    /// Deletes a file permanently from Drive.
     pub fn delete_permanently(&mut self, id: DriveIdRef) -> Result<bool, Error> {
         self.hub
             .files()
@@ -471,6 +480,7 @@ impl DriveFacade {
             .map_err(|e| err_msg(format!("{:#?}", e)))
     }
 
+    /// `mv` operation. Can potentially move a file to a new directory and/or rename it.
     pub fn move_to(
         &mut self,
         id: DriveIdRef,
@@ -497,6 +507,7 @@ impl DriveFacade {
             .map_err(|e| err_msg(format!("DriveFacade::move_to() {}", e)))
     }
 
+    /// Marks a Google Drive file as trashed.
     pub fn move_to_trash(&mut self, id: DriveId) -> Result<(), Error> {
         let f = drive3::File {
             trashed: Some(true),
@@ -512,6 +523,7 @@ impl DriveFacade {
             .map_err(|e| err_msg(format!("DriveFacade::move_to_trash() {}", e)))
     }
 
+    /// Applies pending write operations. Similar to flushing a stream.
     pub fn flush(&mut self, id: DriveIdRef) -> Result<(), Error> {
         if !self.pending_writes.contains_key(id) {
             debug!("flush({}): no pending writes", id);
