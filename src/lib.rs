@@ -10,7 +10,7 @@
 )]
 extern crate chrono;
 extern crate failure;
-extern crate fuse;
+extern crate fuser;
 extern crate google_drive3_fork as drive3;
 extern crate hyper;
 extern crate hyper_native_tls;
@@ -28,7 +28,6 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate serde_derive;
-extern crate time;
 extern crate yup_oauth2 as oauth2;
 #[macro_use]
 extern crate lazy_static;

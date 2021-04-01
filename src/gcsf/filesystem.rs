@@ -1,22 +1,26 @@
 use super::{Config, File, FileId, FileManager};
 use drive3;
 use failure::Error;
-use fuse::{
-    FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
-    ReplyEntry, ReplyStatfs, ReplyWrite, Request,
+use fuser::{
+    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyBmap, ReplyCreate, ReplyData,
+    ReplyDirectory, ReplyDirectoryPlus, ReplyEmpty, ReplyEntry, ReplyIoctl, ReplyLock, ReplyLseek,
+    ReplyOpen, ReplyStatfs, ReplyWrite, ReplyXattr, Request, TimeOrNow,
 };
+use libc::c_int;
 use libc::{ENOENT, ENOTDIR, ENOTRECOVERABLE, EREMOTE};
 use lru_time_cache::LruCache;
 use std;
 use std::clone::Clone;
 use std::cmp;
 use std::ffi::OsStr;
-use time::Timespec;
+use std::path::Path;
+use std::time::{Duration, SystemTime};
 use DriveFacade;
 
 pub type Inode = u64;
 
 const TRASH_INODE: Inode = 2;
+const TTL: Duration = Duration::from_secs(1);
 
 macro_rules! log_result {
     ($expr:expr) => {
@@ -59,8 +63,6 @@ pub struct Gcsf {
     statfs_cache: LruCache<String, u64>,
 }
 
-const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
-
 impl Gcsf {
     /// Constructs a Gcsf instance using a given Config.
     pub fn with_config(config: Config) -> Result<Self, Error> {
@@ -81,7 +83,17 @@ impl Gcsf {
 }
 
 impl Filesystem for Gcsf {
-    fn lookup(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEntry) {
+    fn init(&mut self, _req: &Request<'_>, _config: &mut KernelConfig) -> Result<(), c_int> {
+        debug!("called init()");
+        Ok(())
+    }
+
+    fn destroy(&mut self, _req: &Request<'_>) {
+        debug!("called destroy()");
+    }
+
+    fn lookup(&mut self, _req: &Request<'_>, parent: Inode, name: &OsStr, reply: ReplyEntry) {
+        debug!("called lookup()");
         // self.manager.sync();
 
         let name = name.to_str().unwrap().to_string();
@@ -97,7 +109,12 @@ impl Filesystem for Gcsf {
         };
     }
 
-    fn getattr(&mut self, _req: &Request, ino: Inode, reply: ReplyAttr) {
+    fn forget(&mut self, _req: &Request<'_>, _ino: Inode, _nlookup: u64) {
+        debug!("called forget()");
+    }
+
+    fn getattr(&mut self, _req: &Request<'_>, ino: u64, reply: ReplyAttr) {
+        debug!("called getattr()");
         // self.manager.sync();
         match self.manager.get_file(&FileId::Inode(ino)) {
             Some(file) => {
@@ -109,150 +126,25 @@ impl Filesystem for Gcsf {
         };
     }
 
-    fn read(
-        &mut self,
-        _req: &Request,
-        ino: Inode,
-        _fh: u64,
-        offset: i64,
-        size: u32,
-        reply: ReplyData,
-    ) {
-        if !self.manager.contains(&FileId::Inode(ino)) {
-            reply.error(ENOENT);
-            return;
-        }
-
-        let (mime, id) = self
-            .manager
-            .get_file(&FileId::Inode(ino))
-            .map(|f| {
-                let mime = f
-                    .drive_file
-                    .as_ref()
-                    .and_then(|f| f.mime_type.as_ref())
-                    .cloned();
-                let id = f.drive_id().unwrap();
-
-                (mime, id)
-            })
-            .unwrap();
-
-        reply.data(
-            self.manager
-                .df
-                .read(&id, mime, offset as usize, size as usize)
-                .unwrap_or(&[]),
-        );
-    }
-
-    fn write(
-        &mut self,
-        _req: &Request,
-        ino: Inode,
-        _fh: u64,
-        offset: i64,
-        data: &[u8],
-        _flags: u32,
-        reply: ReplyWrite,
-    ) {
-        let offset: usize = cmp::max(offset, 0) as usize;
-        self.manager.write(FileId::Inode(ino), offset, data);
-
-        match self.manager.get_mut_file(&FileId::Inode(ino)) {
-            Some(ref mut file) => {
-                file.attr.size = offset as u64 + data.len() as u64;
-                reply.written(data.len() as u32);
-            }
-            None => {
-                reply.error(ENOENT);
-            }
-        };
-    }
-
-    fn readdir(
-        &mut self,
-        _req: &Request,
-        ino: Inode,
-        _fh: u64,
-        offset: i64,
-        mut reply: ReplyDirectory,
-    ) {
-        if let Err(e) = self.manager.sync() {
-            debug!("Could not perform sync: {}", e);
-        }
-        // println!("current state: {:#?}", self.manager);
-
-        let mut curr_offs = offset + 1;
-        match self.manager.get_children(&FileId::Inode(ino)) {
-            Some(children) => {
-                for child in children.iter().skip(offset as usize) {
-                    if reply.add(child.inode(), curr_offs, child.kind(), &child.name()) {
-                        break;
-                    } else {
-                        curr_offs += 1;
-                    }
-                }
-                reply.ok();
-            }
-            None => {
-                reply.error(ENOENT);
-            }
-        };
-    }
-
-    fn rename(
-        &mut self,
-        _req: &Request,
-        parent: Inode,
-        name: &OsStr,
-        new_parent: Inode,
-        new_name: &OsStr,
-        reply: ReplyEmpty,
-    ) {
-        let name = name.to_str().unwrap().to_string();
-        let new_name = new_name.to_str().unwrap().to_string();
-
-        let id = FileId::Inode(
-            self.manager
-                .get_inode(&FileId::ParentAndName { parent, name })
-                .unwrap_or(0),
-        );
-
-        if new_parent == TRASH_INODE {
-            let rename_res = self.manager.rename(&id, parent, new_name);
-            log_result!(&rename_res);
-
-            let trash_res = self.manager.move_file_to_trash(&id, true);
-            log_result!(&trash_res);
-
-            if rename_res.is_ok() && trash_res.is_ok() {
-                reply.ok();
-            } else {
-                reply.error(EREMOTE);
-            }
-        } else {
-            log_result_and_fill_reply!(self.manager.rename(&id, new_parent, new_name), reply);
-        }
-    }
-
     fn setattr(
         &mut self,
-        _req: &Request,
+        _req: &Request<'_>,
         ino: Inode,
         _mode: Option<u32>,
         uid: Option<u32>,
         gid: Option<u32>,
         size: Option<u64>,
-        atime: Option<Timespec>,
-        mtime: Option<Timespec>,
+        atime: Option<TimeOrNow>,
+        mtime: Option<TimeOrNow>,
+        ctime: Option<SystemTime>,
         _fh: Option<u64>,
-        crtime: Option<Timespec>,
-        chgtime: Option<Timespec>,
-        _bkuptime: Option<Timespec>,
+        crtime: Option<SystemTime>,
+        _chgtime: Option<SystemTime>,
+        _bkuptime: Option<SystemTime>,
         flags: Option<u32>,
         reply: ReplyAttr,
     ) {
+        debug!("called setattr()");
         if !self.manager.contains(&FileId::Inode(ino)) {
             error!("setattr: could not find inode={} in the file tree", ino);
             reply.error(ENOENT);
@@ -266,9 +158,17 @@ impl Filesystem for Gcsf {
             kind: file.attr.kind,
             size: size.unwrap_or(file.attr.size),
             blocks: file.attr.blocks,
-            atime: atime.unwrap_or(file.attr.atime),
-            mtime: mtime.unwrap_or(file.attr.mtime),
-            ctime: chgtime.unwrap_or(file.attr.ctime),
+            blksize: file.attr.blksize,
+            padding: file.attr.padding,
+            atime: match atime.unwrap_or(TimeOrNow::SpecificTime(file.attr.atime)) {
+                TimeOrNow::SpecificTime(t) => t,
+                TimeOrNow::Now => SystemTime::now(),
+            },
+            mtime: match mtime.unwrap_or(TimeOrNow::SpecificTime(file.attr.mtime)) {
+                TimeOrNow::SpecificTime(t) => t,
+                TimeOrNow::Now => SystemTime::now(),
+            },
+            ctime: ctime.unwrap_or(file.attr.ctime),
             crtime: crtime.unwrap_or(file.attr.crtime),
             perm: file.attr.perm,
             nlink: file.attr.nlink,
@@ -282,21 +182,41 @@ impl Filesystem for Gcsf {
         reply.attr(&TTL, &file.attr);
     }
 
-    fn create(
+    fn readlink(&mut self, _req: &Request<'_>, _ino: u64, reply: ReplyData) {
+        debug!("called readlink()");
+        reply.error(1);
+    }
+
+    fn mknod(
         &mut self,
-        req: &Request,
+        _req: &Request<'_>,
+        _parent: u64,
+        _name: &OsStr,
+        _mode: u32,
+        _umask: u32,
+        _rdev: u32,
+        reply: ReplyEntry,
+    ) {
+        debug!("called mknod()");
+        reply.error(1);
+    }
+
+    fn mkdir(
+        &mut self,
+        _req: &Request<'_>,
         parent: Inode,
         name: &OsStr,
         _mode: u32,
-        _flags: u32,
-        reply: ReplyCreate,
+        _umask: u32,
+        reply: ReplyEntry,
     ) {
-        let filename = name.to_str().unwrap().to_string();
+        debug!("called mkdir()");
+        let dirname = name.to_str().unwrap().to_string();
 
         // TODO: these two checks might not be necessary
         if !self.manager.contains(&FileId::Inode(parent)) {
             error!(
-                "create: could not find parent inode={} in the file tree",
+                "mkdir: could not find parent inode={} in the file tree",
                 parent
             );
             reply.error(ENOTDIR);
@@ -304,38 +224,40 @@ impl Filesystem for Gcsf {
         }
         if self.manager.contains(&FileId::ParentAndName {
             parent,
-            name: filename.clone(),
+            name: dirname.clone(),
         }) {
             error!(
-                "create: file {:?} of parent(inode={}) already exists",
+                "mkdir: file {:?} of parent(inode={}) already exists",
                 name, parent
             );
             reply.error(ENOTDIR);
             return;
         }
 
-        let file = File {
-            name: filename.clone(),
+        let dir = File {
+            name: dirname.clone(),
             attr: FileAttr {
                 ino: self.manager.next_available_inode(),
-                kind: FileType::RegularFile,
-                size: 0,
-                blocks: 123,
-                atime: Timespec::new(1, 0),
-                mtime: Timespec::new(1, 0),
-                ctime: Timespec::new(1, 0),
-                crtime: Timespec::new(1, 0),
-                perm: 0o744,
+                kind: FileType::Directory,
+                size: 512,
+                blocks: 1,
+                blksize: 0,
+                padding: 0,
+                atime: SystemTime::now(),
+                mtime: SystemTime::now(),
+                ctime: SystemTime::now(),
+                crtime: SystemTime::now(),
+                perm: 0o644,
                 nlink: 0,
-                uid: req.uid(),
-                gid: req.gid(),
+                uid: 0,
+                gid: 0,
                 rdev: 0,
                 flags: 0,
             },
             identical_name_id: None,
             drive_file: Some(drive3::File {
-                name: Some(filename),
-                mime_type: None,
+                name: Some(dirname),
+                mime_type: Some("application/vnd.google-apps.folder".to_string()),
                 parents: Some(vec![self
                     .manager
                     .get_drive_id(&FileId::Inode(parent))
@@ -344,19 +266,20 @@ impl Filesystem for Gcsf {
             }),
         };
 
-        let attr = file.attr;
-        match self.manager.create_file(file, Some(FileId::Inode(parent))) {
+        let attr = dir.attr;
+        match self.manager.create_file(dir, Some(FileId::Inode(parent))) {
             Ok(()) => {
-                reply.created(&TTL, &attr, 0, 0, 0);
+                reply.entry(&TTL, &attr, 0);
             }
             Err(e) => {
-                error!("create: {}", e);
+                error!("mkdir: {}", e);
                 reply.error(EREMOTE);
             }
         }
     }
 
-    fn unlink(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
+    fn unlink(&mut self, _req: &Request<'_>, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
+        debug!("called unlink()");
         let id = FileId::ParentAndName {
             parent,
             name: name.to_str().unwrap().to_string(),
@@ -396,86 +319,153 @@ impl Filesystem for Gcsf {
         }
     }
 
-    fn forget(&mut self, _req: &Request, _ino: u64, _nlookup: u64) {}
-
-    fn mkdir(
-        &mut self,
-        _req: &Request,
-        parent: Inode,
-        name: &OsStr,
-        _mode: u32,
-        reply: ReplyEntry,
-    ) {
-        let dirname = name.to_str().unwrap().to_string();
-
-        // TODO: these two checks might not be necessary
-        if !self.manager.contains(&FileId::Inode(parent)) {
-            error!(
-                "mkdir: could not find parent inode={} in the file tree",
-                parent
-            );
-            reply.error(ENOTDIR);
-            return;
-        }
-        if self.manager.contains(&FileId::ParentAndName {
-            parent,
-            name: dirname.clone(),
-        }) {
-            error!(
-                "mkdir: file {:?} of parent(inode={}) already exists",
-                name, parent
-            );
-            reply.error(ENOTDIR);
-            return;
-        }
-
-        let dir = File {
-            name: dirname.clone(),
-            attr: FileAttr {
-                ino: self.manager.next_available_inode(),
-                kind: FileType::Directory,
-                size: 512,
-                blocks: 1,
-                atime: Timespec::new(1, 0),
-                mtime: Timespec::new(1, 0),
-                ctime: Timespec::new(1, 0),
-                crtime: Timespec::new(1, 0),
-                perm: 0o644,
-                nlink: 0,
-                uid: 0,
-                gid: 0,
-                rdev: 0,
-                flags: 0,
-            },
-            identical_name_id: None,
-            drive_file: Some(drive3::File {
-                name: Some(dirname),
-                mime_type: Some("application/vnd.google-apps.folder".to_string()),
-                parents: Some(vec![self
-                    .manager
-                    .get_drive_id(&FileId::Inode(parent))
-                    .unwrap()]),
-                ..Default::default()
-            }),
-        };
-
-        let attr = dir.attr;
-        match self.manager.create_file(dir, Some(FileId::Inode(parent))) {
-            Ok(()) => {
-                reply.entry(&TTL, &attr, 0);
-            }
-            Err(e) => {
-                error!("mkdir: {}", e);
-                reply.error(EREMOTE);
-            }
-        }
-    }
-
-    fn rmdir(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
+    fn rmdir(&mut self, _req: &Request<'_>, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
+        debug!("called rmdir()");
         self.unlink(_req, parent, name, reply);
     }
 
-    fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
+    fn symlink(
+        &mut self,
+        _req: &Request<'_>,
+        _parent: u64,
+        _name: &OsStr,
+        _link: &Path,
+        reply: ReplyEntry,
+    ) {
+        debug!("called symlink()");
+        reply.error(1);
+    }
+
+    fn rename(
+        &mut self,
+        _req: &Request<'_>,
+        parent: Inode,
+        name: &OsStr,
+        newparent: u64,
+        newname: &OsStr,
+        _flags: u32,
+        reply: ReplyEmpty,
+    ) {
+        debug!("called rename()");
+        let name = name.to_str().unwrap().to_string();
+        let newname = newname.to_str().unwrap().to_string();
+
+        let id = FileId::Inode(
+            self.manager
+                .get_inode(&FileId::ParentAndName { parent, name })
+                .unwrap_or(0),
+        );
+
+        if newparent == TRASH_INODE {
+            let rename_res = self.manager.rename(&id, parent, newname);
+            log_result!(&rename_res);
+
+            let trash_res = self.manager.move_file_to_trash(&id, true);
+            log_result!(&trash_res);
+
+            if rename_res.is_ok() && trash_res.is_ok() {
+                reply.ok();
+            } else {
+                reply.error(EREMOTE);
+            }
+        } else {
+            log_result_and_fill_reply!(self.manager.rename(&id, newparent, newname), reply);
+        }
+    }
+
+    fn link(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _newparent: u64,
+        _newname: &OsStr,
+        reply: ReplyEntry,
+    ) {
+        debug!("called link()");
+        reply.error(1);
+    }
+
+    fn open(&mut self, _req: &Request<'_>, _ino: u64, flags: i32, reply: ReplyOpen) {
+        debug!("called open()");
+        reply.opened(1, flags as u32);
+    }
+
+    fn read(
+        &mut self,
+        _req: &Request<'_>,
+        ino: Inode,
+        _fh: u64,
+        offset: i64,
+        size: u32,
+        _flags: i32,
+        _lock_owner: Option<u64>,
+        reply: ReplyData,
+    ) {
+        debug!("called read()");
+        if !self.manager.contains(&FileId::Inode(ino)) {
+            reply.error(ENOENT);
+            return;
+        }
+
+        let (mime, id) = self
+            .manager
+            .get_file(&FileId::Inode(ino))
+            .map(|f| {
+                let mime = f
+                    .drive_file
+                    .as_ref()
+                    .and_then(|f| f.mime_type.as_ref())
+                    .cloned();
+                let id = f.drive_id().unwrap();
+
+                (mime, id)
+            })
+            .unwrap();
+
+        reply.data(
+            self.manager
+                .df
+                .read(&id, mime, offset as usize, size as usize)
+                .unwrap_or(&[]),
+        );
+    }
+
+    fn write(
+        &mut self,
+        _req: &Request<'_>,
+        ino: Inode,
+        _fh: u64,
+        offset: i64,
+        data: &[u8],
+        _write_flags: u32,
+        _flags: i32,
+        _lock_owner: Option<u64>,
+        reply: ReplyWrite,
+    ) {
+        debug!("called write()");
+        let offset = cmp::max(offset, 0) as usize;
+        self.manager.write(FileId::Inode(ino), offset, data);
+
+        match self.manager.get_mut_file(&FileId::Inode(ino)) {
+            Some(ref mut file) => {
+                file.attr.size = offset as u64 + data.len() as u64;
+                reply.written(data.len() as u32);
+            }
+            None => {
+                reply.error(ENOENT);
+            }
+        };
+    }
+
+    fn flush(
+        &mut self,
+        _req: &Request<'_>,
+        ino: Inode,
+        _fh: u64,
+        _lock_owner: u64,
+        reply: ReplyEmpty,
+    ) {
+        debug!("called flush()");
         match self.manager.flush(&FileId::Inode(ino)) {
             Ok(()) => reply.ok(),
             Err(e) => {
@@ -485,7 +475,112 @@ impl Filesystem for Gcsf {
         }
     }
 
-    fn statfs(&mut self, _req: &Request, _ino: u64, reply: ReplyStatfs) {
+    fn release(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _flags: i32,
+        _lock_owner: Option<u64>,
+        _flush: bool,
+        reply: ReplyEmpty,
+    ) {
+        debug!("called release()");
+        reply.error(1);
+    }
+
+    fn fsync(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: Inode,
+        _fh: u64,
+        _datasync: bool,
+        reply: ReplyEmpty,
+    ) {
+        debug!("called fsync()");
+        if let Err(e) = self.manager.sync() {
+            debug!("Could not perform sync: {}", e);
+            reply.error(1);
+        } else {
+            reply.ok();
+        }
+    }
+
+    fn opendir(&mut self, _req: &Request<'_>, ino: u64, flags: i32, reply: ReplyOpen) {
+        debug!("called opendir()");
+        reply.opened(ino, flags as u32);
+    }
+
+    fn readdir(
+        &mut self,
+        _req: &Request<'_>,
+        ino: Inode,
+        _fh: u64,
+        offset: i64,
+        mut reply: ReplyDirectory,
+    ) {
+        debug!("called readdir()");
+        if let Err(e) = self.manager.sync() {
+            debug!("Could not perform sync: {}", e);
+        }
+        // println!("current state: {:#?}", self.manager);
+
+        let mut curr_offs = offset + 1;
+        match self.manager.get_children(&FileId::Inode(ino)) {
+            Some(children) => {
+                for child in children.iter().skip(offset as usize) {
+                    if reply.add(child.inode(), curr_offs, child.kind(), &child.name()) {
+                        break;
+                    } else {
+                        curr_offs += 1;
+                    }
+                }
+                reply.ok();
+            }
+            None => {
+                reply.error(ENOENT);
+            }
+        };
+    }
+
+    fn readdirplus(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _offset: i64,
+        reply: ReplyDirectoryPlus,
+    ) {
+        debug!("called readdirplus()");
+        reply.error(1);
+    }
+
+    fn releasedir(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _flags: i32,
+        reply: ReplyEmpty,
+    ) {
+        debug!("called releasedir()");
+        reply.error(1);
+    }
+
+    fn fsyncdir(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _datasync: bool,
+        reply: ReplyEmpty,
+    ) {
+        debug!("called fsyncdir()");
+        reply.error(1);
+    }
+
+    fn statfs(&mut self, _req: &Request<'_>, _ino: Inode, reply: ReplyStatfs) {
+        debug!("called statfs()");
         let (size, capacity) = if !self.statfs_cache.contains_key("size")
             || !self.statfs_cache.contains_key("capacity")
         {
@@ -517,5 +612,228 @@ impl Filesystem for Gcsf {
             /* namelen: */ 1024,
             /* frsize: */ bsize as u32,
         );
+    }
+
+    fn setxattr(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _name: &OsStr,
+        _value: &[u8],
+        _flags: i32,
+        _position: u32,
+        reply: ReplyEmpty,
+    ) {
+        debug!("called setxattr()");
+        reply.error(1);
+    }
+
+    fn getxattr(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _name: &OsStr,
+        _size: u32,
+        reply: ReplyXattr,
+    ) {
+        debug!("called getxattr()");
+        reply.error(1);
+    }
+
+    fn listxattr(&mut self, _req: &Request<'_>, _ino: u64, _size: u32, reply: ReplyXattr) {
+        debug!("called listxattr()");
+        reply.error(1);
+    }
+
+    fn removexattr(&mut self, _req: &Request<'_>, _ino: u64, _name: &OsStr, reply: ReplyEmpty) {
+        debug!("called removexattr()");
+        reply.error(1);
+    }
+
+    fn access(&mut self, _req: &Request<'_>, _ino: u64, _mask: i32, reply: ReplyEmpty) {
+        debug!("called access()");
+        reply.ok();
+    }
+
+    fn create(
+        &mut self,
+        req: &Request<'_>,
+        parent: Inode,
+        name: &OsStr,
+        _mode: u32,
+        _umask: u32,
+        _flags: i32,
+        reply: ReplyCreate,
+    ) {
+        debug!("called create()");
+        let filename = name.to_str().unwrap().to_string();
+
+        // TODO: these two checks might not be necessary
+        if !self.manager.contains(&FileId::Inode(parent)) {
+            error!(
+                "create: could not find parent inode={} in the file tree",
+                parent
+            );
+            reply.error(ENOTDIR);
+            return;
+        }
+        if self.manager.contains(&FileId::ParentAndName {
+            parent,
+            name: filename.clone(),
+        }) {
+            error!(
+                "create: file {:?} of parent(inode={}) already exists",
+                name, parent
+            );
+            reply.error(ENOTDIR);
+            return;
+        }
+
+        let file = File {
+            name: filename.clone(),
+            attr: FileAttr {
+                ino: self.manager.next_available_inode(),
+                kind: FileType::RegularFile,
+                size: 0,
+                blocks: 123,
+                blksize: 0,
+                padding: 0,
+                atime: SystemTime::now(),
+                mtime: SystemTime::now(),
+                ctime: SystemTime::now(),
+                crtime: SystemTime::now(),
+                perm: 0o744,
+                nlink: 0,
+                uid: req.uid(),
+                gid: req.gid(),
+                rdev: 0,
+                flags: 0,
+            },
+            identical_name_id: None,
+            drive_file: Some(drive3::File {
+                name: Some(filename),
+                mime_type: None,
+                parents: Some(vec![self
+                    .manager
+                    .get_drive_id(&FileId::Inode(parent))
+                    .unwrap()]),
+                ..Default::default()
+            }),
+        };
+
+        let attr = file.attr;
+        match self.manager.create_file(file, Some(FileId::Inode(parent))) {
+            Ok(()) => {
+                reply.created(&TTL, &attr, 0, 0, 0);
+            }
+            Err(e) => {
+                error!("create: {}", e);
+                reply.error(EREMOTE);
+            }
+        }
+    }
+
+    fn getlk(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _lock_owner: u64,
+        _start: u64,
+        _end: u64,
+        _typ: i32,
+        _pid: u32,
+        reply: ReplyLock,
+    ) {
+        debug!("called getlk()");
+        reply.error(1);
+    }
+
+    fn setlk(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _lock_owner: u64,
+        _start: u64,
+        _end: u64,
+        _typ: i32,
+        _pid: u32,
+        _sleep: bool,
+        reply: ReplyEmpty,
+    ) {
+        debug!("called setlk()");
+        reply.error(1);
+    }
+
+    fn bmap(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _blocksize: u32,
+        _idx: u64,
+        reply: ReplyBmap,
+    ) {
+        debug!("called bmap()");
+        reply.error(1);
+    }
+
+    fn ioctl(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _flags: u32,
+        _cmd: u32,
+        _in_data: &[u8],
+        _out_size: u32,
+        reply: ReplyIoctl,
+    ) {
+        debug!("called ioctl()");
+        reply.error(1);
+    }
+
+    fn fallocate(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _offset: i64,
+        _length: i64,
+        _mode: i32,
+        reply: ReplyEmpty,
+    ) {
+        debug!("called fallocate()");
+        reply.error(1);
+    }
+
+    fn lseek(
+        &mut self,
+        _req: &Request<'_>,
+        _ino: u64,
+        _fh: u64,
+        _offset: i64,
+        _whence: i32,
+        reply: ReplyLseek,
+    ) {
+        debug!("called lseek()");
+        reply.error(1);
+    }
+
+    fn copy_file_range(
+        &mut self,
+        _req: &Request<'_>,
+        _ino_in: u64,
+        _fh_in: u64,
+        _offset_in: i64,
+        _ino_out: u64,
+        _fh_out: u64,
+        _offset_out: i64,
+        _len: u64,
+        _flags: u32,
+        reply: ReplyWrite,
+    ) {
+        debug!("called copy_file_range()");
+        reply.error(1);
     }
 }

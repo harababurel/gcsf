@@ -32,8 +32,6 @@ mount_options = [
     # Allow file system access to root. This only works if `user_allow_other`
     # is set in /etc/fuse.conf
     "allow_root",
-    "big_writes",
-    "max_write=131072"
 ]
 
 # If set to true, Google Drive will provide a code after logging in and

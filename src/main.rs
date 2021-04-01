@@ -3,7 +3,7 @@ extern crate clap;
 extern crate config;
 extern crate ctrlc;
 extern crate failure;
-extern crate fuse;
+extern crate fuser;
 extern crate gcsf;
 #[macro_use]
 extern crate log;
@@ -27,10 +27,10 @@ use std::time;
 
 use gcsf::{Config, DriveFacade, Gcsf, NullFs};
 
-const DEBUG_LOG: &str = "hyper::client=error,hyper::http=error,hyper::net=error,debug";
+const DEBUG_LOG: &str = "hyper::client=info,hyper::http=info,hyper::net=info,debug";
 
 const INFO_LOG: &str =
-    "hyper::client=error,hyper::http=error,hyper::net=error,fuse::session=error,info";
+    "hyper::client=error,hyper::http=error,hyper::net=error,fuser::session=error,info";
 
 const DEFAULT_CONFIG: &str = r#"
 ### This is the configuration file that GCSF uses.
@@ -67,8 +67,6 @@ mount_options = [
     # Allow file system access to root. This only works if `user_allow_other`
     # is set in /etc/fuse.conf
     "allow_root",
-    "big_writes",
-    "max_write=131072"
 ]
 
 # If set to true, Google Drive will provide a code after logging in and
@@ -91,7 +89,7 @@ skip_trash = false
 
 # The Google OAuth client secret for Google Drive APIs. Create your own
 # credentials at https://console.developers.google.com and paste them here
-client_secret = """{"installed":{"client_id":"726003905312-e2mq9mesjc5llclmvc04ef1k7qopv9tu.apps.googleusercontent.com","project_id":"weighty-triode-199418","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"hp83n1Rzz8UpxgCnqvX15qC2","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"""
+client_secret = """{"installed":{"client_id":"892276709198-2ksebnrqkhihtf5p743k4ce5bk0n7p5a.apps.googleusercontent.com","project_id":"gcsf-v02","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://oauth2.googleapis.com/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"1ImxorJzh-PuH2CxrcLPnJMU","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"""
 "#;
 
 fn mount_gcsf(config: Config, mountpoint: &str) {
@@ -103,52 +101,48 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
     options.pop();
 
     if config.mount_check() {
-        unsafe {
-            match fuse::spawn_mount(NullFs {}, &mountpoint, &options) {
-                Ok(session) => {
-                    debug!("Test mount of NullFs successful. Will mount GCSF next.");
-                    drop(session);
-                }
-                Err(e) => {
-                    error!("Could not mount to {}: {}", &mountpoint, e);
-                    return;
-                }
-            };
-        }
+        match fuser::spawn_mount(NullFs {}, &mountpoint, &options) {
+            Ok(session) => {
+                debug!("Test mount of NullFs successful. Will mount GCSF next.");
+                drop(session);
+            }
+            Err(e) => {
+                error!("Could not mount to {}: {}", &mountpoint, e);
+                return;
+            }
+        };
     }
 
     info!("Creating and populating file system...");
     let fs: Gcsf = match Gcsf::with_config(config) {
         Ok(fs) => fs,
         Err(e) => {
-            error!("{}", e);
+            error!("Could not create GCSF instance: {}", e);
             return;
         }
     };
     info!("File system created.");
 
-    unsafe {
-        info!("Mounting to {}", &mountpoint);
-        match fuse::spawn_mount(fs, &mountpoint, &options) {
-            Ok(_session) => {
-                info!("Mounted to {}", &mountpoint);
+    info!("Mounting to {}", &mountpoint);
+    match fuser::spawn_mount(fs, &mountpoint, &options) {
+        Ok(_session) => {
+            info!("Mounted to {}", &mountpoint);
 
-                let running = Arc::new(AtomicBool::new(true));
-                let r = running.clone();
+            let running = Arc::new(AtomicBool::new(true));
+            let r = running.clone();
 
-                ctrlc::set_handler(move || {
-                    info!("Ctrl-C detected");
-                    r.store(false, Ordering::SeqCst);
-                })
-                .expect("Error setting Ctrl-C handler");
+            ctrlc::set_handler(move || {
+                info!("Ctrl-C detected");
+                r.store(false, Ordering::SeqCst);
+            })
+            .expect("Error setting Ctrl-C handler");
 
-                while running.load(Ordering::SeqCst) {
-                    thread::sleep(time::Duration::from_millis(50));
-                }
+            while running.load(Ordering::SeqCst) {
+                thread::sleep(time::Duration::from_millis(50));
             }
-            Err(e) => error!("Could not mount to {}: {}", &mountpoint, e),
-        };
-    }
+        }
+        Err(e) => error!("Could not mount to {}: {}", &mountpoint, e),
+    };
 }
 
 fn login(config: &mut Config) -> Result<(), Error> {
@@ -196,6 +190,10 @@ fn load_conf() -> Result<Config, Error> {
 
 fn main() {
     let mut config = load_conf().expect("Could not load configuration file.");
+
+    if config.debug() {
+        info!("Debug mode enabled.");
+    }
 
     pretty_env_logger::formatted_builder()
         .parse_filters(if config.debug() { DEBUG_LOG } else { INFO_LOG })

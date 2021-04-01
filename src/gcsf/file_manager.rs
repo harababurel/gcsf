@@ -1,7 +1,7 @@
 use super::{File, FileId};
 use drive3;
 use failure::{err_msg, Error};
-use fuse::{FileAttr, FileType};
+use fuser::{FileAttr, FileType};
 use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
@@ -10,7 +10,6 @@ use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fmt;
 use std::time::{Duration, SystemTime};
-use time::Timespec;
 use DriveFacade;
 
 pub type Inode = u64;
@@ -245,10 +244,12 @@ impl FileManager {
                 ino: ROOT_INODE,
                 size: 512,
                 blocks: 1,
-                atime: Timespec { sec: 0, nsec: 0 },
-                mtime: Timespec { sec: 0, nsec: 0 },
-                ctime: Timespec { sec: 0, nsec: 0 },
-                crtime: Timespec { sec: 0, nsec: 0 },
+                blksize: 0,
+                padding: 0,
+                atime: SystemTime::now(),
+                mtime: SystemTime::now(),
+                ctime: SystemTime::now(),
+                crtime: SystemTime::now(),
                 kind: FileType::Directory,
                 perm: 0o755,
                 nlink: 2,
@@ -271,10 +272,12 @@ impl FileManager {
                 ino: preferred_inode.unwrap_or_else(|| self.next_available_inode()),
                 size: 512,
                 blocks: 1,
-                atime: Timespec { sec: 0, nsec: 0 },
-                mtime: Timespec { sec: 0, nsec: 0 },
-                ctime: Timespec { sec: 0, nsec: 0 },
-                crtime: Timespec { sec: 0, nsec: 0 },
+                blksize: 0,
+                padding: 0,
+                atime: SystemTime::now(),
+                mtime: SystemTime::now(),
+                ctime: SystemTime::now(),
+                crtime: SystemTime::now(),
                 kind: FileType::Directory,
                 perm: 0o755,
                 nlink: 2,

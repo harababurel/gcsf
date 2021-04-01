@@ -1,10 +1,10 @@
 use chrono::DateTime;
 use drive3;
 use failure::{err_msg, Error};
-use fuse::{FileAttr, FileType};
+use fuser::{FileAttr, FileType};
 use id_tree::NodeId;
 use std::collections::HashMap;
-use time::Timespec;
+use std::time::{Duration, SystemTime};
 
 type Inode = u64;
 type DriveId = String;
@@ -76,11 +76,11 @@ impl File {
         .iter()
         .map(
             |time| match DateTime::parse_from_rfc3339(time.as_ref().unwrap_or(&String::new())) {
-                Ok(t) => Timespec {
-                    sec: t.timestamp(),
-                    nsec: t.timestamp_subsec_nanos() as i32,
-                },
-                Err(_) => Timespec { sec: 0, nsec: 0 },
+                Ok(t) => {
+                    SystemTime::UNIX_EPOCH
+                        + Duration::new(t.timestamp() as u64, t.timestamp_subsec_nanos())
+                }
+                Err(_) => SystemTime::UNIX_EPOCH,
             },
         )
         .collect();
@@ -92,6 +92,8 @@ impl File {
             ino: inode,
             size,
             blocks: size / bsize + if size % bsize > 0 { 1 } else { 0 },
+            blksize: 0,
+            padding: 0,
             atime,
             mtime,
             ctime: mtime, // Time of last change
