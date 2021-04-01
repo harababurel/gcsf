@@ -13,6 +13,7 @@ use std::time::{Duration, SystemTime};
 use DriveFacade;
 
 pub type Inode = u64;
+pub type FileHandle = u64;
 pub type DriveId = String;
 
 const ROOT_INODE: Inode = 1;
@@ -66,6 +67,8 @@ pub struct FileManager {
     pub skip_trash: bool,
 
     last_inode: Inode,
+
+    last_fh: FileHandle,
 }
 
 impl FileManager {
@@ -90,6 +93,7 @@ impl FileManager {
             sync_interval,
             df,
             last_inode: 2,
+            last_fh: 3,
         };
 
         manager
@@ -295,6 +299,12 @@ impl FileManager {
     pub fn next_available_inode(&mut self) -> Inode {
         self.last_inode += 1;
         self.last_inode
+    }
+
+    /// Returns the next unused file handle.
+    pub fn next_available_fh(&mut self) -> FileHandle {
+        self.last_fh += 1;
+        self.last_fh
     }
 
     /// Returns true if the file identified by a given id exists in the filesystem.

@@ -385,9 +385,14 @@ impl Filesystem for Gcsf {
         reply.error(1);
     }
 
-    fn open(&mut self, _req: &Request<'_>, _ino: u64, flags: i32, reply: ReplyOpen) {
+    fn open(&mut self, _req: &Request<'_>, ino: u64, flags: i32, reply: ReplyOpen) {
         debug!("called open()");
-        reply.opened(1, flags as u32);
+        if !self.manager.contains(&FileId::Inode(ino)) {
+            error!("open: could not find inode={} in the file tree", ino);
+            reply.error(ENOENT);
+        } else {
+            reply.opened(self.manager.next_available_fh(), flags as u32);
+        }
     }
 
     fn read(
@@ -506,9 +511,24 @@ impl Filesystem for Gcsf {
         }
     }
 
-    fn opendir(&mut self, _req: &Request<'_>, ino: u64, flags: i32, reply: ReplyOpen) {
+    fn opendir(&mut self, _req: &Request<'_>, ino: Inode, flags: i32, reply: ReplyOpen) {
         debug!("called opendir()");
-        reply.opened(ino, flags as u32);
+        let id = FileId::Inode(ino);
+        if !self.manager.contains(&id) {
+            error!("opendir: could not find inode={} in the file tree", ino);
+            reply.error(ENOENT);
+            return;
+        }
+
+        if let Some(f) = self.manager.get_file(&id) {
+            if f.is_dir() {
+                reply.opened(self.manager.next_available_fh(), flags as u32);
+            } else {
+                reply.error(ENOTDIR);
+            }
+        } else {
+            reply.error(ENOENT);
+        }
     }
 
     fn readdir(
@@ -790,7 +810,7 @@ impl Filesystem for Gcsf {
         reply: ReplyIoctl,
     ) {
         debug!("called ioctl()");
-        reply.error(1);
+        reply.ioctl(0, &[]);
     }
 
     fn fallocate(

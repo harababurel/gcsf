@@ -199,6 +199,10 @@ impl File {
         self.attr.kind
     }
 
+    pub fn is_dir(&self) -> bool {
+        self.attr.kind == FileType::Directory
+    }
+
     pub fn drive_parent(&self) -> Option<String> {
         self.drive_file.as_ref()?;
 
