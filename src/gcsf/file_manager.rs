@@ -194,7 +194,7 @@ impl FileManager {
                 drive_file,
                 self.add_extensions_to_special_files,
             );
-            self.add_file_locally(file, Some(FileId::Inode(3)))?;
+            self.add_file_locally(file, Some(FileId::Inode(SHARED_INODE)))?;
         }
 
         let mut moves: LinkedList<(FileId, FileId)> = LinkedList::new();
@@ -406,6 +406,21 @@ impl FileManager {
         self.df.flush(&file)
     }
 
+    fn get_sibling_count(&self, id: &FileId, parent: &FileId) -> Result<usize, Error> {
+        let file = self
+            .get_file(id)
+            .ok_or_else(|| err_msg(format!("Cannot get_file: {:?}", &id)))?;
+
+        let identical_filename_count = self
+            .get_children(&parent)
+            .ok_or_else(|| err_msg("FileManager::get_sibling_count() could not get file siblings"))?
+            .iter()
+            .filter(|child| child.name == file.name)
+            .count();
+
+        Ok(identical_filename_count)
+    }
+
     /// Adds a file to the local file tree. Does not communicate with Drive.
     fn add_file_locally(&mut self, mut file: File, parent: Option<FileId>) -> Result<(), Error> {
         let node_id = match parent {
@@ -415,17 +430,13 @@ impl FileManager {
                 })?;
 
                 if self.rename_identical_files {
-                    let identical_filename_count = self
-                        .get_children(&id)
-                        .ok_or_else(|| {
-                            err_msg("FileManager::add_file_locally() could not get file siblings")
-                        })?
-                        .iter()
-                        .filter(|child| child.name == file.name)
-                        .count();
-
-                    if identical_filename_count > 0 {
-                        file.identical_name_id = Some(identical_filename_count);
+                    let count = self
+                        .get_sibling_count(&FileId::Inode(file.inode()), &id)
+                        .unwrap_or_default();
+                    if count > 1 {
+                        file.identical_name_id = Some(count);
+                    } else {
+                        file.identical_name_id = None;
                     }
                 }
 
@@ -453,6 +464,20 @@ impl FileManager {
             .ok_or_else(|| err_msg("Target node doesn't exist"))?;
 
         self.tree.move_node(&current_node, ToParent(&target_node))?;
+
+        if self.rename_identical_files {
+            let count = self.get_sibling_count(id, new_parent)?;
+            let mut file = self
+                .get_mut_file(id)
+                .ok_or_else(|| err_msg(format!("Cannot find file {:?}", &id)))?;
+
+            if count > 1 {
+                file.identical_name_id = Some(count);
+            } else {
+                file.identical_name_id = None;
+            }
+        }
+
         Ok(())
     }
 
@@ -553,20 +578,15 @@ impl FileManager {
 
         {
             if self.rename_identical_files {
-                let identical_filename_count = self
-                    .get_children(&FileId::Inode(new_parent))
-                    .ok_or_else(|| err_msg("FileManager::rename() could not get file siblings"))?
-                    .iter()
-                    .filter(|child| child.name == new_name)
-                    .count();
+                let count = self.get_sibling_count(&id, &FileId::Inode(new_parent))?;
 
                 let file = self
                     .get_mut_file(&id)
                     .ok_or_else(|| err_msg("File doesn't exist"))?;
                 file.name = new_name.clone();
 
-                if identical_filename_count > 0 {
-                    file.identical_name_id = Some(identical_filename_count);
+                if count > 0 {
+                    file.identical_name_id = Some(count);
                 } else {
                     file.identical_name_id = None;
                 }

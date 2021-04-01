@@ -11,9 +11,9 @@
 extern crate chrono;
 extern crate failure;
 extern crate fuser;
-extern crate google_drive3_fork as drive3;
+extern crate google_drive3 as drive3;
 extern crate hyper;
-extern crate hyper_native_tls;
+extern crate hyper_rustls;
 extern crate id_tree;
 extern crate libc;
 extern crate mime_sniffer;

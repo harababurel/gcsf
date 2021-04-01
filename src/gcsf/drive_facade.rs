@@ -3,7 +3,6 @@ use drive3;
 use failure::{err_msg, Error};
 use hyper;
 use hyper::client::Response;
-use hyper_native_tls::NativeTlsClient;
 use lru_time_cache::LruCache;
 use mime_sniffer::MimeTypeSniffer;
 use oauth2;
@@ -23,12 +22,12 @@ type GcAuthenticator = oauth2::Authenticator<
     oauth2::DiskTokenStorage,
     hyper::Client,
 >;
-type GcDrive = drive3::Drive<GcClient, GcAuthenticator>;
+type GcDriveHub = drive3::DriveHub<GcClient, GcAuthenticator>;
 
 /// Provides a simple high-level interface for interacting with the Google Drive API.
 pub struct DriveFacade {
-    /// The `drive3::Drive` hub used for interacting with the API.
-    pub hub: GcDrive,
+    /// The `drive3::DriveHub` hub used for interacting with the API.
+    pub hub: GcDriveHub,
 
     /// A buffer used for temporarily caching read blocks. Storing this inside the struct makes it possible to return a reference to the data without the danger of the data outliving the struct.
     buff: Vec<u8>,
@@ -101,7 +100,9 @@ impl DriveFacade {
         let auth = oauth2::Authenticator::new(
             &secret,
             oauth2::DefaultAuthenticatorDelegate,
-            hyper::Client::with_connector(hyper::net::HttpsConnector::new(NativeTlsClient::new()?)),
+            hyper::Client::with_connector(hyper::net::HttpsConnector::new(
+                hyper_rustls::TlsClient::new(),
+            )),
             oauth2::DiskTokenStorage::new(&config.token_file().to_str().unwrap().to_string())
                 .unwrap(),
             Some(if config.authorize_using_code() {
@@ -115,10 +116,12 @@ impl DriveFacade {
     }
 
     /// Creates a drive hub.
-    fn create_drive(config: &Config) -> Result<GcDrive, Error> {
+    fn create_drive(config: &Config) -> Result<GcDriveHub, Error> {
         let auth = Self::create_drive_auth(config)?;
-        Ok(drive3::Drive::new(
-            hyper::Client::with_connector(hyper::net::HttpsConnector::new(NativeTlsClient::new()?)),
+        Ok(drive3::DriveHub::new(
+            hyper::Client::with_connector(hyper::net::HttpsConnector::new(
+                hyper_rustls::TlsClient::new(),
+            )),
             auth,
         ))
     }
@@ -159,7 +162,7 @@ impl DriveFacade {
     /// This is the only way of retrieving Docs, Sheets, Slides, Sites and Drawings.
     fn get_file_content(
         &self,
-        drive_id: &str,
+        drive_id: DriveIdRef,
         mime_type: Option<String>,
     ) -> Result<Vec<u8>, Error> {
         if let Some(mime) = mime_type.clone() {
@@ -239,7 +242,7 @@ impl DriveFacade {
     }
 
     /// Returns the Drive ID of the root "My Drive" directory
-    pub fn root_id(&mut self) -> Result<&String, Error> {
+    pub fn root_id(&mut self) -> Result<DriveIdRef, Error> {
         if self.root_id.is_some() {
             return Ok(self.root_id.as_ref().unwrap());
         }
