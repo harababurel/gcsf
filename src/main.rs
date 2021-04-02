@@ -123,6 +123,7 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
             return;
         }
     };
+
     info!("File system created.");
     info!("Mounting to {}", &mountpoint);
     match fuser::spawn_mount(fs, &mountpoint, &options) {
@@ -165,7 +166,7 @@ fn login(config: &mut Config) -> Result<(), Error> {
 }
 
 fn load_conf() -> Result<Config, Error> {
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("gcsf").unwrap();
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("gcsf")?;
     let config_file = xdg_dirs
         .place_config_file("gcsf.toml")
         .map_err(|_| err_msg("Cannot create configuration directory"))?;
@@ -178,27 +179,27 @@ fn load_conf() -> Result<Config, Error> {
         config_file.write_all(DEFAULT_CONFIG.as_bytes())?;
     }
 
-    let mut settings = config::Config::default();
-    settings
-        .merge(config::File::with_name(config_file.to_str().unwrap()))
-        .expect("Invalid configuration file");
+    if let Some(filename) = config_file.to_str() {
+        let mut settings = config::Config::default();
+        settings
+            .merge(config::File::with_name(filename))
+            .expect("Invalid configuration file");
 
-    let mut config = settings.try_into::<Config>()?;
-    config.config_dir = Some(xdg_dirs.get_config_home());
-
-    Ok(config)
+        let mut config = settings.try_into::<Config>()?;
+        config.config_dir = Some(xdg_dirs.get_config_home());
+        Ok(config)
+    } else {
+        Err(err_msg("Config file path is not valid unicode!"))
+    }
 }
 
 fn main() {
     let mut config = load_conf().expect("Could not load configuration file.");
-
-    if config.debug() {
-        info!("Debug mode enabled.");
-    }
-
     pretty_env_logger::formatted_builder()
         .parse_filters(if config.debug() { DEBUG_LOG } else { INFO_LOG })
         .init();
+
+    info!("Debug mode: {:?}.", config.debug());
 
     let yaml = load_yaml!("cli.yml");
     let matches = App::from_yaml(yaml).get_matches();
@@ -235,7 +236,10 @@ fn main() {
     if let Some(_matches) = matches.subcommand_matches("list") {
         let exception = String::from("gcsf.toml");
         let mut sessions: Vec<_> = fs::read_dir(&config.config_dir())
-            .unwrap()
+            .expect(&format!(
+                "Could not read config dir: {:?}",
+                &config.config_dir()
+            ))
             .map(Result::unwrap)
             .map(|f| f.file_name().to_str().unwrap().to_string())
             .filter(|name| name != &exception)

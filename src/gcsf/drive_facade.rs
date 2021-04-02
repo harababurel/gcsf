@@ -80,7 +80,7 @@ impl DriveFacade {
         let max_count = config.cache_max_items() as usize;
 
         DriveFacade {
-            hub: DriveFacade::create_drive(&config).unwrap(),
+            hub: DriveFacade::create_drive(&config).expect("Could not create drive3::DriveHub"),
             buff: Vec::new(),
             pending_writes: HashMap::new(),
             cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
@@ -104,7 +104,7 @@ impl DriveFacade {
                 hyper_rustls::TlsClient::new(),
             )),
             oauth2::DiskTokenStorage::new(&config.token_file().to_str().unwrap().to_string())
-                .unwrap(),
+                .expect("Could not create oauth2::DiskTokenStorage"),
             Some(if config.authorize_using_code() {
                 oauth2::FlowType::InstalledInteractive
             } else {
@@ -142,8 +142,12 @@ impl DriveFacade {
     }
 
     #[allow(dead_code)]
-    fn get_file_size(&self, drive_id: DriveIdRef, mime_type: Option<String>) -> u64 {
-        self.get_file_content(drive_id, mime_type).unwrap().len() as u64
+    fn get_file_size(
+        &self,
+        drive_id: DriveIdRef,
+        mime_type: Option<String>,
+    ) -> Result<usize, Error> {
+        self.get_file_content(drive_id, mime_type).map(|x| x.len())
     }
 
     fn get_file_metadata(&self, id: DriveIdRef) -> Result<drive3::File, Error> {
@@ -241,42 +245,42 @@ impl DriveFacade {
         self.pending_writes.remove(&id);
     }
 
-    /// Returns the Drive ID of the root "My Drive" directory
+    /// Returns the Drive ID of the root "My Drive" directory. Caches the value.
     pub fn root_id(&mut self) -> Result<DriveIdRef, Error> {
-        if self.root_id.is_some() {
-            return Ok(self.root_id.as_ref().unwrap());
+        if self.root_id.is_none() {
+            let parent = self
+                .hub
+                .files()
+                .list()
+                .param("fields", "files(parents)")
+                .spaces("drive")
+                .corpora("user")
+                .page_size(1)
+                .q("'root' in parents")
+                .add_scope(drive3::Scope::Full)
+                .doit()
+                .map_err(|e| err_msg(format!("{:#?}", e)))?
+                .1
+                .files
+                .ok_or_else(|| err_msg("No files received"))?
+                .into_iter()
+                .take(1)
+                .next()
+                .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?
+                .parents
+                .ok_or_else(|| {
+                    err_msg("Probed file has no parents. Can't deduce drive id for 'My Drive'")
+                })?
+                .into_iter()
+                .take(1)
+                .next()
+                .ok_or_else(|| {
+                    err_msg("No files on drive. Can't deduce drive id for 'My Drive'")
+                })?;
+            self.root_id = Some(parent);
         }
 
-        let parent = self
-            .hub
-            .files()
-            .list()
-            .param("fields", "files(parents)")
-            .spaces("drive")
-            .corpora("user")
-            .page_size(1)
-            .q("'root' in parents")
-            .add_scope(drive3::Scope::Full)
-            .doit()
-            .map_err(|e| err_msg(format!("{:#?}", e)))?
-            .1
-            .files
-            .ok_or_else(|| err_msg("No files received"))?
-            .into_iter()
-            .take(1)
-            .next()
-            .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?
-            .parents
-            .ok_or_else(|| {
-                err_msg("Probed file has no parents. Can't deduce drive id for 'My Drive'")
-            })?
-            .into_iter()
-            .take(1)
-            .next()
-            .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?;
-
-        self.root_id = Some(parent);
-        Ok(self.root_id.as_ref().unwrap())
+        Ok(self.root_id.as_ref().unwrap()) // unwrap() is safe
     }
 
     /// Returns the start page token for the `changes.list` API endpoint.
@@ -389,9 +393,10 @@ impl DriveFacade {
             match filelist.files {
                 Some(files) => {
                     info!(
-                        "Received page {} containing {} files",
+                        "Received page {} containing {} files (requested {})",
                         current_page,
-                        files.len()
+                        files.len(),
+                        PAGE_SIZE,
                     );
                     all_files.extend(files);
                 }
@@ -416,8 +421,7 @@ impl DriveFacade {
         offset: usize,
         size: usize,
     ) -> Option<&[u8]> {
-        if self.cache.contains_key(drive_id) {
-            let data = self.cache.get(drive_id).unwrap();
+        if let Some(data) = self.cache.get(drive_id) {
             self.buff =
                 data[cmp::min(data.len(), offset)..cmp::min(data.len(), offset + size)].to_vec();
             return Some(&self.buff);

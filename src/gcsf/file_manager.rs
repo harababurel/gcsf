@@ -6,8 +6,7 @@ use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
 use id_tree::{Node, NodeId, Tree, TreeBuilder};
-use std::collections::HashMap;
-use std::collections::LinkedList;
+use std::collections::{HashMap, LinkedList};
 use std::fmt;
 use std::time::{Duration, SystemTime};
 use DriveFacade;
@@ -183,34 +182,48 @@ impl FileManager {
     /// Retrieves all files and directories shown in "My Drive" and "Shared with me" and adds them locally.
     fn populate(&mut self) -> Result<(), Error> {
         let root = self.new_root_file();
-        self.add_file_locally(root, None)?;
-
         let shared = self.new_special_dir("Shared with me", Some(SHARED_INODE));
+        self.add_file_locally(root, None)?;
         self.add_file_locally(shared, Some(FileId::Inode(ROOT_INODE)))?;
 
-        for drive_file in self.df.get_all_files(None, Some(false))? {
-            let file = File::from_drive_file(
-                self.next_available_inode(),
-                drive_file,
-                self.add_extensions_to_special_files,
-            );
+        let drive_files = self
+            .df
+            .get_all_files(/*parents:*/ None, /*trashed:*/ Some(false))?
+            .iter()
+            .map(|drive_file| {
+                File::from_drive_file(
+                    self.next_available_inode(),
+                    drive_file.clone(),
+                    self.add_extensions_to_special_files,
+                )
+            })
+            .collect::<LinkedList<_>>();
+
+        // Add everything to "Shared with me" initially.
+        for file in drive_files {
             self.add_file_locally(file, Some(FileId::Inode(SHARED_INODE)))?;
         }
 
-        let mut moves: LinkedList<(FileId, FileId)> = LinkedList::new();
-        for (inode, file) in &self.files {
-            if let Some(parent) = file.drive_parent() {
-                if self.contains(&FileId::DriveId(parent.clone())) {
-                    moves.push_back((FileId::Inode(*inode), FileId::DriveId(parent)));
-                }
-            }
-        }
+        // Find the proper parent of every file somewhere in the flat hierarchy.
+        let moves = self
+            .files
+            .iter()
+            .filter(|(_, file)| file.drive_parent().is_some())
+            .map(|(inode, file)| {
+                (
+                    FileId::Inode(*inode),
+                    FileId::DriveId(file.drive_parent().unwrap()),
+                )
+            })
+            .filter(|(_, parent)| self.contains(parent))
+            .collect::<LinkedList<_>>();
 
-        for (inode, parent) in &moves {
+        // Move every file under its proper parent.
+        moves.iter().for_each(|(inode, parent)| {
             if let Err(e) = self.move_locally(inode, parent) {
                 error!("{}", e);
             }
-        }
+        });
 
         Ok(())
     }
@@ -221,7 +234,10 @@ impl FileManager {
         let trash = self.new_special_dir("Trash", Some(TRASH_INODE));
         self.add_file_locally(trash.clone(), Some(FileId::DriveId(root_id)))?;
 
-        for drive_file in self.df.get_all_files(None, Some(true))? {
+        for drive_file in self
+            .df
+            .get_all_files(/*parents:*/ None, /*trashed:*/ Some(true))?
+        {
             let file = File::from_drive_file(
                 self.next_available_inode(),
                 drive_file,
@@ -233,8 +249,9 @@ impl FileManager {
         Ok(())
     }
 
-    /// Creates a new File struct which represents the root directory. If possible, it fills in the exact DriveId. If not, it
-    /// keeps using "root" as a placeholder id.
+    /// Creates a new File which represents the root directory.
+    /// If possible, it fills in the exact DriveId.
+    /// If not, it keeps using "root" as a placeholder id.
     fn new_root_file(&mut self) -> File {
         let mut drive_file = drive3::File::default();
 
@@ -267,8 +284,7 @@ impl FileManager {
         }
     }
 
-    /// Creates a new File struct which represents a directory that does not necessarily exist on
-    /// Drive.
+    /// Creates a new File struct which represents a directory that does not necessarily exist on Drive.
     fn new_special_dir(&mut self, name: &str, preferred_inode: Option<Inode>) -> File {
         File {
             name: name.to_string(),
@@ -421,12 +437,16 @@ impl FileManager {
         Ok(identical_filename_count)
     }
 
-    /// Adds a file to the local file tree. Does not communicate with Drive.
+    /// Adds a file to the local file tree under its parent. If the parent does not exist, adds the
+    /// file as the root node. Does not communicate with Drive.
     fn add_file_locally(&mut self, mut file: File, parent: Option<FileId>) -> Result<(), Error> {
         let node_id = match parent {
             Some(id) => {
                 let parent_id = self.get_node_id(&id).ok_or_else(|| {
-                    err_msg("FileManager::add_file_locally() could not find parent by FileId")
+                    err_msg(format!(
+                        "FileManager::add_file_locally() could not find parent: {:?}",
+                        id
+                    ))
                 })?;
 
                 if self.rename_identical_files {
@@ -441,10 +461,10 @@ impl FileManager {
                 }
 
                 self.tree
-                    .insert(Node::new(file.inode()), UnderNode(&parent_id))?
+                    .insert(Node::new(file.inode()), UnderNode(&parent_id))
             }
-            None => self.tree.insert(Node::new(file.inode()), AsRoot)?,
-        };
+            None => self.tree.insert(Node::new(file.inode()), AsRoot),
+        }?;
 
         self.node_ids.insert(file.inode(), node_id);
         file.drive_id()

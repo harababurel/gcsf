@@ -38,3 +38,6 @@ yup-oauth2 = "1.0.9"
 # information.
 hyper = "^0.10"
 hyper-rustls = "^0.6"
+
+[profile.release]
+debug = true
