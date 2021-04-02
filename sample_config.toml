@@ -10,7 +10,12 @@ debug = false
 #
 #     fuse: attempt to remount on active mount point: [...]
 #     Could not mount to [...]: Undefined error: 0 (os error 0)
-mount_check = true
+#
+# Note: this seems to be broken with fuser = 0.7.0. Dropping the file system
+# BackgroundSession handle does not unmount the file system, so attempting to
+# mount GCSF after having mounted NullFs fails. Disable this check as a
+# workaround.
+mount_check = false
 
 # How long to cache the contents of a file after it has been accessed.
 cache_max_seconds = 300
