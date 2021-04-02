@@ -384,6 +384,9 @@ impl DriveFacade {
                 query_chain.push(format!("trashed = {}", trash));
             }
 
+            // TODO: shard files by time and batch requests that way.
+            // query_chain.push(String::from("modifiedTime > '2021-01-01T00:00:00'"));
+
             let query = query_chain.join(" and ");
             let (_, filelist) = request
                 .q(&query)

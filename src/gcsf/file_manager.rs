@@ -18,6 +18,7 @@ pub type DriveId = String;
 const ROOT_INODE: Inode = 1;
 const TRASH_INODE: Inode = 2;
 const SHARED_INODE: Inode = 3;
+const ORPHANS_INODE: Inode = 4;
 
 macro_rules! unwrap_or_continue {
     ($res:expr) => {
@@ -65,8 +66,10 @@ pub struct FileManager {
     /// Deleting trashed files always removes them permanently.
     pub skip_trash: bool,
 
+    /// New inodes are assigned incrementally. This keeps track of the last used inode.
     last_inode: Inode,
 
+    /// New file handles are assigned incrementally. This keeps track of the last used file handle.
     last_fh: FileHandle,
 }
 
@@ -91,7 +94,7 @@ impl FileManager {
             skip_trash,
             sync_interval,
             df,
-            last_inode: 2,
+            last_inode: 4,
             last_fh: 3,
         };
 
@@ -179,12 +182,20 @@ impl FileManager {
         Ok(())
     }
 
-    /// Retrieves all files and directories shown in "My Drive" and "Shared with me" and adds them locally.
-    fn populate(&mut self) -> Result<(), Error> {
+    /// Creates special dirs: root (.), "Shared with me", "Orphans".
+    fn create_special_dirs(&mut self) -> Result<(), Error> {
         let root = self.new_root_file();
         let shared = self.new_special_dir("Shared with me", Some(SHARED_INODE));
+        let orphans = self.new_special_dir("Orphans", Some(ORPHANS_INODE));
         self.add_file_locally(root, None)?;
         self.add_file_locally(shared, Some(FileId::Inode(ROOT_INODE)))?;
+        self.add_file_locally(orphans, Some(FileId::Inode(ROOT_INODE)))?;
+        Ok(())
+    }
+
+    /// Retrieves all files and directories shown in "My Drive" and "Shared with me" and adds them locally.
+    fn populate(&mut self) -> Result<(), Error> {
+        self.create_special_dirs()?;
 
         let drive_files = self
             .df
@@ -199,9 +210,10 @@ impl FileManager {
             })
             .collect::<LinkedList<_>>();
 
-        // Add everything to "Shared with me" initially.
+        // Add everything to "Orphans" dir initially.
         for file in drive_files {
-            self.add_file_locally(file, Some(FileId::Inode(SHARED_INODE)))?;
+            info!("asdf: {}", &file.name());
+            self.add_file_locally(file, Some(FileId::Inode(ORPHANS_INODE)))?;
         }
 
         // Find the proper parent of every file somewhere in the flat hierarchy.
