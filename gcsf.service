@@ -1,5 +1,5 @@
 # Systemd service configuration for mounting GCSF.
-# Can be placed in /etc/systemd/system/ or in other places[0]. Remember to set
+# Can be placed in /usr/lib/systemd/system/ or in other places[0]. Remember to set
 # GCSF_(SESSION|MOUNTPOINT) to the correct values, and also set the full path
 # to the gcsf binary.
 #

@@ -27,7 +27,8 @@ use std::time;
 
 use gcsf::{Config, DriveFacade, Gcsf, NullFs};
 
-const DEBUG_LOG: &str = "hyper::client=info,hyper::http=info,hyper::net=info,debug";
+const DEBUG_LOG: &str =
+    "hyper::client=info,hyper::http=info,hyper::net=info,rustls::client::hs=info,debug";
 
 const INFO_LOG: &str =
     "hyper::client=error,hyper::http=error,hyper::net=error,fuser::session=error,info";
@@ -94,20 +95,21 @@ client_secret = """{"installed":{"client_id":"892276709198-2ksebnrqkhihtf5p743k4
 
 fn mount_gcsf(config: Config, mountpoint: &str) {
     let vals = config.mount_options();
-    let mut options = iter::repeat("-o")
+    let options = iter::repeat("-o")
         .interleave_shortest(vals.iter().map(String::as_ref))
+        .take(2 * vals.len())
         .map(OsStr::new)
         .collect::<Vec<_>>();
-    options.pop();
+
+    debug!("Mount options: {:#?}", options);
 
     if config.mount_check() {
         match fuser::spawn_mount(NullFs {}, &mountpoint, &options) {
-            Ok(session) => {
-                debug!("Test mount of NullFs successful. Will mount GCSF next.");
-                drop(session);
+            Ok(_session) => {
+                info!("Test mount of NullFs successful. Will mount GCSF next.");
             }
             Err(e) => {
-                error!("Could not mount to {}: {}", &mountpoint, e);
+                error!("Could not mount NullFs to {}: {}", &mountpoint, e);
                 return;
             }
         };
@@ -122,7 +124,6 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
         }
     };
     info!("File system created.");
-
     info!("Mounting to {}", &mountpoint);
     match fuser::spawn_mount(fs, &mountpoint, &options) {
         Ok(_session) => {
