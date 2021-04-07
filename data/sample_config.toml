@@ -45,7 +45,7 @@ mount_options = [
 #
 # If set to false, Google Drive will attempt to communicate with GCSF directly.
 # This is usually faster and more convenient.
-authorize_using_code = false
+authorize_using_code = true
 
 # If set to true, all files with identical name will get an increasing number
 # attached to the suffix. This is most likely not necessary.

@@ -1,5 +1,4 @@
 use chrono::DateTime;
-use drive3;
 use failure::{err_msg, Error};
 use fuser::{FileAttr, FileType};
 use id_tree::NodeId;
@@ -22,7 +21,7 @@ pub struct File {
     pub name: String,
     pub attr: FileAttr,
     pub identical_name_id: Option<usize>,
-    pub drive_file: Option<drive3::File>,
+    pub drive_file: Option<drive3::api::File>,
 }
 
 /// Specifies multiple ways of identifying a file:
@@ -53,7 +52,11 @@ lazy_static! {
 
 impl File {
     /// Creates a new file using a Drive file as a template.
-    pub fn from_drive_file(inode: Inode, drive_file: drive3::File, add_extension: bool) -> Self {
+    pub fn from_drive_file(
+        inode: Inode,
+        drive_file: drive3::api::File,
+        add_extension: bool,
+    ) -> Self {
         let mut size = drive_file
             .size
             .clone()

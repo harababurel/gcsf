@@ -1,5 +1,4 @@
-use super::{Config, File, FileId, FileManager};
-use drive3;
+use super::{Config, DriveFacade, File, FileId, FileManager};
 use failure::Error;
 use fuser::{
     FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyBmap, ReplyCreate, ReplyData,
@@ -9,13 +8,11 @@ use fuser::{
 use libc::c_int;
 use libc::{ENOENT, ENOTDIR, ENOTRECOVERABLE, EREMOTE};
 use lru_time_cache::LruCache;
-use std;
 use std::clone::Clone;
 use std::cmp;
 use std::ffi::OsStr;
 use std::path::Path;
 use std::time::{Duration, SystemTime};
-use DriveFacade;
 
 pub type Inode = u64;
 
@@ -255,7 +252,7 @@ impl Filesystem for Gcsf {
                 flags: 0,
             },
             identical_name_id: None,
-            drive_file: Some(drive3::File {
+            drive_file: Some(drive3::api::File {
                 name: Some(dirname),
                 mime_type: Some("application/vnd.google-apps.folder".to_string()),
                 parents: Some(vec![self
@@ -730,7 +727,7 @@ impl Filesystem for Gcsf {
                 flags: 0,
             },
             identical_name_id: None,
-            drive_file: Some(drive3::File {
+            drive_file: Some(drive3::api::File {
                 name: Some(filename),
                 mime_type: None,
                 parents: Some(vec![self

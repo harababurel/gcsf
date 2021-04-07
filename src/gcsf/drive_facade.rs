@@ -1,28 +1,25 @@
 use super::Config;
-use drive3;
 use failure::{err_msg, Error};
-use hyper;
-use hyper::client::Response;
+use futures::executor::block_on;
+use hyper::body::Body;
+use hyper::client::connect::HttpConnector;
+use hyper::Response;
+use hyper_rustls::HttpsConnector;
 use lru_time_cache::LruCache;
 use mime_sniffer::MimeTypeSniffer;
-use oauth2;
-use serde_json;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::io::{Read, Seek, SeekFrom};
+use std::time::Instant;
 
 const PAGE_SIZE: i32 = 1000;
 type DriveId = String;
 type DriveIdRef<'a> = &'a str;
 
-type GcClient = hyper::Client;
-type GcAuthenticator = oauth2::Authenticator<
-    oauth2::DefaultAuthenticatorDelegate,
-    oauth2::DiskTokenStorage,
-    hyper::Client,
->;
-type GcDriveHub = drive3::DriveHub<GcClient, GcAuthenticator>;
+type GcClient = hyper::Client<HttpsConnector<HttpConnector>, Body>;
+type GcAuthenticator = oauth2::authenticator::Authenticator<HttpsConnector<HttpConnector>>;
+type GcDriveHub = drive3::DriveHub<GcClient>;
 
 /// Provides a simple high-level interface for interacting with the Google Drive API.
 pub struct DriveFacade {
@@ -78,6 +75,9 @@ impl DriveFacade {
 
         let ttl = config.cache_max_seconds();
         let max_count = config.cache_max_items() as usize;
+        //asdf
+        // let mut hub = drive3::DriveHub::new(hyper::Client::builder().build(hyper_rustls::HttpsConnector::with_native_roots()), auth);
+        // (hyper::Client::builder().build(hyper_rustls::HttpsConnector::with_native_roots()), auth);
 
         DriveFacade {
             hub: DriveFacade::create_drive(&config).expect("Could not create drive3::DriveHub"),
@@ -97,43 +97,49 @@ impl DriveFacade {
             .installed
             .ok_or_else(|| err_msg("ConsoleApplicationSecret.installed is None"))?;
 
-        let auth = oauth2::Authenticator::new(
-            &secret,
-            oauth2::DefaultAuthenticatorDelegate,
-            hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-                hyper_rustls::TlsClient::new(),
-            )),
-            oauth2::DiskTokenStorage::new(&config.token_file().to_str().unwrap().to_string())
-                .expect("Could not create oauth2::DiskTokenStorage"),
-            Some(if config.authorize_using_code() {
-                oauth2::FlowType::InstalledInteractive
-            } else {
-                oauth2::FlowType::InstalledRedirect(8081)
-            }),
-        );
+        let flow = if config.authorize_using_code() {
+            oauth2::InstalledFlowReturnMethod::Interactive
+        } else {
+            oauth2::InstalledFlowReturnMethod::HTTPRedirect
+        };
+
+        // panic!("asdf: {:?}", &config.token_file());
+
+        let auth = block_on(
+            oauth2::InstalledFlowAuthenticator::builder(secret, flow)
+                .persist_tokens_to_disk(&config.token_file())
+                .build(),
+        )
+        .map_err(|e| err_msg(format!("Could not create oauth2 authenticator:\n{}", e)))?;
 
         Ok(auth)
     }
 
     /// Creates a drive hub.
     fn create_drive(config: &Config) -> Result<GcDriveHub, Error> {
+        let start = Instant::now();
+
         let auth = Self::create_drive_auth(config)?;
-        Ok(drive3::DriveHub::new(
-            hyper::Client::with_connector(hyper::net::HttpsConnector::new(
-                hyper_rustls::TlsClient::new(),
-            )),
+        let hub = GcDriveHub::new(
+            hyper::Client::builder().build(hyper_rustls::HttpsConnector::with_webpki_roots()),
             auth,
-        ))
+        );
+
+        let duration = start.elapsed();
+        info!("Hub creation took {:?}", duration);
+
+        Ok(hub)
     }
 
     /// Will still detect a file even if it is in Trash.
-    fn contains(&self, id: DriveIdRef) -> Result<bool, Error> {
-        let response = self
-            .hub
-            .files()
-            .get(&id)
-            .add_scope(drive3::Scope::Full)
-            .doit();
+    fn contains(&self, id: DriveIdRef<'_>) -> Result<bool, Error> {
+        let response = block_on(
+            self.hub
+                .files()
+                .get(&id)
+                .add_scope(drive3::api::Scope::Full)
+                .doit(),
+        );
 
         match response {
             Ok((_, file)) => Ok(file.id == Some(id.to_string())),
@@ -144,21 +150,23 @@ impl DriveFacade {
     #[allow(dead_code)]
     fn get_file_size(
         &self,
-        drive_id: DriveIdRef,
+        drive_id: DriveIdRef<'_>,
         mime_type: Option<String>,
     ) -> Result<usize, Error> {
         self.get_file_content(drive_id, mime_type).map(|x| x.len())
     }
 
-    fn get_file_metadata(&self, id: DriveIdRef) -> Result<drive3::File, Error> {
-        self.hub
-            .files()
-            .get(id)
-            .param("fields", "id,name,parents,mimeType,webContentLink")
-            .add_scope(drive3::Scope::Full)
-            .doit()
-            .map(|(_response, file)| file)
-            .map_err(|e| err_msg(format!("{:#?}", e)))
+    fn get_file_metadata(&self, id: DriveIdRef<'_>) -> Result<drive3::api::File, Error> {
+        block_on(
+            self.hub
+                .files()
+                .get(id)
+                .param("fields", "id,name,parents,mimeType,webContentLink")
+                .add_scope(drive3::api::Scope::Full)
+                .doit(),
+        )
+        .map(|(_response, file)| file)
+        .map_err(|e| err_msg(format!("{:#?}", e)))
     }
 
     /// Retrieves the content of a Drive file. If `mime_type` is specified, this method will
@@ -166,7 +174,7 @@ impl DriveFacade {
     /// This is the only way of retrieving Docs, Sheets, Slides, Sites and Drawings.
     fn get_file_content(
         &self,
-        drive_id: DriveIdRef,
+        drive_id: DriveIdRef<'_>,
         mime_type: Option<String>,
     ) -> Result<Vec<u8>, Error> {
         if let Some(mime) = mime_type.clone() {
@@ -190,35 +198,36 @@ impl DriveFacade {
             .and_then(|ref t| MIME_TYPES.get::<str>(&t))
             .cloned();
 
-        let mut response = match export_type {
+        let response = match export_type {
             Some(t) => {
-                let response = self
-                    .hub
-                    .files()
-                    .export(drive_id, &t)
-                    .add_scope(drive3::Scope::Full)
-                    .doit()
-                    .map_err(|e| err_msg(format!("{:#?}", e)))?;
+                let response = block_on(
+                    self.hub
+                        .files()
+                        .export(drive_id, &t)
+                        .add_scope(drive3::api::Scope::Full)
+                        .doit(),
+                )
+                .map_err(|e| err_msg(format!("{:#?}", e)))?;
 
                 debug!("response: {:?}", &response);
                 response
             }
             None => {
-                let (response, _empty_file) = self
-                    .hub
-                    .files()
-                    .get(&drive_id)
-                    .supports_team_drives(false)
-                    .param("alt", "media")
-                    .add_scope(drive3::Scope::Full)
-                    .doit()
-                    .map_err(|e| err_msg(format!("{:#?}", e)))?;
+                let (response, _empty_file) = block_on(
+                    self.hub
+                        .files()
+                        .get(&drive_id)
+                        .supports_team_drives(false)
+                        .param("alt", "media")
+                        .add_scope(drive3::api::Scope::Full)
+                        .doit(),
+                )
+                .map_err(|e| err_msg(format!("{:#?}", e)))?;
                 response
             }
         };
 
-        let mut content: Vec<u8> = Vec::new();
-        let _result = response.read_to_end(&mut content);
+        let content: Vec<u8> = block_on(hyper::body::to_bytes(response.into_body()))?.to_vec();
 
         Ok(content)
     }
@@ -246,37 +255,36 @@ impl DriveFacade {
     }
 
     /// Returns the Drive ID of the root "My Drive" directory. Caches the value.
-    pub fn root_id(&mut self) -> Result<DriveIdRef, Error> {
+    pub fn root_id(&mut self) -> Result<DriveIdRef<'_>, Error> {
         if self.root_id.is_none() {
-            let parent = self
-                .hub
-                .files()
-                .list()
-                .param("fields", "files(parents)")
-                .spaces("drive")
-                .corpora("user")
-                .page_size(1)
-                .q("'root' in parents")
-                .add_scope(drive3::Scope::Full)
-                .doit()
-                .map_err(|e| err_msg(format!("{:#?}", e)))?
-                .1
-                .files
-                .ok_or_else(|| err_msg("No files received"))?
-                .into_iter()
-                .take(1)
-                .next()
-                .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?
-                .parents
-                .ok_or_else(|| {
-                    err_msg("Probed file has no parents. Can't deduce drive id for 'My Drive'")
-                })?
-                .into_iter()
-                .take(1)
-                .next()
-                .ok_or_else(|| {
-                    err_msg("No files on drive. Can't deduce drive id for 'My Drive'")
-                })?;
+            let parent = block_on(
+                self.hub
+                    .files()
+                    .list()
+                    .param("fields", "files(parents)")
+                    .spaces("drive")
+                    .corpora("user")
+                    .page_size(1)
+                    .q("'root' in parents")
+                    .add_scope(drive3::api::Scope::Full)
+                    .doit(),
+            )
+            .map_err(|e| err_msg(format!("{:#?}", e)))?
+            .1
+            .files
+            .ok_or_else(|| err_msg("No files received"))?
+            .into_iter()
+            .take(1)
+            .next()
+            .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?
+            .parents
+            .ok_or_else(|| {
+                err_msg("Probed file has no parents. Can't deduce drive id for 'My Drive'")
+            })?
+            .into_iter()
+            .take(1)
+            .next()
+            .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?;
             self.root_id = Some(parent);
         }
 
@@ -285,20 +293,20 @@ impl DriveFacade {
 
     /// Returns the start page token for the `changes.list` API endpoint.
     fn get_start_page_token(&mut self) -> Result<String, Error> {
-        self.hub
-            .changes()
-            .get_start_page_token()
-            .add_scope(drive3::Scope::Full)
-            .doit()
-            .map_err(|e| err_msg(format!("{:#?}", e)))
-            .map(|result| {
-                result.1.start_page_token.unwrap_or_else(|| {
-                    err_msg(
-                        "Received OK response from drive but there is no startPageToken included.",
-                    )
+        block_on(
+            self.hub
+                .changes()
+                .get_start_page_token()
+                .add_scope(drive3::api::Scope::Full)
+                .doit(),
+        )
+        .map_err(|e| err_msg(format!("{:#?}", e)))
+        .map(|result| {
+            result.1.start_page_token.unwrap_or_else(|| {
+                err_msg("Received OK response from drive but there is no startPageToken included.")
                     .to_string()
-                })
             })
+        })
     }
 
     /// Returns the current token for the `changes.list` API endpoint, or the start page token if
@@ -313,12 +321,12 @@ impl DriveFacade {
 
     /// Returns a list of all changes reported by Drive which are more recent than the changes
     /// token indicates.
-    pub fn get_all_changes(&mut self) -> Result<Vec<drive3::Change>, Error> {
+    pub fn get_all_changes(&mut self) -> Result<Vec<drive3::api::Change>, Error> {
         let mut all_changes = Vec::new();
 
         loop {
             let token = self.changes_token()?.clone();
-            let (_response, changelist) = self.hub
+            let (_response, changelist) =block_on( self.hub
                 .changes()
                 .list(&token)
                 .param("fields", "kind,newStartPageToken,changes(kind,type,time,removed,fileId,file(name,id,size,mimeType,owners,parents,trashed,modifiedTime,createdTime,viewedByMeTime))")
@@ -329,8 +337,8 @@ impl DriveFacade {
                 .supports_team_drives(false)
                 .include_team_drive_items(false)
                 .page_size(PAGE_SIZE)
-                .add_scope(drive3::Scope::Full)
-                .doit()
+                .add_scope(drive3::api::Scope::Full)
+                .doit())
                 .map_err(|e| err_msg(format!("{:#?}", e)))?;
 
             match changelist.changes {
@@ -353,7 +361,26 @@ impl DriveFacade {
         &mut self,
         parents: Option<Vec<DriveId>>,
         trashed: Option<bool>,
-    ) -> Result<Vec<drive3::File>, Error> {
+    ) -> Result<Vec<drive3::api::File>, Error> {
+        // let requests = vec![
+        // self.hub.files()
+        //         .list()
+        //         .param("fields", "nextPageToken,files(name,id,size,mimeType,owners,trashed,modifiedTime,createdTime,viewedByMeTime)")
+        //         .spaces("drive") // TODO: maybe add photos as well
+        //         .corpora("user")
+        //         .page_size(PAGE_SIZE)
+        //         .add_scope(drive3::api::Scope::Full),
+        //         self.hub.files().list()
+        //         .param("fields", "nextPageToken,files(name)")
+        //         .spaces("drive") // TODO: maybe add photos as well
+        //         .corpora("user")
+        //         .page_size(PAGE_SIZE)
+        //         .add_scope(drive3::api::Scope::Full),
+        // ];
+        // requests.into_iter().for_each(move |r| {
+        //     r.doit();
+        // });
+
         let mut all_files = Vec::new();
         let mut page_token: Option<String> = None;
         let mut current_page = 1;
@@ -364,7 +391,7 @@ impl DriveFacade {
                 .spaces("drive") // TODO: maybe add photos as well
                 .corpora("user")
                 .page_size(PAGE_SIZE)
-                .add_scope(drive3::Scope::Full);
+                .add_scope(drive3::api::Scope::Full);
 
             if let Some(token) = page_token {
                 request = request.page_token(&token);
@@ -388,10 +415,11 @@ impl DriveFacade {
             // query_chain.push(String::from("modifiedTime > '2021-01-01T00:00:00'"));
 
             let query = query_chain.join(" and ");
-            let (_, filelist) = request
-                .q(&query)
-                .doit()
-                .map_err(|e| err_msg(format!("{:#?}", e)))?;
+            debug!("query size: {}", query.len());
+            debug!("query content: {}", query);
+
+            let (_, filelist) = block_on(request.q(&query).doit())
+                .map_err(|e| err_msg(format!("Could not retrieve file list:\n{}", e)))?;
 
             match filelist.files {
                 Some(files) => {
@@ -445,21 +473,23 @@ impl DriveFacade {
     }
 
     /// Creates a new file on Drive. If successful, returns the file id.
-    pub fn create(&mut self, drive_file: &drive3::File) -> Result<DriveId, Error> {
+    pub fn create(&mut self, drive_file: &drive3::api::File) -> Result<DriveId, Error> {
         let dummy_file = DummyFile::new(&[]);
-        self.hub
-            .files()
-            .create(drive_file.clone())
-            .use_content_as_indexable_text(true)
-            .supports_team_drives(false)
-            .ignore_default_visibility(true)
-            .upload(dummy_file, "application/octet-stream".parse().unwrap())
-            .map_err(|e| err_msg(format!("{:#?}", e)))
-            .map(|(_, file)| {
-                file.id.unwrap_or_else(|| {
-                    err_msg("Received file from drive but it has no drive id.").to_string()
-                })
+        block_on(
+            self.hub
+                .files()
+                .create(drive_file.clone())
+                .use_content_as_indexable_text(true)
+                .supports_team_drives(false)
+                .ignore_default_visibility(true)
+                .upload(dummy_file, "application/octet-stream".parse().unwrap()),
+        )
+        .map_err(|e| err_msg(format!("{:#?}", e)))
+        .map(|(_, file)| {
+            file.id.unwrap_or_else(|| {
+                err_msg("Received file from drive but it has no drive id.").to_string()
             })
+        })
     }
 
     /// Writes some data to a Drive file starting at a certain offset.
@@ -480,57 +510,63 @@ impl DriveFacade {
 
     /// Deletes a file permanently from Drive.
     pub fn delete_permanently(&mut self, id: DriveIdRef) -> Result<bool, Error> {
-        self.hub
-            .files()
-            .delete(&id)
-            .supports_team_drives(false)
-            .add_scope(drive3::Scope::Full)
-            .doit()
-            .map(|response| response.status.is_success())
-            .map_err(|e| err_msg(format!("{:#?}", e)))
+        block_on(
+            self.hub
+                .files()
+                .delete(&id)
+                .supports_team_drives(false)
+                .add_scope(drive3::api::Scope::Full)
+                .doit(),
+        )
+        .map(|response| response.status().is_success())
+        .map_err(|e| err_msg(format!("{:#?}", e)))
     }
 
     /// `mv` operation. Can potentially move a file to a new directory and/or rename it.
     pub fn move_to(
         &mut self,
-        id: DriveIdRef,
-        parent: DriveIdRef,
+        id: DriveId,
+        parent: DriveId,
         new_name: &str,
-    ) -> Result<(Response, drive3::File), Error> {
+    ) -> Result<(Response<Body>, drive3::api::File), Error> {
         let current_parents = self
-            .get_file_metadata(id)?
+            .get_file_metadata(&id)?
             .parents
             .unwrap_or_else(|| vec![String::from("root")])
             .join(",");
 
-        let f = drive3::File {
+        let f = drive3::api::File {
             name: Some(new_name.to_string()),
             ..Default::default()
         };
-        self.hub
-            .files()
-            .update(f, id)
-            .remove_parents(&current_parents)
-            .add_parents(parent)
-            .add_scope(drive3::Scope::Full)
-            .doit_without_upload()
-            .map_err(|e| err_msg(format!("DriveFacade::move_to() {}", e)))
+        block_on(
+            self.hub
+                .files()
+                .update(f, &id)
+                .remove_parents(&current_parents)
+                .add_parents(&parent)
+                .add_scope(drive3::api::Scope::Full)
+                .doit_without_upload(),
+        )
+        .map_err(|e| err_msg(format!("DriveFacade::move_to() {}", e)))
     }
 
     /// Marks a Google Drive file as trashed.
     pub fn move_to_trash(&mut self, id: DriveId) -> Result<(), Error> {
-        let f = drive3::File {
+        let f = drive3::api::File {
             trashed: Some(true),
             ..Default::default()
         };
 
-        self.hub
-            .files()
-            .update(f, &id)
-            .add_scope(drive3::Scope::Full)
-            .doit_without_upload()
-            .map(|_| ())
-            .map_err(|e| err_msg(format!("DriveFacade::move_to_trash() {}", e)))
+        block_on(
+            self.hub
+                .files()
+                .update(f, &id)
+                .add_scope(drive3::api::Scope::Full)
+                .doit_without_upload(),
+        )
+        .map(|_| ())
+        .map_err(|e| err_msg(format!("DriveFacade::move_to_trash() {}", e)))
     }
 
     /// Applies pending write operations. Similar to flushing a stream.
@@ -561,36 +597,39 @@ impl DriveFacade {
         &mut self,
         id: DriveId,
         data: &[u8],
-    ) -> Result<(Response, drive3::File), Error> {
+    ) -> Result<(Response<Body>, drive3::api::File), Error> {
         let mime_guess = data.sniff_mime_type().unwrap_or("application/octet-stream");
         debug!(
             "Updating file content for {}. Mime type guess based on content: {}",
             &id, &mime_guess
         );
 
-        let file = drive3::File {
+        let file = drive3::api::File {
             mime_type: Some(mime_guess.to_string()),
             ..Default::default()
         };
 
-        self.hub
-            .files()
-            .update(file, &id)
-            .add_scope(drive3::Scope::Full)
-            .upload_resumable(DummyFile::new(data), mime_guess.parse().unwrap())
-            .map_err(|e| err_msg(format!("{:#?}", e)))
+        block_on(
+            self.hub
+                .files()
+                .update(file, &id)
+                .add_scope(drive3::api::Scope::Full)
+                .upload_resumable(DummyFile::new(data), mime_guess.parse().unwrap()),
+        )
+        .map_err(|e| err_msg(format!("{:#?}", e)))
     }
 
     /// Returns the size and capacity of the Drive account. In some cases, the limit can be absent.
     pub fn size_and_capacity(&mut self) -> Result<(u64, Option<u64>), Error> {
-        let (_response, about) = self
-            .hub
-            .about()
-            .get()
-            .param("fields", "storageQuota")
-            .add_scope(drive3::Scope::Full)
-            .doit()
-            .map_err(|e| err_msg(format!("{:#?}", e)))?;
+        let (_response, about) = block_on(
+            self.hub
+                .about()
+                .get()
+                .param("fields", "storageQuota")
+                .add_scope(drive3::api::Scope::Full)
+                .doit(),
+        )
+        .map_err(|e| err_msg(format!("{:#?}", e)))?;
 
         let storage_quota = about
             .storage_quota

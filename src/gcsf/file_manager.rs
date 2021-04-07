@@ -1,5 +1,4 @@
-use super::{File, FileId};
-use drive3;
+use super::{DriveFacade, File, FileId};
 use failure::{err_msg, Error};
 use fuser::{FileAttr, FileType};
 use id_tree::InsertBehavior::*;
@@ -9,7 +8,6 @@ use id_tree::{Node, NodeId, Tree, TreeBuilder};
 use std::collections::{HashMap, LinkedList};
 use std::fmt;
 use std::time::{Duration, SystemTime};
-use DriveFacade;
 
 pub type Inode = u64;
 pub type FileHandle = u64;
@@ -265,7 +263,7 @@ impl FileManager {
     /// If possible, it fills in the exact DriveId.
     /// If not, it keeps using "root" as a placeholder id.
     fn new_root_file(&mut self) -> File {
-        let mut drive_file = drive3::File::default();
+        let mut drive_file = drive3::api::File::default();
 
         let fallback_id = String::from("root");
         let root_id = self.df.root_id().unwrap_or(&fallback_id);
@@ -428,10 +426,10 @@ impl FileManager {
 
     /// Passes along the FLUSH system call to the `DriveFacade`.
     pub fn flush(&mut self, id: &FileId) -> Result<(), Error> {
-        let file = self
+        let drive_id = self
             .get_drive_id(&id)
             .ok_or_else(|| err_msg(format!("Cannot find drive id of {:?}", &id)))?;
-        self.df.flush(&file)
+        self.df.flush(&drive_id)
     }
 
     fn get_sibling_count(&self, id: &FileId, parent: &FileId) -> Result<usize, Error> {
@@ -638,7 +636,7 @@ impl FileManager {
             })?;
 
         debug!("parent_id: {}", &parent_id);
-        self.df.move_to(&drive_id, &parent_id, &new_name)?;
+        self.df.move_to(drive_id, parent_id, &new_name)?;
         Ok(())
     }
 

@@ -7,7 +7,7 @@ authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
 license = "MIT"
 keywords = ["google", "drive", "fuse", "filesystem"]
 exclude = ["build/**/*.o", "doc/**/*.html", "client_secret.json", "/ci/*"]
-
+edition = "2018"
 
 [dependencies]
 chrono = "0.4"
@@ -16,7 +16,9 @@ config = "0.11"
 ctrlc = { version = "3.1", features = ["termination"] }
 failure = "0.1"
 fuser = { version = "0.7", features = ["abi-7-11"] }
-google-drive3 = "1.0.14"
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+google-drive3 = "2.0.2"
 id_tree = "1.7"
 itertools = "0.10"
 lazy_static = "1.4"
@@ -32,13 +34,13 @@ serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
 xdg = "2.2"
-yup-oauth2 = "1.0.9"
 
-# google-drive3 intentionally uses an old version of Hyper. See
+# google-drive3 intentionally uses an old version of hyper. See
 # https://github.com/Byron/google-apis-rs/issues/173 for more
 # information.
-hyper = "^0.10"
-hyper-rustls = "^0.6"
+hyper = "^0.14"
+hyper-rustls = { version = "^0.22", features = ["rustls-native-certs", "webpki-roots"]}
+yup-oauth2 = "^5.0"
 
 [profile.release]
 debug = true
