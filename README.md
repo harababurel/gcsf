@@ -27,7 +27,7 @@ $ rustup update stable
 On Mac OSX, GCSF requires [osxfuse](https://osxfuse.github.io/) and [pkg-config](http://macappstore.org/pkg-config/):
 
 ```bash
-$ brew update; brew install pkg-config; brew tap homebrew/cask; brew cask install osxfuse
+$ brew update; brew install pkg-config; brew tap homebrew/cask; brew install --cask osxfuse
 ```
 
 #### Ubuntu
