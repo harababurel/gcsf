@@ -31,7 +31,7 @@ rand = "0.8.5"
 serde = "1.0.174"
 serde_derive = "1.0.174"
 serde_json = "1.0.103"
-time = "0.1"
+time = "0.3.23"
 xdg = "2.5.2"
 yup-oauth2 = "1"
 

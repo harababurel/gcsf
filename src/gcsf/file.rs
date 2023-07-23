@@ -4,7 +4,6 @@ use failure::{err_msg, Error};
 use fuser::{FileAttr, FileType};
 use id_tree::NodeId;
 use std::collections::HashMap;
-use time::Timespec;
 
 type Inode = u64;
 type DriveId = String;
@@ -76,14 +75,10 @@ impl File {
         .iter()
         .map(
             |time| match DateTime::parse_from_rfc3339(time.as_ref().unwrap_or(&String::new())) {
-                Ok(t) => Timespec {
-                    sec: t.timestamp(),
-                    nsec: t.timestamp_subsec_nanos() as i32,
-                },
-                Err(_) => Timespec { sec: 0, nsec: 0 },
+                Ok(t) => std::time::UNIX_EPOCH + std::time::Duration::new(t.timestamp() as u64, t.timestamp_subsec_nanos()),
+                Err(_) => std::time::UNIX_EPOCH,
             },
         )
-        .map(|t| std::time::UNIX_EPOCH + std::time::Duration::new(t.sec as u64, t.nsec as u32))
         .collect();
 
         let (crtime, mtime, atime) = (times[0], times[1], times[2]);
