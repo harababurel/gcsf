@@ -1,4 +1,5 @@
 use super::{Config, File, FileId, FileManager};
+use crate::DriveFacade;
 use drive3;
 use failure::Error;
 use fuser::{
@@ -11,7 +12,6 @@ use std;
 use std::clone::Clone;
 use std::cmp;
 use std::ffi::OsStr;
-use crate::DriveFacade;
 
 pub type Inode = u64;
 
@@ -272,11 +272,11 @@ impl Filesystem for Gcsf {
             size: size.unwrap_or(file.attr.size),
             blocks: file.attr.blocks,
             blksize: file.attr.blksize,
-            atime: match atime.unwrap_or(fuser::TimeOrNow::SpecificTime( file.attr.atime )) {
+            atime: match atime.unwrap_or(fuser::TimeOrNow::SpecificTime(file.attr.atime)) {
                 fuser::TimeOrNow::SpecificTime(t) => t,
                 fuser::TimeOrNow::Now => std::time::SystemTime::now(),
             },
-            mtime: match mtime.unwrap_or(fuser::TimeOrNow::SpecificTime( file.attr.mtime )) {
+            mtime: match mtime.unwrap_or(fuser::TimeOrNow::SpecificTime(file.attr.mtime)) {
                 fuser::TimeOrNow::SpecificTime(t) => t,
                 fuser::TimeOrNow::Now => std::time::SystemTime::now(),
             },
@@ -347,7 +347,7 @@ impl Filesystem for Gcsf {
                 flags: 0,
             },
             identical_name_id: None,
-            drive_file: Some(drive3::File {
+            drive_file: Some(drive3::api::File {
                 name: Some(filename),
                 mime_type: None,
                 parents: Some(vec![self
@@ -464,7 +464,7 @@ impl Filesystem for Gcsf {
                 flags: 0,
             },
             identical_name_id: None,
-            drive_file: Some(drive3::File {
+            drive_file: Some(drive3::api::File {
                 name: Some(dirname),
                 mime_type: Some("application/vnd.google-apps.folder".to_string()),
                 parents: Some(vec![self
@@ -520,7 +520,8 @@ impl Filesystem for Gcsf {
         };
 
         let bsize: u32 = 512;
-        let blocks: u64 = capacity / (bsize as u64)+ if capacity % (bsize as u64) > 0 { 1 } else { 0 };
+        let blocks: u64 =
+            capacity / (bsize as u64) + if capacity % (bsize as u64) > 0 { 1 } else { 0 };
         let bfree: u64 = (capacity - size) / (bsize as u64);
 
         reply.statfs(

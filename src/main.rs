@@ -161,7 +161,7 @@ fn login(config: &mut Config) -> Result<(), Error> {
     // Create a DriveFacade which will store the authentication token in the desired file.
     // And make an arbitrary request in order to trigger the authentication process.
     let mut df = DriveFacade::new(&config);
-    let _result = df.root_id();
+    let _result = df.root_id()?;
 
     Ok(())
 }

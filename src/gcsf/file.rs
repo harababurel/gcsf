@@ -1,4 +1,3 @@
-use chrono::DateTime;
 use drive3;
 use failure::{err_msg, Error};
 use fuser::{FileAttr, FileType};
@@ -21,7 +20,7 @@ pub struct File {
     pub name: String,
     pub attr: FileAttr,
     pub identical_name_id: Option<usize>,
-    pub drive_file: Option<drive3::File>,
+    pub drive_file: Option<drive3::api::File>,
 }
 
 /// Specifies multiple ways of identifying a file:
@@ -52,11 +51,15 @@ lazy_static! {
 
 impl File {
     /// Creates a new file using a Drive file as a template.
-    pub fn from_drive_file(inode: Inode, drive_file: drive3::File, add_extension: bool) -> Self {
+    pub fn from_drive_file(
+        inode: Inode,
+        drive_file: drive3::api::File,
+        add_extension: bool,
+    ) -> Self {
         let mut size = drive_file
             .size
             .clone()
-            .map(|size| size.parse::<u64>().unwrap_or_default())
+            .map(|size| u64::try_from(size).unwrap_or_default())
             .unwrap_or(10 * 1024 * 1024);
 
         let kind =
@@ -67,18 +70,13 @@ impl File {
                 FileType::RegularFile
             };
 
-        let times: Vec<_> = vec![
+        let times: Vec<std::time::SystemTime> = vec![
             &drive_file.created_time,
             &drive_file.modified_time,
             &drive_file.viewed_by_me_time,
         ]
         .iter()
-        .map(
-            |time| match DateTime::parse_from_rfc3339(time.as_ref().unwrap_or(&String::new())) {
-                Ok(t) => std::time::UNIX_EPOCH + std::time::Duration::new(t.timestamp() as u64, t.timestamp_subsec_nanos()),
-                Err(_) => std::time::UNIX_EPOCH,
-            },
-        )
+        .map(|datetime| datetime.unwrap_or_default().into())
         .collect();
 
         let (crtime, mtime, atime) = (times[0], times[1], times[2]);

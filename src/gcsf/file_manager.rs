@@ -1,5 +1,6 @@
 use super::{File, FileId};
-use drive3;
+use crate::drive3;
+use crate::DriveFacade;
 use failure::{err_msg, Error};
 use fuser::{FileAttr, FileType};
 use id_tree::InsertBehavior::*;
@@ -10,7 +11,6 @@ use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fmt;
 use std::time::{Duration, SystemTime};
-use crate::DriveFacade;
 
 pub type Inode = u64;
 pub type DriveId = String;
@@ -232,7 +232,7 @@ impl FileManager {
     /// Creates a new File struct which represents the root directory. If possible, it fills in the exact DriveId. If not, it
     /// keeps using "root" as a placeholder id.
     fn new_root_file(&mut self) -> File {
-        let mut drive_file = drive3::File::default();
+        let mut drive_file = drive3::api::File::default();
 
         let fallback_id = String::from("root");
         let root_id = self.df.root_id().unwrap_or(&fallback_id);
@@ -311,8 +311,7 @@ impl FileManager {
         match file_id {
             FileId::Inode(inode) => self.node_ids.get(&inode).cloned(),
             FileId::DriveId(drive_id) => self.get_node_id(&FileId::Inode(
-                self.get_inode(&FileId::DriveId(drive_id.to_string()))
-                    .unwrap(),
+                self.get_inode(&FileId::DriveId(drive_id.to_string()))?,
             )),
             FileId::NodeId(node_id) => Some(node_id.clone()),
             ref pn @ FileId::ParentAndName { .. } => {
