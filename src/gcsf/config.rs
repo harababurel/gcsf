@@ -31,7 +31,7 @@ pub struct Config {
     pub add_extensions_to_special_files: Option<bool>,
     /// If set to true, deleted files and folder will not be moved to Trash Folder, instead they get deleted permanently.
     pub skip_trash: Option<bool>,
-    /// The Google OAuth client secret for Google Drive APIs (see https://console.developers.google.com)
+    /// The Google OAuth client secret for Google Drive APIs (see <https://console.developers.google.com>)
     pub client_secret: Option<String>,
 }
 
@@ -116,7 +116,7 @@ impl Config {
     }
 
     /// The Google OAuth client secret for Google Drive APIs. Create your own
-    /// credentials at https://console.developers.google.com and paste them here
+    /// credentials at <https://console.developers.google.com> and paste them here
     pub fn client_secret(&self) -> &String {
         self.client_secret.as_ref().unwrap()
     }
