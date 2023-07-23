@@ -139,8 +139,8 @@ extern crate lazy_static;
 
 mod gcsf;
 
-pub use gcsf::filesystem::{Gcsf, NullFs};
-pub use gcsf::{Config, DriveFacade, FileManager};
+pub use crate::gcsf::filesystem::{Gcsf, NullFs};
+pub use crate::gcsf::{Config, DriveFacade, FileManager};
 
 #[cfg(test)]
 mod tests;
