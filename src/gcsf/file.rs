@@ -1,4 +1,3 @@
-use drive3;
 use failure::{err_msg, Error};
 use fuser::{FileAttr, FileType};
 use id_tree::NodeId;
@@ -58,7 +57,6 @@ impl File {
     ) -> Self {
         let mut size = drive_file
             .size
-            .clone()
             .map(|size| u64::try_from(size).unwrap_or_default())
             .unwrap_or(10 * 1024 * 1024);
 
@@ -125,10 +123,7 @@ impl File {
 
         File {
             // name: format!("{} ({})", filename, owners.join(", ")),
-            name: filename
-                .chars()
-                .filter(|c| File::is_posix(c))
-                .collect::<String>(),
+            name: filename.chars().filter(File::is_posix).collect::<String>(),
             attr,
             identical_name_id: None,
             drive_file: Some(drive_file),

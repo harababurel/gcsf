@@ -7,7 +7,6 @@ use hyper::Response;
 use failure::{err_msg, Error};
 use lru_time_cache::LruCache;
 use mime_sniffer::MimeTypeSniffer;
-use serde_json;
 use std::cmp;
 use std::collections::{HashMap, HashSet};
 use std::io;
@@ -76,7 +75,7 @@ impl DriveFacade {
         let max_count = config.cache_max_items() as usize;
 
         DriveFacade {
-            hub: DriveFacade::create_drive(&config).unwrap(),
+            hub: DriveFacade::create_drive(config).unwrap(),
             buff: Vec::new(),
             pending_writes: HashMap::new(),
             cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
@@ -99,19 +98,18 @@ impl DriveFacade {
             .ok_or_else(|| err_msg("ConsoleApplicationSecret.installed is None"))?;
 
         let rt = Runtime::new().unwrap();
-        let auth = rt
-            .block_on(
-                oauth2::InstalledFlowAuthenticator::builder(
-                    secret,
-                    if config.authorize_using_code() {
-                        oauth2::InstalledFlowReturnMethod::Interactive
-                    } else {
-                        oauth2::InstalledFlowReturnMethod::HTTPPortRedirect(8081)
-                    }
-                )
-                .persist_tokens_to_disk(config.token_file())
-                .build(),
-            )?;
+        let auth = rt.block_on(
+            oauth2::InstalledFlowAuthenticator::builder(
+                secret,
+                if config.authorize_using_code() {
+                    oauth2::InstalledFlowReturnMethod::Interactive
+                } else {
+                    oauth2::InstalledFlowReturnMethod::HTTPPortRedirect(8081)
+                },
+            )
+            .persist_tokens_to_disk(config.token_file())
+            .build(),
+        )?;
         Ok(auth)
     }
 
@@ -138,7 +136,7 @@ impl DriveFacade {
         let response = rt.block_on(
             self.hub
                 .files()
-                .get(&id)
+                .get(id)
                 .add_scope(drive3::api::Scope::Full)
                 .doit(),
         );
@@ -194,7 +192,7 @@ impl DriveFacade {
         }
 
         let export_type: Option<&'static str> = mime_type
-            .and_then(|ref t| MIME_TYPES.get::<str>(&t))
+            .and_then(|ref t| MIME_TYPES.get::<str>(t))
             .cloned();
 
         let rt = Runtime::new().unwrap();
@@ -205,7 +203,7 @@ impl DriveFacade {
                     .block_on(
                         self.hub
                             .files()
-                            .export(drive_id, &t)
+                            .export(drive_id, t)
                             .add_scope(drive3::api::Scope::Full)
                             .doit(),
                     )
@@ -219,7 +217,7 @@ impl DriveFacade {
                     .block_on(
                         self.hub
                             .files()
-                            .get(&drive_id)
+                            .get(drive_id)
                             .supports_team_drives(false)
                             .param("alt", "media")
                             .add_scope(drive3::api::Scope::Full)
@@ -447,7 +445,7 @@ impl DriveFacade {
             return Some(&self.buff);
         }
 
-        match self.get_file_content(&drive_id, mime_type) {
+        match self.get_file_content(drive_id, mime_type) {
             Ok(data) => {
                 self.buff = data[cmp::min(data.len(), offset)..cmp::min(data.len(), offset + size)]
                     .to_vec();
@@ -504,7 +502,7 @@ impl DriveFacade {
         rt.block_on(
             self.hub
                 .files()
-                .delete(&id)
+                .delete(id)
                 .supports_team_drives(false)
                 .add_scope(drive3::api::Scope::Full)
                 .doit(),
@@ -577,7 +575,7 @@ impl DriveFacade {
             )));
         }
 
-        let mut file_data = self.get_file_content(&id, None).unwrap_or_default();
+        let mut file_data = self.get_file_content(id, None).unwrap_or_default();
         self.apply_pending_writes_on_data(DriveId::from(id), &mut file_data);
         self.update_file_content(DriveId::from(id), &file_data)?;
 
@@ -632,7 +630,9 @@ impl DriveFacade {
             .ok_or_else(|| err_msg("size_and_capacity(): no storage quota in response"))?;
 
         let usage = u64::try_from(storage_quota.usage.unwrap())?;
-        let limit = storage_quota.limit.map(|s| u64::try_from(s).unwrap_or_default());
+        let limit = storage_quota
+            .limit
+            .map(|s| u64::try_from(s).unwrap_or_default());
 
         Ok((usage, limit))
     }

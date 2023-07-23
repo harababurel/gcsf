@@ -91,26 +91,20 @@ client_secret = """{"installed":{"client_id":"726003905312-e2mq9mesjc5llclmvc04e
 "#;
 
 fn mount_gcsf(config: Config, mountpoint: &str) {
-    // let vals = config.mount_options();
-    // let mut options = iter::repeat("-o")
-    //     .interleave_shortest(vals.iter().map(String::as_ref))
-    //     .map(OsStr::new)
-    //     .collect::<Vec<_>>();
-    // options.pop();
-
+    // TODO: consider making these configurable in the config file
     let options = [
         fuser::MountOption::FSName(String::from("GCSF")),
         fuser::MountOption::AllowRoot,
     ];
 
     if config.mount_check() {
-        match fuser::spawn_mount2(NullFs {}, &mountpoint, &options) {
+        match fuser::spawn_mount2(NullFs {}, mountpoint, &options) {
             Ok(session) => {
                 debug!("Test mount of NullFs successful. Will mount GCSF next.");
                 drop(session);
             }
             Err(e) => {
-                error!("Could not mount to {}: {}", &mountpoint, e);
+                error!("Could not mount to {}: {}", mountpoint, e);
                 return;
             }
         };
@@ -127,7 +121,7 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
     info!("File system created.");
 
     info!("Mounting to {}", &mountpoint);
-    match fuser::spawn_mount2(fs, &mountpoint, &options) {
+    match fuser::spawn_mount2(fs, mountpoint, &options) {
         Ok(_session) => {
             info!("Mounted to {}", &mountpoint);
 
@@ -160,7 +154,7 @@ fn login(config: &mut Config) -> Result<(), Error> {
 
     // Create a DriveFacade which will store the authentication token in the desired file.
     // And make an arbitrary request in order to trigger the authentication process.
-    let mut df = DriveFacade::new(&config);
+    let mut df = DriveFacade::new(config);
     let _result = df.root_id()?;
 
     Ok(())
@@ -239,7 +233,7 @@ fn main() {
 
     if let Some(_matches) = matches.subcommand_matches("list") {
         let exception = String::from("gcsf.toml");
-        let mut sessions: Vec<_> = fs::read_dir(&config.config_dir())
+        let mut sessions: Vec<_> = fs::read_dir(config.config_dir())
             .unwrap()
             .map(Result::unwrap)
             .map(|f| f.file_name().to_str().unwrap().to_string())

@@ -87,7 +87,7 @@ impl Filesystem for Gcsf {
         let id = FileId::ParentAndName { parent, name };
 
         match self.manager.get_file(&id) {
-            Some(ref file) => {
+            Some(file) => {
                 reply.entry(&TTL, &file.attr, 0);
             }
             None => {

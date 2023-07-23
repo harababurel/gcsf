@@ -298,10 +298,10 @@ impl FileManager {
     /// Returns true if the file identified by a given id exists in the filesystem.
     pub fn contains(&self, file_id: &FileId) -> bool {
         match file_id {
-            FileId::Inode(inode) => self.node_ids.contains_key(&inode),
+            FileId::Inode(inode) => self.node_ids.contains_key(inode),
             FileId::DriveId(drive_id) => self.drive_ids.contains_key(drive_id),
-            FileId::NodeId(node_id) => self.tree.get(&node_id).is_ok(),
-            pn @ FileId::ParentAndName { .. } => self.get_file(&pn).is_some(),
+            FileId::NodeId(node_id) => self.tree.get(node_id).is_ok(),
+            pn @ FileId::ParentAndName { .. } => self.get_file(pn).is_some(),
         }
     }
 
@@ -309,13 +309,13 @@ impl FileManager {
     /// The NodeId indicates the placement of the file in the file tree.
     pub fn get_node_id(&self, file_id: &FileId) -> Option<NodeId> {
         match file_id {
-            FileId::Inode(inode) => self.node_ids.get(&inode).cloned(),
+            FileId::Inode(inode) => self.node_ids.get(inode).cloned(),
             FileId::DriveId(drive_id) => self.get_node_id(&FileId::Inode(
                 self.get_inode(&FileId::DriveId(drive_id.to_string()))?,
             )),
             FileId::NodeId(node_id) => Some(node_id.clone()),
-            ref pn @ FileId::ParentAndName { .. } => {
-                let inode = self.get_inode(&pn)?;
+            pn => {
+                let inode = self.get_inode(pn)?;
                 self.get_node_id(&FileId::Inode(inode))
             }
         }
@@ -332,12 +332,7 @@ impl FileManager {
         match id {
             FileId::Inode(inode) => Some(*inode),
             FileId::DriveId(drive_id) => self.drive_ids.get(drive_id).cloned(),
-            FileId::NodeId(node_id) => self
-                .tree
-                .get(&node_id)
-                .map(|node| node.data())
-                .ok()
-                .cloned(),
+            FileId::NodeId(node_id) => self.tree.get(node_id).map(|node| node.data()).ok().cloned(),
             FileId::ParentAndName {
                 ref parent,
                 ref name,
@@ -351,14 +346,12 @@ impl FileManager {
 
     /// Returns the children of a directory identified by a given id.
     pub fn get_children(&self, id: &FileId) -> Option<Vec<&File>> {
-        let node_id = self.get_node_id(&id)?;
+        let node_id = self.get_node_id(id)?;
         let children: Vec<&File> = self
             .tree
             .children(&node_id)
             .unwrap()
-            .map(|child| self.get_file(&FileId::Inode(*child.data())))
-            .filter(Option::is_some)
-            .map(Option::unwrap)
+            .filter_map(|child| self.get_file(&FileId::Inode(*child.data())))
             .collect();
 
         Some(children)
@@ -372,7 +365,7 @@ impl FileManager {
 
     /// Returns a mutable reference to a file identified by a given id.
     pub fn get_mut_file(&mut self, id: &FileId) -> Option<&mut File> {
-        let inode = self.get_inode(&id)?;
+        let inode = self.get_inode(id)?;
         self.files.get_mut(&inode)
     }
 
@@ -388,7 +381,7 @@ impl FileManager {
     /// Passes along the FLUSH system call to the `DriveFacade`.
     pub fn flush(&mut self, id: &FileId) -> Result<(), Error> {
         let file = self
-            .get_drive_id(&id)
+            .get_drive_id(id)
             .ok_or_else(|| err_msg(format!("Cannot find drive id of {:?}", &id)))?;
         self.df.flush(&file)
     }
@@ -433,10 +426,10 @@ impl FileManager {
     /// Moves a file somewhere else in the local file tree. Does not communicate with Drive.
     fn move_locally(&mut self, id: &FileId, new_parent: &FileId) -> Result<(), Error> {
         let current_node = self
-            .get_node_id(&id)
+            .get_node_id(id)
             .ok_or_else(|| err_msg(format!("Cannot find node_id of {:?}", &id)))?;
         let target_node = self
-            .get_node_id(&new_parent)
+            .get_node_id(new_parent)
             .ok_or_else(|| err_msg("Target node doesn't exist"))?;
 
         self.tree.move_node(&current_node, ToParent(&target_node))?;
@@ -595,9 +588,7 @@ impl fmt::Debug for FileManager {
 
         let mut stack: Vec<(u32, &NodeId)> = vec![(0, self.tree.root_node_id().unwrap())];
 
-        while !stack.is_empty() {
-            let (level, node_id) = stack.pop().unwrap();
-
+        while let Some((level, node_id)) = stack.pop() {
             for _ in 0..level {
                 write!(f, "\t")?;
             }
