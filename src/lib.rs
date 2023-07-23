@@ -10,7 +10,7 @@
 )]
 extern crate chrono;
 extern crate failure;
-extern crate fuse;
+extern crate fuser;
 extern crate google_drive3_fork as drive3;
 extern crate hyper;
 extern crate hyper_native_tls;

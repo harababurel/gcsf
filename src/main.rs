@@ -3,11 +3,10 @@ extern crate clap;
 extern crate config;
 extern crate ctrlc;
 extern crate failure;
-extern crate fuse;
+extern crate fuser;
 extern crate gcsf;
 #[macro_use]
 extern crate log;
-extern crate itertools;
 extern crate pretty_env_logger;
 extern crate serde;
 extern crate serde_json;
@@ -15,11 +14,8 @@ extern crate xdg;
 
 use clap::App;
 use failure::{err_msg, Error};
-use itertools::Itertools;
-use std::ffi::OsStr;
 use std::fs;
 use std::io::prelude::*;
-use std::iter;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -95,26 +91,29 @@ client_secret = """{"installed":{"client_id":"726003905312-e2mq9mesjc5llclmvc04e
 "#;
 
 fn mount_gcsf(config: Config, mountpoint: &str) {
-    let vals = config.mount_options();
-    let mut options = iter::repeat("-o")
-        .interleave_shortest(vals.iter().map(String::as_ref))
-        .map(OsStr::new)
-        .collect::<Vec<_>>();
-    options.pop();
+    // let vals = config.mount_options();
+    // let mut options = iter::repeat("-o")
+    //     .interleave_shortest(vals.iter().map(String::as_ref))
+    //     .map(OsStr::new)
+    //     .collect::<Vec<_>>();
+    // options.pop();
+
+    let options = [
+        fuser::MountOption::FSName(String::from("GCSF")),
+        fuser::MountOption::AllowRoot,
+    ];
 
     if config.mount_check() {
-        unsafe {
-            match fuse::spawn_mount(NullFs {}, &mountpoint, &options) {
-                Ok(session) => {
-                    debug!("Test mount of NullFs successful. Will mount GCSF next.");
-                    drop(session);
-                }
-                Err(e) => {
-                    error!("Could not mount to {}: {}", &mountpoint, e);
-                    return;
-                }
-            };
-        }
+        match fuser::spawn_mount2(NullFs {}, &mountpoint, &options) {
+            Ok(session) => {
+                debug!("Test mount of NullFs successful. Will mount GCSF next.");
+                drop(session);
+            }
+            Err(e) => {
+                error!("Could not mount to {}: {}", &mountpoint, e);
+                return;
+            }
+        };
     }
 
     info!("Creating and populating file system...");
@@ -127,28 +126,26 @@ fn mount_gcsf(config: Config, mountpoint: &str) {
     };
     info!("File system created.");
 
-    unsafe {
-        info!("Mounting to {}", &mountpoint);
-        match fuse::spawn_mount(fs, &mountpoint, &options) {
-            Ok(_session) => {
-                info!("Mounted to {}", &mountpoint);
+    info!("Mounting to {}", &mountpoint);
+    match fuser::spawn_mount2(fs, &mountpoint, &options) {
+        Ok(_session) => {
+            info!("Mounted to {}", &mountpoint);
 
-                let running = Arc::new(AtomicBool::new(true));
-                let r = running.clone();
+            let running = Arc::new(AtomicBool::new(true));
+            let r = running.clone();
 
-                ctrlc::set_handler(move || {
-                    info!("Ctrl-C detected");
-                    r.store(false, Ordering::SeqCst);
-                })
-                .expect("Error setting Ctrl-C handler");
+            ctrlc::set_handler(move || {
+                info!("Ctrl-C detected");
+                r.store(false, Ordering::SeqCst);
+            })
+            .expect("Error setting Ctrl-C handler");
 
-                while running.load(Ordering::SeqCst) {
-                    thread::sleep(time::Duration::from_millis(50));
-                }
+            while running.load(Ordering::SeqCst) {
+                thread::sleep(time::Duration::from_millis(50));
             }
-            Err(e) => error!("Could not mount to {}: {}", &mountpoint, e),
-        };
-    }
+        }
+        Err(e) => error!("Could not mount to {}: {}", &mountpoint, e),
+    };
 }
 
 fn login(config: &mut Config) -> Result<(), Error> {
@@ -183,12 +180,19 @@ fn load_conf() -> Result<Config, Error> {
         config_file.write_all(DEFAULT_CONFIG.as_bytes())?;
     }
 
-    let mut settings = config::Config::default();
-    settings
-        .merge(config::File::with_name(config_file.to_str().unwrap()))
-        .expect("Invalid configuration file");
+    // let mut settings = config::Config::default();
 
-    let mut config = settings.try_into::<Config>()?;
+    let settings = config::ConfigBuilder::<config::builder::DefaultState>::default()
+        .add_source(config::File::with_name(config_file.to_str().unwrap()))
+        .build()
+        .unwrap();
+
+    // settings
+    //     .merge(config::File::with_name(config_file.to_str().unwrap()))
+    //     .expect("Invalid configuration file");
+
+    // let mut config = TryInto::<Config>::try_into(settings)?;
+    let mut config: gcsf::Config = settings.try_deserialize()?;
     config.config_dir = Some(xdg_dirs.get_config_home());
 
     Ok(config)

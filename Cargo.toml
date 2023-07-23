@@ -7,15 +7,16 @@ authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
 license = "MIT"
 keywords = ["google", "drive", "fuse", "filesystem"]
 exclude = ["build/**/*.o", "doc/**/*.html", "client_secret.json", "/ci/*"]
+edition = "2021"
 
 
 [dependencies]
 chrono = "0.4.11"
 clap = { version = "2.33.0", features = ["yaml"] }
-config = "0.10.1"
+config = "0.13.3"
 ctrlc = "3.1.4"
 failure = "0.1.7"
-fuse = "0.3.1"
+fuser = "0.12"
 # google-drive3 = "1.0.7+20171201"
 google-drive3-fork = "1.0.10"
 id_tree = "1.7.0"

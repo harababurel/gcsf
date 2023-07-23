@@ -1,7 +1,7 @@
 use super::{Config, File, FileId, FileManager};
 use drive3;
 use failure::Error;
-use fuse::{
+use fuser::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
     ReplyEntry, ReplyStatfs, ReplyWrite, Request,
 };
@@ -11,8 +11,7 @@ use std;
 use std::clone::Clone;
 use std::cmp;
 use std::ffi::OsStr;
-use time::Timespec;
-use DriveFacade;
+use crate::DriveFacade;
 
 pub type Inode = u64;
 
@@ -59,7 +58,7 @@ pub struct Gcsf {
     statfs_cache: LruCache<String, u64>,
 }
 
-const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
+const TTL: std::time::Duration = std::time::Duration::from_secs(1);
 
 impl Gcsf {
     /// Constructs a Gcsf instance using a given Config.
@@ -116,6 +115,8 @@ impl Filesystem for Gcsf {
         _fh: u64,
         offset: i64,
         size: u32,
+        _flags: i32,
+        _lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
         if !self.manager.contains(&FileId::Inode(ino)) {
@@ -153,7 +154,9 @@ impl Filesystem for Gcsf {
         _fh: u64,
         offset: i64,
         data: &[u8],
-        _flags: u32,
+        _write_flags: u32,
+        _flags: i32,
+        _lock_owner: Option<u64>,
         reply: ReplyWrite,
     ) {
         let offset: usize = cmp::max(offset, 0) as usize;
@@ -206,12 +209,13 @@ impl Filesystem for Gcsf {
         _req: &Request,
         parent: Inode,
         name: &OsStr,
-        new_parent: Inode,
-        new_name: &OsStr,
+        newparent: Inode,
+        newname: &OsStr,
+        _flags: u32,
         reply: ReplyEmpty,
     ) {
         let name = name.to_str().unwrap().to_string();
-        let new_name = new_name.to_str().unwrap().to_string();
+        let newname = newname.to_str().unwrap().to_string();
 
         let id = FileId::Inode(
             self.manager
@@ -219,8 +223,8 @@ impl Filesystem for Gcsf {
                 .unwrap_or(0),
         );
 
-        if new_parent == TRASH_INODE {
-            let rename_res = self.manager.rename(&id, parent, new_name);
+        if newparent == TRASH_INODE {
+            let rename_res = self.manager.rename(&id, parent, newname);
             log_result!(&rename_res);
 
             let trash_res = self.manager.move_file_to_trash(&id, true);
@@ -232,7 +236,7 @@ impl Filesystem for Gcsf {
                 reply.error(EREMOTE);
             }
         } else {
-            log_result_and_fill_reply!(self.manager.rename(&id, new_parent, new_name), reply);
+            log_result_and_fill_reply!(self.manager.rename(&id, newparent, newname), reply);
         }
     }
 
@@ -244,12 +248,13 @@ impl Filesystem for Gcsf {
         uid: Option<u32>,
         gid: Option<u32>,
         size: Option<u64>,
-        atime: Option<Timespec>,
-        mtime: Option<Timespec>,
+        atime: Option<fuser::TimeOrNow>,
+        mtime: Option<fuser::TimeOrNow>,
+        _ctime: Option<std::time::SystemTime>,
         _fh: Option<u64>,
-        crtime: Option<Timespec>,
-        chgtime: Option<Timespec>,
-        _bkuptime: Option<Timespec>,
+        crtime: Option<std::time::SystemTime>,
+        chgtime: Option<std::time::SystemTime>,
+        _bkuptime: Option<std::time::SystemTime>,
         flags: Option<u32>,
         reply: ReplyAttr,
     ) {
@@ -266,8 +271,15 @@ impl Filesystem for Gcsf {
             kind: file.attr.kind,
             size: size.unwrap_or(file.attr.size),
             blocks: file.attr.blocks,
-            atime: atime.unwrap_or(file.attr.atime),
-            mtime: mtime.unwrap_or(file.attr.mtime),
+            blksize: file.attr.blksize,
+            atime: match atime.unwrap_or(fuser::TimeOrNow::SpecificTime( file.attr.atime )) {
+                fuser::TimeOrNow::SpecificTime(t) => t,
+                fuser::TimeOrNow::Now => std::time::SystemTime::now(),
+            },
+            mtime: match mtime.unwrap_or(fuser::TimeOrNow::SpecificTime( file.attr.mtime )) {
+                fuser::TimeOrNow::SpecificTime(t) => t,
+                fuser::TimeOrNow::Now => std::time::SystemTime::now(),
+            },
             ctime: chgtime.unwrap_or(file.attr.ctime),
             crtime: crtime.unwrap_or(file.attr.crtime),
             perm: file.attr.perm,
@@ -288,7 +300,8 @@ impl Filesystem for Gcsf {
         parent: Inode,
         name: &OsStr,
         _mode: u32,
-        _flags: u32,
+        _umask: u32,
+        _flags: i32,
         reply: ReplyCreate,
     ) {
         let filename = name.to_str().unwrap().to_string();
@@ -321,10 +334,11 @@ impl Filesystem for Gcsf {
                 kind: FileType::RegularFile,
                 size: 0,
                 blocks: 123,
-                atime: Timespec::new(1, 0),
-                mtime: Timespec::new(1, 0),
-                ctime: Timespec::new(1, 0),
-                crtime: Timespec::new(1, 0),
+                blksize: 512,
+                atime: std::time::SystemTime::now(),
+                mtime: std::time::SystemTime::now(),
+                ctime: std::time::SystemTime::now(),
+                crtime: std::time::SystemTime::now(),
                 perm: 0o744,
                 nlink: 0,
                 uid: req.uid(),
@@ -404,6 +418,7 @@ impl Filesystem for Gcsf {
         parent: Inode,
         name: &OsStr,
         _mode: u32,
+        _umask: u32,
         reply: ReplyEntry,
     ) {
         let dirname = name.to_str().unwrap().to_string();
@@ -436,10 +451,11 @@ impl Filesystem for Gcsf {
                 kind: FileType::Directory,
                 size: 512,
                 blocks: 1,
-                atime: Timespec::new(1, 0),
-                mtime: Timespec::new(1, 0),
-                ctime: Timespec::new(1, 0),
-                crtime: Timespec::new(1, 0),
+                atime: std::time::SystemTime::now(),
+                mtime: std::time::SystemTime::now(),
+                ctime: std::time::SystemTime::now(),
+                crtime: std::time::SystemTime::now(),
+                blksize: 512,
                 perm: 0o644,
                 nlink: 0,
                 uid: 0,
@@ -503,9 +519,9 @@ impl Filesystem for Gcsf {
             (size, capacity)
         };
 
-        let bsize = 512;
-        let blocks: u64 = capacity / bsize + if capacity % bsize > 0 { 1 } else { 0 };
-        let bfree: u64 = (capacity - size) / bsize;
+        let bsize: u32 = 512;
+        let blocks: u64 = capacity / (bsize as u64)+ if capacity % (bsize as u64) > 0 { 1 } else { 0 };
+        let bfree: u64 = (capacity - size) / (bsize as u64);
 
         reply.statfs(
             /* blocks:*/ blocks,
@@ -513,9 +529,9 @@ impl Filesystem for Gcsf {
             /* bavail: */ bfree,
             /* files: */ std::u64::MAX,
             /* ffree: */ std::u64::MAX - self.manager.files.len() as u64,
-            /* bsize: */ bsize as u32,
+            /* bsize: */ bsize,
             /* namelen: */ 1024,
-            /* frsize: */ bsize as u32,
+            /* frsize: */ bsize,
         );
     }
 }

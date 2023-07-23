@@ -1,7 +1,7 @@
 use super::{File, FileId};
 use drive3;
 use failure::{err_msg, Error};
-use fuse::{FileAttr, FileType};
+use fuser::{FileAttr, FileType};
 use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
 use id_tree::RemoveBehavior::*;
@@ -10,8 +10,7 @@ use std::collections::HashMap;
 use std::collections::LinkedList;
 use std::fmt;
 use std::time::{Duration, SystemTime};
-use time::Timespec;
-use DriveFacade;
+use crate::DriveFacade;
 
 pub type Inode = u64;
 pub type DriveId = String;
@@ -245,10 +244,11 @@ impl FileManager {
                 ino: ROOT_INODE,
                 size: 512,
                 blocks: 1,
-                atime: Timespec { sec: 0, nsec: 0 },
-                mtime: Timespec { sec: 0, nsec: 0 },
-                ctime: Timespec { sec: 0, nsec: 0 },
-                crtime: Timespec { sec: 0, nsec: 0 },
+                blksize: 512,
+                atime: std::time::SystemTime::UNIX_EPOCH,
+                mtime: std::time::SystemTime::UNIX_EPOCH,
+                ctime: std::time::SystemTime::UNIX_EPOCH,
+                crtime: std::time::SystemTime::UNIX_EPOCH,
                 kind: FileType::Directory,
                 perm: 0o755,
                 nlink: 2,
@@ -271,10 +271,11 @@ impl FileManager {
                 ino: preferred_inode.unwrap_or_else(|| self.next_available_inode()),
                 size: 512,
                 blocks: 1,
-                atime: Timespec { sec: 0, nsec: 0 },
-                mtime: Timespec { sec: 0, nsec: 0 },
-                ctime: Timespec { sec: 0, nsec: 0 },
-                crtime: Timespec { sec: 0, nsec: 0 },
+                blksize: 512,
+                atime: std::time::SystemTime::UNIX_EPOCH,
+                mtime: std::time::SystemTime::UNIX_EPOCH,
+                ctime: std::time::SystemTime::UNIX_EPOCH,
+                crtime: std::time::SystemTime::UNIX_EPOCH,
                 kind: FileType::Directory,
                 perm: 0o755,
                 nlink: 2,

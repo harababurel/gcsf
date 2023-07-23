@@ -1,7 +1,7 @@
 use chrono::DateTime;
 use drive3;
 use failure::{err_msg, Error};
-use fuse::{FileAttr, FileType};
+use fuser::{FileAttr, FileType};
 use id_tree::NodeId;
 use std::collections::HashMap;
 use time::Timespec;
@@ -83,15 +83,17 @@ impl File {
                 Err(_) => Timespec { sec: 0, nsec: 0 },
             },
         )
+        .map(|t| std::time::UNIX_EPOCH + std::time::Duration::new(t.sec as u64, t.nsec as u32))
         .collect();
 
         let (crtime, mtime, atime) = (times[0], times[1], times[2]);
-        let bsize = 512;
+        let bsize: u64 = 512;
 
         let mut attr = FileAttr {
             ino: inode,
             size,
             blocks: size / bsize + if size % bsize > 0 { 1 } else { 0 },
+            blksize: bsize as u32,
             atime,
             mtime,
             ctime: mtime, // Time of last change
