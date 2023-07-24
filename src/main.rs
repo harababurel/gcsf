@@ -55,7 +55,7 @@ cache_statfs_seconds = 60
 
 # How many seconds to wait before checking for remote changes and updating them
 # locally.
-sync_interval = 10
+sync_interval = 60
 
 # Mount options
 mount_options = [
@@ -63,8 +63,6 @@ mount_options = [
     # Allow file system access to root. This only works if `user_allow_other`
     # is set in /etc/fuse.conf
     "allow_root",
-    "big_writes",
-    "max_write=131072"
 ]
 
 # If set to true, Google Drive will provide a code after logging in and
@@ -75,19 +73,31 @@ mount_options = [
 # This is usually faster and more convenient.
 authorize_using_code = false
 
-# If set to true, all files with identical name will get an increasing number attached to the suffix.
+# If set to true, all files with identical name will get an increasing number
+# attached to the suffix. This is most likely not necessary.
 rename_identical_files = false
 
 # If set to true, will add an extension to special files (docs, presentations, sheets, drawings, sites), e.g. "\#.ods" for spreadsheets.
 add_extensions_to_special_files = false
 
-# If set to true, deleted files will remove them permanently instead of moving them to Trash.
-# Deleting trashed files always removes them permanently.
+# If set to true, deleted files and folder will not be moved to Trash Folder,
+# instead they get deleted permanently.
 skip_trash = false
 
 # The Google OAuth client secret for Google Drive APIs. Create your own
 # credentials at https://console.developers.google.com and paste them here
-client_secret = """{"installed":{"client_id":"726003905312-e2mq9mesjc5llclmvc04ef1k7qopv9tu.apps.googleusercontent.com","project_id":"weighty-triode-199418","auth_uri":"https://accounts.google.com/o/oauth2/auth","token_uri":"https://accounts.google.com/o/oauth2/token","auth_provider_x509_cert_url":"https://www.googleapis.com/oauth2/v1/certs","client_secret":"hp83n1Rzz8UpxgCnqvX15qC2","redirect_uris":["urn:ietf:wg:oauth:2.0:oob","http://localhost"]}}"""
+client_secret = """
+  {
+  "installed": {
+    "client_id": "892276709198-2ksebnrqkhihtf5p743k4ce5bk0n7p5a.apps.googleusercontent.com",
+    "project_id": "gcsf-v02",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_secret": "1ImxorJzh-PuH2CxrcLPnJMU",
+    "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob", "http://localhost"]
+  }
+}"""
 "#;
 
 fn mount_gcsf(config: Config, mountpoint: &str) {
