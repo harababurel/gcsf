@@ -1,4 +1,4 @@
-dist: jammy
+dist: focal
 language: rust
 sudo: required
 rust:
