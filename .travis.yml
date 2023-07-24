@@ -40,7 +40,7 @@ deploy:
   api_key:
     secure: FPEA8LSJpjWzpQuLW1GvFkjzclnnrypwHxIEqDboO4KO/L1RzF5EJaODoXPTLRF0kXCzO0udosV27G7FPpP88IDFxA5RGlNSaDfmcLwX3A5W4i+4LZJOtT5nbpirx0mUj+3JuVWyOEX0dmyoCHfKjaYPNcEAGprfplJY7IInkzlovwaDmJjpPIG1lIp64S+yVQB1zhOGtYFjK9xUWcz1mTkrlLgJ39Tu+x8x5yuYSQZUZYOQ3NmV8wCwIpKcDxz5sBJttd2tvBmy8JiwYEZJ8CbMGJuPs7Dg7v1DkmzKb0DFAsDiMQ5uU/GQjfJgCOGWEebh9aaYovvPEJlV5AQnTRYg5qVh6/ZMxrF5k0SsikFr7B4Nec4XZBv0OrGXxIHN6khzWfRHN5dxmCBMKdOO36D0tlqk4ZAH+Up+LCN3gxQZoAl7NloAb8s3c/476Degu4SQVAW6Wf1us8PTCHgA1XhfYbOfg1EOm2900QMkM0zLfSMsI+hvNIrpDNMrzegboHbaGQnAlRKYLNYQ4AOyS0WQgjEPuan9+HwolLkJVvGwUA5Agzpq47xNdfZj7IL/10VgLaJspt1KxaTUxymq5e+JGGLE3lrdIbS8bSXOQ6Zjf3P0/7Oz3RSvGWHkXBjHdEOU3HBKi1htQKEAR2/T0rehqoBNo1TC+QIkPtl0lpQ=
   file_glob: true
-  edge: true # opt in to dpl v2
+  # edge: true # opt in to dpl v2
   file: "$CRATE_NAME-$TRAVIS_TAG-$TARGET.*"
   on:
     tags: true
