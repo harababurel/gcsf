@@ -1,7 +1,7 @@
 [package]
 name = "gcsf"
 description = "Filesystem based on Google Drive"
-version = "0.2.3"
+version = "0.2.4"
 repository = "https://github.com/harababurel/gcsf"
 authors = ["Sergiu Puscas <srg.pscs@gmail.com>"]
 license = "MIT"
@@ -15,21 +15,21 @@ clap = { version = "2.33.0", features = ["yaml"] }
 config = "0.13.3"
 ctrlc = "3.4.0"
 failure = "0.1.8"
-fuser = "0.12"
+fuser = "0.13"
 futures = {version =  "0.3.28", features = ["executor"]}
-google-drive3 = "5.0.2"
+google-drive3 = "5.0.3"
 id_tree = "1.8.0"
 lazy_static = "1.4.0"
 libc = "0.2.147"
-log = "0.4.19"
+log = "0.4.20"
 lru_time_cache = "0.11.11"
 maplit = "1.0.2"
 mime-sniffer = "0.1.2"
 pretty_env_logger = "0.5.0"
 rand = "0.8.5"
-serde = "1.0.174"
-serde_derive = "1.0.174"
-serde_json = "1.0.103"
-time = "0.3.23"
-tokio = { version = "1.29", features = ["full"] }
+serde = "1.0.186"
+serde_derive = "1.0.186"
+serde_json = "1.0.105"
+time = "0.3.27"
+tokio = { version = "1.32", features = ["full"] }
 xdg = "2.5.2"
