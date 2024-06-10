@@ -18,8 +18,9 @@ Environment=GCSF_SESSION="some_session_name"
 ExecStart=/full/path/to/gcsf mount $GCSF_MOUNTPOINT -s $GCSF_SESSION
 ExecStop=/bin/fusermount -u $GCSF_MOUNTPOINT
 User=some_user_name
-# GCSF will die by itself after the fusermount command
-KillMode=none
+# Set KillMode to "control-group": after ExecStop is executed, all remaining processes will be killed.
+# Normally, GCSF will die by itself after the fusermount command is executed, but in some cases (such as during start-up while still receiving initial data from the Drive API), fusermount will fail (as expected, since the file system is not mounted yet) and the gcsf process will continue running. In that case, systemd should kill it.
+KillMode=control-group
 Restart=on-failure
 
 [Install]
