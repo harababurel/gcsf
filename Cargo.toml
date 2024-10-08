@@ -12,24 +12,24 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "2.33.0", features = ["yaml"] }
-config = "0.13.3"
-ctrlc = "3.4.0"
+config = "0.14.0"
+ctrlc = "3.4.5"
 failure = "0.1.8"
-fuser = "0.12"
-futures = {version =  "0.3.28", features = ["executor"]}
+fuser = "0.14.0"
+futures = {version =  "0.3.31", features = ["executor"]}
 google-drive3 = "5.0.2"
 id_tree = "1.8.0"
-lazy_static = "1.4.0"
-libc = "0.2.147"
-log = "0.4.19"
+lazy_static = "1.5.0"
+libc = "0.2.159"
+log = "0.4.22"
 lru_time_cache = "0.11.11"
 maplit = "1.0.2"
 mime-sniffer = "0.1.2"
 pretty_env_logger = "0.5.0"
 rand = "0.8.5"
-serde = "1.0.174"
-serde_derive = "1.0.174"
-serde_json = "1.0.103"
-time = "0.3.23"
-tokio = { version = "1.29", features = ["full"] }
+serde = "1.0.210"
+serde_derive = "1.0.210"
+serde_json = "1.0.128"
+time = "0.3.36"
+tokio = { version = "1.40.0", features = ["full"] }
 xdg = "2.5.2"

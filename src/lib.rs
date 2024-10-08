@@ -33,7 +33,6 @@
     improper_ctypes,
     improper_ctypes_definitions,
     incomplete_features,
-    indirect_structural_match,
     inline_no_sanitize,
     invalid_doc_attributes,
     invalid_macro_export_arguments,
@@ -109,7 +108,6 @@
     unused_unsafe,
     unused_variables,
     warnings,
-    where_clauses_object_safety,
     while_true
 )]
 extern crate failure;
