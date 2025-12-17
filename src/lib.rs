@@ -7,7 +7,6 @@
     bad_asm_style,
     bare_trait_objects,
     break_with_label_and_loop,
-    byte_slice_in_packed_struct_with_derive,
     clashing_extern_declarations,
     coherence_leak_check,
     confusable_idents,
@@ -33,7 +32,6 @@
     improper_ctypes,
     improper_ctypes_definitions,
     incomplete_features,
-    indirect_structural_match,
     inline_no_sanitize,
     invalid_doc_attributes,
     invalid_macro_export_arguments,
@@ -62,7 +60,7 @@
     special_module_name,
     stable_features,
     suspicious_double_ref_op,
-    temporary_cstring_as_ptr,
+    dangling_pointers_from_temporaries,
     trivial_bounds,
     trivial_casts,
     trivial_numeric_casts,
@@ -70,7 +68,6 @@
     tyvar_behind_raw_pointer,
     uncommon_codepoints,
     unconditional_recursion,
-    undefined_naked_function_abi,
     unexpected_cfgs,
     ungated_async_fn_track_caller,
     uninhabited_static,
@@ -109,7 +106,6 @@
     unused_unsafe,
     unused_variables,
     warnings,
-    where_clauses_object_safety,
     while_true
 )]
 extern crate failure;

@@ -334,8 +334,8 @@ impl FileManager {
             FileId::DriveId(drive_id) => self.drive_ids.get(drive_id).cloned(),
             FileId::NodeId(node_id) => self.tree.get(node_id).map(|node| node.data()).ok().cloned(),
             FileId::ParentAndName {
-                ref parent,
-                ref name,
+                parent,
+                name,
             } => self
                 .get_children(&FileId::Inode(*parent))?
                 .into_iter()
