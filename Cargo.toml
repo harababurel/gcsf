@@ -16,7 +16,7 @@ config = "0.13.3"
 ctrlc = "3.5.1"
 failure = "0.1.8"
 fuser = "0.12"
-futures = {version =  "0.3.28", features = ["executor"]}
+futures = {version =  "0.3.31", features = ["executor"]}
 google-drive3 = "5.0.2"
 id_tree = "1.8.0"
 lazy_static = "1.4.0"
