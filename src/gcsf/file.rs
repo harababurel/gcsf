@@ -163,7 +163,6 @@ impl File {
         }
     }
 
-    #[allow(dead_code)]
     pub fn is_drive_document(&self) -> bool {
         self.drive_file
             .as_ref()
@@ -211,7 +210,6 @@ impl File {
         self.drive_file.as_mut().unwrap().id = Some(id);
     }
 
-    #[allow(dead_code)]
     pub fn mime_type(&self) -> Option<String> {
         self.drive_file.as_ref()?;
 
