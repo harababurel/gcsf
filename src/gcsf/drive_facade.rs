@@ -1,7 +1,7 @@
 use super::Config;
 use drive3::hyper;
 use drive3::hyper_rustls;
-use yup_oauth2 as oauth2;
+use drive3::yup_oauth2 as oauth2;
 use google_drive3::hyper_rustls::HttpsConnector;
 use hyper::Response;
 use http_body_util::BodyExt;
