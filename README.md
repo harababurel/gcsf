@@ -37,6 +37,14 @@ On Ubuntu, GCSF requires [libfuse-dev](https://packages.ubuntu.com/disco/libfuse
 sudo apt-get install -y libfuse-dev libssl-dev pkg-config
 ```
 
+#### Fedora
+
+On Fedora, GCSF requires gcc, fuse3-devel, and pkg-config:
+
+```bash
+sudo dnf install -y gcc fuse3-devel pkg-config
+```
+
 #### Arch Linux
 
 An AUR package is maintained by [axionl](https://github.com/axionl): [gcsf-git](https://aur.archlinux.org/packages/gcsf-git/).
