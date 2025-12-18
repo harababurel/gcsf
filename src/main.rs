@@ -29,7 +29,7 @@ const INFO_LOG: &str =
 
 #[derive(Parser)]
 #[command(name = "GCSF")]
-#[command(version = "0.2.7")]
+#[command(version = "0.2.8")]
 #[command(author = "Sergiu Puscas <srg.pscs@gmail.com>")]
 #[command(about = "File system based on Google Drive")]
 #[command(after_help = "Note: this is a work in progress. It might cause data loss. Use with caution.")]
