@@ -68,11 +68,9 @@ impl File {
                 FileType::RegularFile
             };
 
-        let times: Vec<std::time::SystemTime> = vec![
-            &drive_file.created_time,
+        let times: Vec<std::time::SystemTime> = [&drive_file.created_time,
             &drive_file.modified_time,
-            &drive_file.viewed_by_me_time,
-        ]
+            &drive_file.viewed_by_me_time]
         .iter()
         .map(|datetime| datetime.unwrap_or_default().into())
         .collect();
@@ -83,7 +81,7 @@ impl File {
         let mut attr = FileAttr {
             ino: inode,
             size,
-            blocks: size / bsize + if size % bsize > 0 { 1 } else { 0 },
+            blocks: size / bsize + if !size.is_multiple_of(bsize) { 1 } else { 0 },
             blksize: bsize as u32,
             atime,
             mtime,

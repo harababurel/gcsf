@@ -190,7 +190,7 @@ impl Filesystem for Gcsf {
         match self.manager.get_children(&FileId::Inode(ino)) {
             Some(children) => {
                 for child in children.iter().skip(offset as usize) {
-                    if reply.add(child.inode(), curr_offs, child.kind(), &child.name()) {
+                    if reply.add(child.inode(), curr_offs, child.kind(), child.name()) {
                         break;
                     } else {
                         curr_offs += 1;

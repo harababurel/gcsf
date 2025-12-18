@@ -195,11 +195,10 @@ impl FileManager {
 
         let mut moves: LinkedList<(FileId, FileId)> = LinkedList::new();
         for (inode, file) in &self.files {
-            if let Some(parent) = file.drive_parent() {
-                if self.contains(&FileId::DriveId(parent.clone())) {
+            if let Some(parent) = file.drive_parent()
+                && self.contains(&FileId::DriveId(parent.clone())) {
                     moves.push_back((FileId::Inode(*inode), FileId::DriveId(parent)));
                 }
-            }
         }
 
         for (inode, parent) in &moves {

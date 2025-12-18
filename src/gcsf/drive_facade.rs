@@ -177,8 +177,8 @@ impl DriveFacade {
         drive_id: &str,
         mime_type: Option<String>,
     ) -> Result<Vec<u8>, Error> {
-        if let Some(mime) = mime_type.clone() {
-            if UNEXPORTABLE_MIME_TYPES.contains::<str>(&mime) {
+        if let Some(mime) = mime_type.clone()
+            && UNEXPORTABLE_MIME_TYPES.contains::<str>(&mime) {
                 return Ok(format!(
                     "UNEXPORTABLE_FILE: The MIME type of this \
                      file is {:?}, which can not be exported from Drive. Web \
@@ -192,7 +192,6 @@ impl DriveFacade {
                 .as_bytes()
                 .to_vec());
             }
-        }
 
         let export_type: Option<&'static str> = mime_type
             .and_then(|ref t| MIME_TYPES.get::<str>(t))
@@ -245,7 +244,7 @@ impl DriveFacade {
     fn apply_pending_writes_on_data(&mut self, id: DriveId, data: &mut Vec<u8>) {
         self.pending_writes
             .entry(id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .iter()
             .filter(|write| write.id == id)
             .for_each(|pending_write| {
