@@ -96,7 +96,7 @@ impl Filesystem for Gcsf {
         };
     }
 
-    fn getattr(&mut self, _req: &Request, ino: Inode, reply: ReplyAttr) {
+    fn getattr(&mut self, _req: &Request, ino: Inode, _fh: Option<u64>, reply: ReplyAttr) {
         // self.manager.sync();
         match self.manager.get_file(&FileId::Inode(ino)) {
             Some(file) => {

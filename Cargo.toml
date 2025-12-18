@@ -15,7 +15,7 @@ clap = { version = "2.34.0", features = ["yaml"] }
 config = "0.15.19"
 ctrlc = "3.5.1"
 failure = "0.1.8"
-fuser = "0.12"
+fuser = "0.16"
 futures = {version =  "0.3.31", features = ["executor"]}
 google-drive3 = "5.0.2"
 id_tree = "1.8.0"
