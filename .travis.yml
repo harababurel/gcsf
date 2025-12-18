@@ -38,6 +38,7 @@ deploy:
   file_glob: true
   # edge: true # opt in to dpl v2
   file: "$CRATE_NAME-$TRAVIS_TAG-$TARGET.*"
+  edge: true
   on:
     tags: true
   provider: releases
