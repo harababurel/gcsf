@@ -2,7 +2,6 @@
      title="Size Limit logo" src="https://i.imgur.com/9xdFwQq.png">
 
 
-[![Build Status](https://travis-ci.org/harababurel/gcsf.svg?branch=master)](https://travis-ci.org/harababurel/gcsf)
 [![Crates.io](https://img.shields.io/crates/v/gcsf.svg)](https://crates.io/crates/gcsf)
 [![Docs](https://docs.rs/gcsf/badge.svg)](https://docs.rs/gcsf/latest/gcsf/)<br>
 [![GitHub Issues](https://img.shields.io/github/issues/harababurel/gcsf.svg)](https://github.com/harababurel/gcsf/issues)
@@ -160,3 +159,5 @@ You installed the prebuilt binaries but couldn't run it. Fix by installing rust 
 ### Contributing
 
 Contributions are welcome. Documentation available on [docs.rs/gcsf](https://docs.rs/gcsf). You can also help by reporting or fixing [issues](https://github.com/harababurel/gcsf/issues).
+
+[![Star History Chart](https://api.star-history.com/svg?repos=harababurel/gcsf&type=Date)](https://star-history.com/#harababurel/gcsf&Date)
