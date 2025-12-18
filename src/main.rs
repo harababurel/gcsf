@@ -1,4 +1,3 @@
-#[macro_use]
 extern crate clap;
 extern crate config;
 extern crate ctrlc;
@@ -12,7 +11,7 @@ extern crate serde;
 extern crate serde_json;
 extern crate xdg;
 
-use clap::App;
+use clap::{Parser, Subcommand};
 use failure::{err_msg, Error};
 use std::fs;
 use std::io::prelude::*;
@@ -27,6 +26,47 @@ const DEBUG_LOG: &str = "hyper::client=error,hyper::http=error,hyper::net=error,
 
 const INFO_LOG: &str =
     "hyper::client=error,hyper::http=error,hyper::net=error,fuse::session=error,info";
+
+#[derive(Parser)]
+#[command(name = "GCSF")]
+#[command(version = "0.2.7")]
+#[command(author = "Sergiu Puscas <srg.pscs@gmail.com>")]
+#[command(about = "File system based on Google Drive")]
+#[command(after_help = "Note: this is a work in progress. It might cause data loss. Use with caution.")]
+#[command(subcommand_required = true)]
+#[command(arg_required_else_help = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Mount the file system.
+    Mount {
+        /// An existing session name set during `gcsf login`
+        #[arg(short = 's', long = "session", value_name = "session_name")]
+        session_name: String,
+
+        /// Path to mount directory
+        #[arg(value_name = "mount_directory")]
+        mountpoint: String,
+    },
+    /// Login to Drive (create a new session).
+    Login {
+        /// User-defined name for this session.
+        #[arg(value_name = "session_name")]
+        session_name: String,
+    },
+    /// Logout (delete a given session).
+    Logout {
+        /// User-defined session name.
+        #[arg(value_name = "session_name")]
+        session_name: String,
+    },
+    /// List sessions.
+    List,
+}
 
 const DEFAULT_CONFIG: &str = r#"
 ### This is the configuration file that GCSF uses.
@@ -209,75 +249,75 @@ fn main() {
         .parse_filters(if config.debug() { DEBUG_LOG } else { INFO_LOG })
         .init();
 
-    let yaml = load_yaml!("cli.yml");
-    let matches = App::from_yaml(yaml).get_matches();
+    let cli = Cli::parse();
 
-    if let Some(matches) = matches.subcommand_matches("login") {
-        config.session_name = Some(matches.value_of("session_name").unwrap().to_string());
+    match cli.command {
+        Commands::Login { session_name } => {
+            config.session_name = Some(session_name);
 
-        match login(&mut config) {
-            Ok(_) => {
-                println!(
-                    "Successfully logged in. Saved credentials to {:?}",
-                    &config.token_file()
-                );
-            }
-            Err(e) => {
-                error!("Could not log in: {}", e);
-            }
-        };
-    }
+            match login(&mut config) {
+                Ok(_) => {
+                    println!(
+                        "Successfully logged in. Saved credentials to {:?}",
+                        &config.token_file()
+                    );
+                }
+                Err(e) => {
+                    error!("Could not log in: {}", e);
+                }
+            };
+        }
+        Commands::Logout { session_name } => {
+            config.session_name = Some(session_name);
+            let tf = config.token_file();
+            match fs::remove_file(&tf) {
+                Ok(_) => {
+                    println!("Successfully removed {:?}", &tf);
+                }
+                Err(e) => {
+                    println!("Could not remove {:?}: {}", &tf, e);
+                }
+            };
+        }
+        Commands::List => {
+            let exception = String::from("gcsf.toml");
+            let mut sessions: Vec<_> = fs::read_dir(config.config_dir())
+                .unwrap()
+                .map(Result::unwrap)
+                .map(|f| f.file_name().to_str().unwrap().to_string())
+                .filter(|name| name != &exception)
+                .collect();
+            sessions.sort();
 
-    if let Some(matches) = matches.subcommand_matches("logout") {
-        config.session_name = Some(matches.value_of("session_name").unwrap().to_string());
-        let tf = config.token_file();
-        match fs::remove_file(&tf) {
-            Ok(_) => {
-                println!("Successfully removed {:?}", &tf);
-            }
-            Err(e) => {
-                println!("Could not remove {:?}: {}", &tf, e);
-            }
-        };
-    }
-
-    if let Some(_matches) = matches.subcommand_matches("list") {
-        let exception = String::from("gcsf.toml");
-        let mut sessions: Vec<_> = fs::read_dir(config.config_dir())
-            .unwrap()
-            .map(Result::unwrap)
-            .map(|f| f.file_name().to_str().unwrap().to_string())
-            .filter(|name| name != &exception)
-            .collect();
-        sessions.sort();
-
-        if sessions.is_empty() {
-            println!("No sessions found.");
-        } else {
-            println!("Sessions:");
-            for session in sessions {
-                println!("\t- {}", &session);
+            if sessions.is_empty() {
+                println!("No sessions found.");
+            } else {
+                println!("Sessions:");
+                for session in sessions {
+                    println!("\t- {}", &session);
+                }
             }
         }
-    }
+        Commands::Mount {
+            session_name,
+            mountpoint,
+        } => {
+            config.session_name = Some(session_name);
 
-    if let Some(matches) = matches.subcommand_matches("mount") {
-        let mountpoint = matches.value_of("mountpoint").unwrap();
-        config.session_name = Some(matches.value_of("session_name").unwrap().to_string());
+            if !config.token_file().exists() {
+                error!("Token file {:?} does not exist.", config.token_file());
+                error!("Try logging in first using `gcsf login`.");
+                return;
+            }
 
-        if !config.token_file().exists() {
-            error!("Token file {:?} does not exist.", config.token_file());
-            error!("Try logging in first using `gcsf login`.");
-            return;
+            if config.client_secret.is_none() {
+                error!("No Google OAuth client secret was provided.");
+                error!("Try deleting your config file to force GCSF to generate it with the default credentials.");
+                error!("Alternatively, you can create your own credentials or manually set the default ones from https://github.com/harababurel/gcsf/blob/master/sample_config.toml");
+                return;
+            }
+
+            mount_gcsf(config, &mountpoint);
         }
-
-        if config.client_secret.is_none() {
-            error!("No Google OAuth client secret was provided.");
-            error!("Try deleting your config file to force GCSF to generate it with the default credentials.");
-            error!("Alternatively, you can create your own credentials or manually set the default ones from https://github.com/harababurel/gcsf/blob/master/sample_config.toml");
-            return;
-        }
-
-        mount_gcsf(config, mountpoint);
     }
 }
