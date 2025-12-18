@@ -171,7 +171,7 @@ fn login(config: &mut Config) -> Result<(), Error> {
 }
 
 fn load_conf() -> Result<Config, Error> {
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("gcsf").unwrap();
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("gcsf");
     let config_file = xdg_dirs
         .place_config_file("gcsf.toml")
         .map_err(|_| err_msg("Cannot create configuration directory"))?;
@@ -197,7 +197,7 @@ fn load_conf() -> Result<Config, Error> {
 
     // let mut config = TryInto::<Config>::try_into(settings)?;
     let mut config: gcsf::Config = settings.try_deserialize()?;
-    config.config_dir = Some(xdg_dirs.get_config_home());
+    config.config_dir = xdg_dirs.get_config_home();
 
     Ok(config)
 }
