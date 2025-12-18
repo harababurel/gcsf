@@ -506,7 +506,7 @@ impl Filesystem for Gcsf {
             || !self.statfs_cache.contains_key("capacity")
         {
             let (size, capacity) = self.manager.df.size_and_capacity().unwrap_or((0, Some(0)));
-            let capacity = capacity.unwrap_or(std::i64::MAX as u64);
+            let capacity = capacity.unwrap_or(i64::MAX as u64);
             self.statfs_cache.insert("size".to_string(), size);
             self.statfs_cache.insert("capacity".to_string(), capacity);
 
@@ -528,8 +528,8 @@ impl Filesystem for Gcsf {
             /* blocks:*/ blocks,
             /* bfree: */ bfree,
             /* bavail: */ bfree,
-            /* files: */ std::u64::MAX,
-            /* ffree: */ std::u64::MAX - self.manager.files.len() as u64,
+            /* files: */ u64::MAX,
+            /* ffree: */ u64::MAX - self.manager.files.len() as u64,
             /* bsize: */ bsize,
             /* namelen: */ 1024,
             /* frsize: */ bsize,
