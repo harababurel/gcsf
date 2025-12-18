@@ -17,7 +17,11 @@ ctrlc = "3.5.1"
 failure = "0.1.8"
 fuser = "0.16"
 futures = {version =  "0.3.31", features = ["executor"]}
-google-drive3 = "=5.0.2"
+google-drive3 = "=6.0.0"
+yup-oauth2 = "=11.0.0"
+hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "http2", "tokio"] }
+http-body-util = "0.1"
+bytes = "1.0"
 id_tree = "1.8.0"
 lazy_static = "1.5.0"
 libc = "0.2.178"

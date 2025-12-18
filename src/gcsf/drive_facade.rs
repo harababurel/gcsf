@@ -1,8 +1,10 @@
 use super::Config;
-use drive3::{hyper, hyper_rustls, oauth2};
+use drive3::hyper;
+use drive3::hyper_rustls;
+use yup_oauth2 as oauth2;
 use google_drive3::hyper_rustls::HttpsConnector;
-use hyper::body::Body;
 use hyper::Response;
+use http_body_util::BodyExt;
 
 use failure::{err_msg, Error};
 use lru_time_cache::LruCache;
@@ -17,7 +19,7 @@ const PAGE_SIZE: i32 = 1000;
 type DriveId = String;
 type DriveIdRef<'a> = &'a str;
 
-type DriveHub = drive3::api::DriveHub<HttpsConnector<hyper::client::HttpConnector>>;
+type DriveHub = drive3::api::DriveHub<HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
 
 /// Provides a simple high-level interface for interacting with the Google Drive API.
 pub struct DriveFacade {
@@ -88,7 +90,7 @@ impl DriveFacade {
     fn create_drive_auth(
         config: &Config,
     ) -> Result<
-        oauth2::authenticator::Authenticator<HttpsConnector<hyper::client::HttpConnector>>,
+        oauth2::authenticator::Authenticator<HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>,
         Error,
     > {
         let secret: oauth2::ConsoleApplicationSecret =
@@ -118,14 +120,15 @@ impl DriveFacade {
         let auth = Self::create_drive_auth(config)?;
 
         Ok(google_drive3::DriveHub::new(
-            hyper::Client::builder().build(
-                hyper_rustls::HttpsConnectorBuilder::new()
-                    .with_native_roots()
-                    .https_or_http()
-                    .enable_http1()
-                    .enable_http2()
-                    .build(),
-            ),
+            hyper_util::client::legacy::Client::builder(hyper_util::rt::TokioExecutor::new())
+                .build(
+                    hyper_rustls::HttpsConnectorBuilder::new()
+                        .with_native_roots()?
+                        .https_or_http()
+                        .enable_http1()
+                        .enable_http2()
+                        .build(),
+                ),
             auth,
         ))
     }
@@ -229,9 +232,11 @@ impl DriveFacade {
         };
 
         let content: Vec<u8> = rt
-            .block_on(hyper::body::to_bytes(response.into_body()))?
-            .into_iter()
-            .collect();
+            .block_on(async {
+                response.into_body().collect().await
+            })?
+            .to_bytes()
+            .to_vec();
         Ok(content)
     }
 
@@ -517,7 +522,7 @@ impl DriveFacade {
         id: DriveIdRef,
         parent: DriveIdRef,
         new_name: &str,
-    ) -> Result<(Response<Body>, drive3::api::File), Error> {
+    ) -> Result<(Response<http_body_util::combinators::BoxBody<bytes::Bytes, hyper::Error>>, drive3::api::File), Error> {
         let current_parents = self
             .get_file_metadata(id)?
             .parents
@@ -588,7 +593,7 @@ impl DriveFacade {
         &mut self,
         id: DriveId,
         data: &[u8],
-    ) -> Result<(Response<Body>, drive3::api::File), Error> {
+    ) -> Result<(Response<http_body_util::combinators::BoxBody<bytes::Bytes, hyper::Error>>, drive3::api::File), Error> {
         let mime_guess = data.sniff_mime_type().unwrap_or("application/octet-stream");
         debug!(
             "Updating file content for {}. Mime type guess based on content: {}",
@@ -678,7 +683,7 @@ impl Read for DummyFile {
         let copied = cmp::min(buf.len(), remaining);
 
         if copied > 0 {
-            buf[..]
+            buf[..copied]
                 .copy_from_slice(&self.data[self.cursor as usize..self.cursor as usize + copied]);
         }
 
