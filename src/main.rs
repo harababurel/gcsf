@@ -24,12 +24,31 @@ use gcsf::{Config, DriveFacade, Gcsf, NullFs};
 
 const DEBUG_LOG: &str = "hyper::client=error,hyper::http=error,hyper::net=error,debug";
 
+fn print_auth_troubleshooting(session_name: &str) {
+    eprintln!();
+    eprintln!("This usually means your refresh token has expired.");
+    eprintln!();
+    eprintln!("Common causes:");
+    eprintln!("  1. Google Cloud project is in 'Testing' mode (tokens expire after 7 days)");
+    eprintln!("  2. You switched to 'Production' mode but haven't re-authenticated");
+    eprintln!("  3. You revoked access in your Google Account settings");
+    eprintln!();
+    eprintln!("To fix:");
+    eprintln!("  1. Ensure your Google Cloud project is in 'Production' mode:");
+    eprintln!("     - Go to https://console.cloud.google.com");
+    eprintln!("     - Navigate to 'APIs & Services' -> 'OAuth consent screen'");
+    eprintln!("     - If status is 'Testing', click 'Publish App'");
+    eprintln!("  2. Re-authenticate:");
+    eprintln!("     gcsf logout {}", session_name);
+    eprintln!("     gcsf login {}", session_name);
+}
+
 const INFO_LOG: &str =
     "hyper::client=error,hyper::http=error,hyper::net=error,fuse::session=error,info";
 
 #[derive(Parser)]
 #[command(name = "GCSF")]
-#[command(version = "0.3.2")]
+#[command(version = "0.3.3")]
 #[command(author = "Sergiu Puscas <srg.pscs@gmail.com>")]
 #[command(about = "File system based on Google Drive")]
 #[command(after_help = "Note: this is a work in progress. It might cause data loss. Use with caution.")]
@@ -66,6 +85,12 @@ enum Commands {
     },
     /// List sessions.
     List,
+    /// Verify that authentication is working for a session.
+    Verify {
+        /// Session name to verify.
+        #[arg(value_name = "session_name")]
+        session_name: String,
+    },
 }
 
 const DEFAULT_CONFIG: &str = r#"
@@ -298,11 +323,40 @@ fn main() {
                 }
             }
         }
+        Commands::Verify { session_name } => {
+            config.session_name = Some(session_name.clone());
+
+            if !config.token_file().exists() {
+                error!("Token file {:?} does not exist.", config.token_file());
+                error!("Run `gcsf login {}` first.", session_name);
+                std::process::exit(1);
+            }
+
+            if config.client_secret.is_none() {
+                error!("No Google OAuth client secret was provided.");
+                std::process::exit(1);
+            }
+
+            println!("Verifying authentication for session '{}'...", session_name);
+
+            let mut df = DriveFacade::new(&config);
+            match df.validate_auth() {
+                Ok(_) => {
+                    println!("Authentication is valid.");
+                    println!("Token file: {:?}", config.token_file());
+                }
+                Err(e) => {
+                    error!("Authentication failed: {}", e);
+                    print_auth_troubleshooting(&session_name);
+                    std::process::exit(1);
+                }
+            }
+        }
         Commands::Mount {
             session_name,
             mountpoint,
         } => {
-            config.session_name = Some(session_name);
+            config.session_name = Some(session_name.clone());
 
             if !config.token_file().exists() {
                 error!("Token file {:?} does not exist.", config.token_file());
@@ -316,6 +370,21 @@ fn main() {
                 error!("Alternatively, you can create your own credentials or manually set the default ones from https://github.com/harababurel/gcsf/blob/master/sample_config.toml");
                 return;
             }
+
+            // Validate authentication before attempting to mount
+            info!("Validating authentication...");
+            let mut df = DriveFacade::new(&config);
+            match df.validate_auth() {
+                Ok(_) => {
+                    info!("Authentication valid.");
+                }
+                Err(e) => {
+                    error!("Authentication failed: {}", e);
+                    print_auth_troubleshooting(&session_name);
+                    return;
+                }
+            }
+            drop(df); // Release the DriveFacade before mount creates its own
 
             mount_gcsf(config, &mountpoint);
         }

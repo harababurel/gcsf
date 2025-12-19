@@ -261,6 +261,13 @@ impl DriveFacade {
         self.pending_writes.remove(&id);
     }
 
+    /// Validates that the current authentication is working.
+    /// Makes a lightweight API call to verify the token is valid.
+    /// Returns Ok(()) if valid, or an error describing the auth problem.
+    pub fn validate_auth(&mut self) -> Result<(), Error> {
+        self.root_id().map(|_| ())
+    }
+
     /// Returns the Drive ID of the root "My Drive" directory
     pub fn root_id(&mut self) -> Result<&String, Error> {
         if self.root_id.is_none() {

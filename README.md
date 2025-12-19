@@ -95,6 +95,33 @@ GCSF will attempt to create a configuration file in `$XDG_CONFIG_HOME/gcsf/gcsf.
 
 Running `gcsf login some_session_name` at this point should show a URL with your `client_id` query parameter.
 
+#### Publishing to GCP app to Production Mode (Optional, important for long-running services)
+
+If you plan to run GCSF as a system service or for extended periods, it is recommended that your Google Cloud project be **in Production mode**, not Testing mode.
+
+Access tokens for apps in Testing mode expire more frequently, which usually triggers a prompt on GCSF to re-authenticate. This can be inconvenient especially when running GCSF as a system service. Publishing the app to Production mode resolves this issue.
+
+**To publish your app:**
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Navigate to "APIs & Services" → "OAuth consent screen" -> "Audience"
+3. Check the "Publishing status" at the top
+4. If it says "Testing", click **"Publish App"**
+5. Publishing to Production might require app verification. Follow the process in the "Verification centre" section.
+6. After publishing, you must re-authenticate:
+   ```bash
+   gcsf logout your_session_name
+   gcsf login your_session_name
+   ```
+
+**Note:** Publishing to Production does NOT require Google verification for personal use. Verification is only needed if you're distributing your app to many external users.
+
+You can verify your authentication is working at any time:
+```bash
+$ gcsf verify your_session_name
+Verifying authentication for session 'your_session_name'...
+Authentication is valid.
+```
+
 ### Usage
 
 The first step is to log in to Drive and authorize the application. A name must be provided for the session:
