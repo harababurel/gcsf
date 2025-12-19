@@ -15,7 +15,7 @@ clap = { version = "4.5.53", features = ["derive"] }
 config = "0.15.19"
 ctrlc = "3.5.1"
 failure = "0.1.8"
-fuser = "0.16"
+fuser = { version = "0.16", features = ["libfuse"] }
 futures = {version =  "0.3.31", features = ["executor"]}
 google-drive3 = "=6.0.0"
 hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "http2", "tokio"] }
