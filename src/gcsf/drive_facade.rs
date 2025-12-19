@@ -263,42 +263,41 @@ impl DriveFacade {
 
     /// Returns the Drive ID of the root "My Drive" directory
     pub fn root_id(&mut self) -> Result<&String, Error> {
-        if self.root_id.is_some() {
-            return Ok(self.root_id.as_ref().unwrap());
+        if self.root_id.is_none() {
+            let rt = Runtime::new().unwrap();
+            let parent = rt
+                .block_on(
+                    self.hub
+                        .files()
+                        .list()
+                        .param("fields", "files(parents)")
+                        .spaces("drive")
+                        .corpora("user")
+                        .page_size(1)
+                        .q("'root' in parents")
+                        .add_scope(drive3::api::Scope::Full)
+                        .doit(),
+                )
+                .map_err(|e| err_msg(format!("{:#?}", e)))?
+                .1
+                .files
+                .ok_or_else(|| err_msg("No files received"))?
+                .into_iter()
+                .take(1)
+                .next()
+                .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?
+                .parents
+                .ok_or_else(|| {
+                    err_msg("Probed file has no parents. Can't deduce drive id for 'My Drive'")
+                })?
+                .into_iter()
+                .take(1)
+                .next()
+                .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?;
+
+            self.root_id = Some(parent);
         }
 
-        let rt = Runtime::new().unwrap();
-        let parent = rt
-            .block_on(
-                self.hub
-                    .files()
-                    .list()
-                    .param("fields", "files(parents)")
-                    .spaces("drive")
-                    .corpora("user")
-                    .page_size(1)
-                    .q("'root' in parents")
-                    .add_scope(drive3::api::Scope::Full)
-                    .doit(),
-            )
-            .map_err(|e| err_msg(format!("{:#?}", e)))?
-            .1
-            .files
-            .ok_or_else(|| err_msg("No files received"))?
-            .into_iter()
-            .take(1)
-            .next()
-            .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?
-            .parents
-            .ok_or_else(|| {
-                err_msg("Probed file has no parents. Can't deduce drive id for 'My Drive'")
-            })?
-            .into_iter()
-            .take(1)
-            .next()
-            .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?;
-
-        self.root_id = Some(parent);
         Ok(self.root_id.as_ref().unwrap())
     }
 

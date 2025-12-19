@@ -114,8 +114,8 @@ impl File {
                 .mime_type
                 .clone()
                 .and_then(|t| EXTENSIONS.get::<str>(&t));
-            if ext.is_some() {
-                filename = format!("{}{}", filename, ext.unwrap());
+            if let Some(ext_value) = ext {
+                filename = format!("{}{}", filename, ext_value);
             }
         }
 
