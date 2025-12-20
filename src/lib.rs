@@ -56,7 +56,6 @@
     path_statements,
     redundant_semicolons,
     renamed_and_removed_lints,
-    repr_transparent_non_zst_fields,
     semicolon_in_expressions_from_macros,
     special_module_name,
     stable_features,
