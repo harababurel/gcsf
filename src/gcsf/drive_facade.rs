@@ -103,11 +103,8 @@ impl DriveFacade {
         let auth = rt.block_on(
             oauth2::InstalledFlowAuthenticator::builder(
                 secret,
-                if config.authorize_using_code() {
-                    oauth2::InstalledFlowReturnMethod::Interactive
-                } else {
-                    oauth2::InstalledFlowReturnMethod::HTTPPortRedirect(8081)
-                },
+                // Always use HTTPPortRedirect - the OOB/Interactive flow is deprecated by Google
+                oauth2::InstalledFlowReturnMethod::HTTPPortRedirect(config.auth_port()),
             )
             .persist_tokens_to_disk(config.token_file())
             .build(),

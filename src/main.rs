@@ -48,7 +48,7 @@ const INFO_LOG: &str =
 
 #[derive(Parser)]
 #[command(name = "GCSF")]
-#[command(version = "0.3.3")]
+#[command(version = "0.3.4")]
 #[command(author = "Sergiu Puscas <srg.pscs@gmail.com>")]
 #[command(about = "File system based on Google Drive")]
 #[command(after_help = "Note: this is a work in progress. It might cause data loss. Use with caution.")]
@@ -137,6 +137,10 @@ mount_options = [
 # If set to false, Google Drive will attempt to communicate with GCSF directly.
 # This is usually faster and more convenient.
 authorize_using_code = false
+
+# Port for OAuth redirect during authentication. Change this if port 8081
+# is already in use by another application.
+auth_port = 8081
 
 # If set to true, all files with identical name will get an increasing number
 # attached to the suffix. This is most likely not necessary.
@@ -280,7 +284,31 @@ fn main() {
         Commands::Login { session_name } => {
             config.session_name = Some(session_name);
 
-            match login(&mut config) {
+            if config.token_file().exists() {
+                error!("Token file {:?} already exists.", config.token_file());
+                return;
+            }
+
+            let result = if config.authorize_using_code() {
+                // Headless mode: use manual URL paste flow for remote servers
+                let secret: serde_json::Value =
+                    serde_json::from_str(config.client_secret()).expect("Invalid client_secret");
+                let installed = &secret["installed"];
+
+                gcsf::auth::headless_login(
+                    installed["client_id"].as_str().expect("Missing client_id"),
+                    installed["client_secret"]
+                        .as_str()
+                        .expect("Missing client_secret"),
+                    &config.token_file(),
+                    config.auth_port(),
+                )
+            } else {
+                // Standard mode: automatic localhost redirect
+                login(&mut config)
+            };
+
+            match result {
                 Ok(_) => {
                     println!(
                         "Successfully logged in. Saved credentials to {:?}",

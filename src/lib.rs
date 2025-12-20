@@ -124,6 +124,7 @@ mod gcsf;
 
 pub use crate::gcsf::filesystem::{Gcsf, NullFs};
 pub use crate::gcsf::{Config, DriveFacade, FileManager};
+pub use crate::gcsf::auth;
 
 #[cfg(test)]
 mod tests;

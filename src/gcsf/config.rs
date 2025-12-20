@@ -33,6 +33,8 @@ pub struct Config {
     pub skip_trash: Option<bool>,
     /// The Google OAuth client secret for Google Drive APIs (see <https://console.developers.google.com>)
     pub client_secret: Option<String>,
+    /// Port for OAuth redirect during authentication.
+    pub auth_port: Option<u16>,
 }
 
 impl Config {
@@ -119,5 +121,10 @@ impl Config {
     /// credentials at <https://console.developers.google.com> and paste them here
     pub fn client_secret(&self) -> &String {
         self.client_secret.as_ref().unwrap()
+    }
+
+    /// Port for OAuth redirect during authentication. Default is 8081.
+    pub fn auth_port(&self) -> u16 {
+        self.auth_port.unwrap_or(8081)
     }
 }
