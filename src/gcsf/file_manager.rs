@@ -89,7 +89,7 @@ impl FileManager {
             skip_trash,
             sync_interval,
             df,
-            last_inode: 2,
+            last_inode: SHARED_INODE, // Must be >= max reserved inode (ROOT=1, TRASH=2, SHARED=3)
         };
 
         manager
