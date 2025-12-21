@@ -31,7 +31,7 @@ $ brew update; brew install pkg-config; brew tap homebrew/cask; brew install --c
 On Ubuntu, GCSF requires [libfuse-dev](https://packages.ubuntu.com/disco/libfuse-dev), [libssl-dev](https://packages.ubuntu.com/disco/libssl-dev) and [pkg-config](https://packages.ubuntu.com/disco/pkg-config):
 
 ```bash
-sudo apt-get install -y libfuse-dev libssl-dev pkg-config
+sudo apt-get install -y fuse3 libfuse-dev libssl-dev pkg-config
 ```
 
 #### Fedora
