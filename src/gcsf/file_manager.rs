@@ -1,7 +1,7 @@
 use super::{File, FileId};
-use crate::drive3;
 use crate::DriveFacade;
-use failure::{err_msg, Error};
+use crate::drive3;
+use failure::{Error, err_msg};
 use fuser::{FileAttr, FileType};
 use id_tree::InsertBehavior::*;
 use id_tree::MoveBehavior::*;
@@ -135,8 +135,15 @@ impl FileManager {
 
                 let parent = f.drive_parent().unwrap();
                 debug!("drive parent: {:#?}", &parent);
-                self.add_file_locally(f, Some(FileId::DriveId(parent)))?;
+                self.add_file_locally(f, Some(FileId::DriveId(parent.clone())))?;
                 debug!("self.add_file_locally() finished");
+
+                // Recalculate suffixes for the parent directory
+                if self.rename_identical_files
+                    && let Some(parent_inode) = self.get_inode(&FileId::DriveId(parent))
+                {
+                    self.recalculate_duplicate_suffixes_for_parent(parent_inode);
+                }
             }
 
             // Trashed file. Move it to trash locally
@@ -161,6 +168,7 @@ impl FileManager {
 
             // Anything else: reconstruct the file locally and move it under its parent.
             debug!("Anything else: reconstruct the file locally and move it under its parent.");
+            let old_parent = self.get_parent_inode(&id);
             let new_parent = {
                 let add_extension = self.add_extensions_to_special_files;
                 let f = unwrap_or_continue!(self.get_mut_file(&id));
@@ -170,6 +178,16 @@ impl FileManager {
             let result = self.move_locally(&id, &new_parent);
             if result.is_err() {
                 error!("Could not move locally: {:?}", result)
+            }
+
+            // Recalculate suffixes for both old and new parent directories
+            if self.rename_identical_files {
+                if let Some(old_parent_inode) = old_parent {
+                    self.recalculate_duplicate_suffixes_for_parent(old_parent_inode);
+                }
+                if let Some(new_parent_inode) = self.get_inode(&new_parent) {
+                    self.recalculate_duplicate_suffixes_for_parent(new_parent_inode);
+                }
             }
         }
 
@@ -184,27 +202,40 @@ impl FileManager {
         let shared = self.new_special_dir("Shared with me", Some(SHARED_INODE));
         self.add_file_locally(shared, Some(FileId::Inode(ROOT_INODE)))?;
 
+        // Disable rename_identical_files during initial population to avoid
+        // global duplicate detection. We'll recalculate per-directory after moves.
+        let should_rename = self.rename_identical_files;
+        self.rename_identical_files = false;
+
         for drive_file in self.df.get_all_files(None, Some(false))? {
             let file = File::from_drive_file(
                 self.next_available_inode(),
                 drive_file,
                 self.add_extensions_to_special_files,
             );
-            self.add_file_locally(file, Some(FileId::Inode(3)))?;
+            self.add_file_locally(file, Some(FileId::Inode(SHARED_INODE)))?;
         }
 
         let mut moves: LinkedList<(FileId, FileId)> = LinkedList::new();
         for (inode, file) in &self.files {
             if let Some(parent) = file.drive_parent()
-                && self.contains(&FileId::DriveId(parent.clone())) {
-                    moves.push_back((FileId::Inode(*inode), FileId::DriveId(parent)));
-                }
+                && self.contains(&FileId::DriveId(parent.clone()))
+            {
+                moves.push_back((FileId::Inode(*inode), FileId::DriveId(parent)));
+            }
         }
 
         for (inode, parent) in &moves {
             if let Err(e) = self.move_locally(inode, parent) {
                 error!("{}", e);
             }
+        }
+
+        // Restore setting and recalculate suffixes per-directory now that
+        // files are in their final positions
+        self.rename_identical_files = should_rename;
+        if self.rename_identical_files {
+            self.recalculate_all_duplicate_suffixes();
         }
 
         Ok(())
@@ -216,6 +247,10 @@ impl FileManager {
         let trash = self.new_special_dir("Trash", Some(TRASH_INODE));
         self.add_file_locally(trash.clone(), Some(FileId::DriveId(root_id)))?;
 
+        // Disable rename_identical_files during population, recalculate after
+        let should_rename = self.rename_identical_files;
+        self.rename_identical_files = false;
+
         for drive_file in self.df.get_all_files(None, Some(true))? {
             let file = File::from_drive_file(
                 self.next_available_inode(),
@@ -223,6 +258,12 @@ impl FileManager {
                 self.add_extensions_to_special_files,
             );
             self.add_file_locally(file, Some(FileId::Inode(trash.inode())))?;
+        }
+
+        // Restore setting and recalculate suffixes for trash directory
+        self.rename_identical_files = should_rename;
+        if self.rename_identical_files {
+            self.recalculate_duplicate_suffixes_for_parent(TRASH_INODE);
         }
 
         Ok(())
@@ -332,10 +373,7 @@ impl FileManager {
             FileId::Inode(inode) => Some(*inode),
             FileId::DriveId(drive_id) => self.drive_ids.get(drive_id).cloned(),
             FileId::NodeId(node_id) => self.tree.get(node_id).map(|node| node.data()).ok().cloned(),
-            FileId::ParentAndName {
-                parent,
-                name,
-            } => self
+            FileId::ParentAndName { parent, name } => self
                 .get_children(&FileId::Inode(*parent))?
                 .into_iter()
                 .find(|child| child.name() == *name)
@@ -435,6 +473,78 @@ impl FileManager {
         Ok(())
     }
 
+    /// Returns the parent inode of a file, if it has one.
+    fn get_parent_inode(&self, id: &FileId) -> Option<Inode> {
+        let node_id = self.get_node_id(id)?;
+        let parent_node_id = self.tree.get(&node_id).ok()?.parent()?;
+        self.tree.get(parent_node_id).ok().map(|n| *n.data())
+    }
+
+    /// Recalculates identical_name_id for all files in all directories.
+    /// Uses Drive ID for stable, deterministic ordering.
+    pub(crate) fn recalculate_all_duplicate_suffixes(&mut self) {
+        // Collect all directory inodes first to avoid borrow issues
+        let dir_inodes: Vec<Inode> = self
+            .files
+            .iter()
+            .filter(|(_, f)| f.kind() == FileType::Directory)
+            .map(|(ino, _)| *ino)
+            .collect();
+
+        for dir_inode in dir_inodes {
+            self.recalculate_duplicate_suffixes_for_parent(dir_inode);
+        }
+    }
+
+    /// Recalculates identical_name_id for all children of a given parent directory.
+    /// Files are sorted by Drive ID for stable ordering (first by Drive ID = no suffix).
+    pub(crate) fn recalculate_duplicate_suffixes_for_parent(&mut self, parent_inode: Inode) {
+        // Get children and group by base name
+        let children: Vec<(Inode, String, Option<String>)> = self
+            .get_children(&FileId::Inode(parent_inode))
+            .unwrap_or_default()
+            .iter()
+            .map(|f| (f.inode(), f.name.clone(), f.drive_id()))
+            .collect();
+
+        // Group by base name
+        let mut by_name: HashMap<String, Vec<(Inode, Option<String>)>> = HashMap::new();
+        for (inode, name, drive_id) in children {
+            by_name.entry(name).or_default().push((inode, drive_id));
+        }
+
+        // Assign suffixes to duplicates
+        for (name, mut entries) in by_name {
+            if entries.len() <= 1 {
+                // No duplicates - clear any existing suffix
+                if let Some((inode, _)) = entries.first()
+                    && let Some(f) = self.files.get_mut(inode)
+                {
+                    f.identical_name_id = None;
+                }
+                continue;
+            }
+
+            // Log detected duplicates
+            info!(
+                "Found {} files with identical name '{}' in directory (inode {})",
+                entries.len(),
+                name,
+                parent_inode
+            );
+
+            // Sort by Drive ID for stable ordering (None sorts first)
+            entries.sort_by(|a, b| a.1.cmp(&b.1));
+
+            // First file gets no suffix, rest get .1, .2, etc.
+            for (idx, (inode, _)) in entries.iter().enumerate() {
+                if let Some(f) = self.files.get_mut(inode) {
+                    f.identical_name_id = if idx == 0 { None } else { Some(idx) };
+                }
+            }
+        }
+    }
+
     /// Deletes a file and its children from the local file tree. Does not communicate with Drive.
     fn delete_locally(&mut self, id: &FileId) -> Result<(), Error> {
         let node_id = self
@@ -484,6 +594,14 @@ impl FileManager {
             .get_node_id(&FileId::Inode(TRASH_INODE))
             .ok_or_else(|| err_msg("Cannot find node_id of Trash dir"))?;
 
+        // Get the old parent inode before moving (for suffix recalculation)
+        let old_parent_inode = self
+            .tree
+            .get(&node_id)?
+            .parent()
+            .and_then(|parent_node_id| self.tree.get(parent_node_id).ok())
+            .map(|parent_node| *parent_node.data());
+
         self.tree.move_node(&node_id, ToParent(&trash_id))?;
 
         // File cannot be identified by FileId::ParentAndName now because the parent has changed.
@@ -493,6 +611,14 @@ impl FileManager {
                 .ok_or_else(|| err_msg(format!("Cannot find {:?}", &drive_id)))?
                 .set_trashed(true)?;
             self.df.move_to_trash(drive_id)?;
+        }
+
+        // Recalculate suffixes for both old parent and Trash directories
+        if self.rename_identical_files {
+            if let Some(old_parent) = old_parent_inode {
+                self.recalculate_duplicate_suffixes_for_parent(old_parent);
+            }
+            self.recalculate_duplicate_suffixes_for_parent(TRASH_INODE);
         }
 
         Ok(())
@@ -518,8 +644,11 @@ impl FileManager {
         // name will probably change in this method.
         let id = FileId::Inode(
             self.get_inode(id)
-                .ok_or_else(|| err_msg(format!("Cannot find node_id of {:?}", &id)))?,
+                .ok_or_else(|| err_msg(format!("Cannot find inode of {:?}", &id)))?,
         );
+
+        // Get old parent before moving (for suffix recalculation)
+        let old_parent = self.get_parent_inode(&id);
 
         let current_node = self
             .get_node_id(&id)
@@ -530,26 +659,21 @@ impl FileManager {
 
         self.tree.move_node(&current_node, ToParent(&target_node))?;
 
+        // Update the file's name
         {
-            if self.rename_identical_files {
-                let identical_filename_count = self
-                    .get_children(&FileId::Inode(new_parent))
-                    .ok_or_else(|| err_msg("FileManager::rename() could not get file siblings"))?
-                    .iter()
-                    .filter(|child| child.name == new_name)
-                    .count();
+            let file = self
+                .get_mut_file(&id)
+                .ok_or_else(|| err_msg("File doesn't exist"))?;
+            file.name = new_name.clone();
+            file.identical_name_id = None; // Will be recalculated below if needed
+        }
 
-                let file = self
-                    .get_mut_file(&id)
-                    .ok_or_else(|| err_msg("File doesn't exist"))?;
-                file.name = new_name.clone();
-
-                if identical_filename_count > 0 {
-                    file.identical_name_id = Some(identical_filename_count);
-                } else {
-                    file.identical_name_id = None;
-                }
+        // Recalculate suffixes for both old and new parent directories
+        if self.rename_identical_files {
+            if let Some(old_parent_inode) = old_parent {
+                self.recalculate_duplicate_suffixes_for_parent(old_parent_inode);
             }
+            self.recalculate_duplicate_suffixes_for_parent(new_parent);
         }
 
         let drive_id = self
@@ -574,6 +698,97 @@ impl FileManager {
     pub fn write(&mut self, id: FileId, offset: usize, data: &[u8]) {
         let drive_id = self.get_drive_id(&id).unwrap();
         self.df.write(drive_id, offset, data);
+    }
+
+    #[cfg(test)]
+    /// Create a FileManager with manual state for testing (no Drive API calls).
+    /// This bypasses the normal constructor which makes Drive API calls during initialization.
+    ///
+    /// WARNING: The DriveFacade field is uninitialized and will leak if the FileManager is dropped.
+    /// This is only safe because test methods don't call DriveFacade methods.
+    /// Use std::mem::forget() on the FileManager after tests to avoid undefined behavior on drop.
+    #[allow(unsafe_code, invalid_value, clippy::uninit_assumed_init)]
+    pub fn new_for_testing(rename_identical_files: bool) -> Self {
+        use std::mem::MaybeUninit;
+
+        // SAFETY: DriveFacade will never be accessed in tests, so it's safe to leave uninitialized.
+        // Test methods only use the tree, files, and mapping fields.
+        // IMPORTANT: The returned FileManager should not be dropped normally - use std::mem::forget()
+        let df = unsafe { MaybeUninit::uninit().assume_init() };
+
+        let mut tree = TreeBuilder::new().with_node_capacity(500).build();
+        let mut files = HashMap::new();
+        let mut node_ids = HashMap::new();
+
+        // Create a root node so tests can add files
+        let root_file = File {
+            name: "/".to_string(),
+            attr: FileAttr {
+                ino: ROOT_INODE,
+                size: 512,
+                blocks: 1,
+                blksize: 512,
+                atime: SystemTime::UNIX_EPOCH,
+                mtime: SystemTime::UNIX_EPOCH,
+                ctime: SystemTime::UNIX_EPOCH,
+                crtime: SystemTime::UNIX_EPOCH,
+                kind: FileType::Directory,
+                perm: 0o755,
+                nlink: 2,
+                uid: 0,
+                gid: 0,
+                rdev: 0,
+                flags: 0,
+            },
+            identical_name_id: None,
+            drive_file: None,
+        };
+
+        let root_node_id = tree.insert(Node::new(ROOT_INODE), AsRoot).unwrap();
+        files.insert(ROOT_INODE, root_file);
+        node_ids.insert(ROOT_INODE, root_node_id);
+
+        FileManager {
+            tree,
+            files,
+            node_ids,
+            drive_ids: HashMap::new(),
+            last_sync: SystemTime::now(),
+            rename_identical_files,
+            add_extensions_to_special_files: false,
+            skip_trash: false,
+            sync_interval: Duration::from_secs(60),
+            df,
+            last_inode: SHARED_INODE, // After ROOT=1, TRASH=2, SHARED=3
+        }
+    }
+
+    #[cfg(test)]
+    /// Manually add a file to the tree for testing (bypasses Drive API).
+    /// This allows building test file structures without making network calls.
+    pub fn add_test_file(&mut self, file: File, parent_inode: Inode) -> Result<(), Error> {
+        let inode = file.inode();
+        let drive_id = file.drive_id();
+
+        // Add to files map
+        self.files.insert(inode, file);
+
+        // Create tree node
+        let node = Node::new(inode);
+        let parent_node_id = self
+            .node_ids
+            .get(&parent_inode)
+            .ok_or_else(|| err_msg(format!("Parent inode {} not found", parent_inode)))?;
+
+        let node_id = self.tree.insert(node, UnderNode(parent_node_id))?;
+
+        // Update mappings
+        self.node_ids.insert(inode, node_id);
+        if let Some(id) = drive_id {
+            self.drive_ids.insert(id, inode);
+        }
+
+        Ok(())
     }
 }
 
