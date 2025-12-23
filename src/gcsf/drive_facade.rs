@@ -3,10 +3,10 @@ use drive3::hyper;
 use drive3::hyper_rustls;
 use drive3::yup_oauth2 as oauth2;
 use google_drive3::hyper_rustls::HttpsConnector;
-use hyper::Response;
 use http_body_util::BodyExt;
+use hyper::Response;
 
-use failure::{err_msg, Error};
+use failure::{Error, err_msg};
 use lru_time_cache::LruCache;
 use mime_sniffer::MimeTypeSniffer;
 use std::cmp;
@@ -19,7 +19,8 @@ const PAGE_SIZE: i32 = 1000;
 type DriveId = String;
 type DriveIdRef<'a> = &'a str;
 
-type DriveHub = drive3::api::DriveHub<HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
+type DriveHub =
+    drive3::api::DriveHub<HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>;
 
 /// Provides a simple high-level interface for interacting with the Google Drive API.
 pub struct DriveFacade {
@@ -90,7 +91,9 @@ impl DriveFacade {
     fn create_drive_auth(
         config: &Config,
     ) -> Result<
-        oauth2::authenticator::Authenticator<HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>>,
+        oauth2::authenticator::Authenticator<
+            HttpsConnector<hyper_util::client::legacy::connect::HttpConnector>,
+        >,
         Error,
     > {
         let secret: oauth2::ConsoleApplicationSecret =
@@ -175,20 +178,21 @@ impl DriveFacade {
         mime_type: Option<String>,
     ) -> Result<Vec<u8>, Error> {
         if let Some(mime) = mime_type.clone()
-            && UNEXPORTABLE_MIME_TYPES.contains::<str>(&mime) {
-                return Ok(format!(
-                    "UNEXPORTABLE_FILE: The MIME type of this \
+            && UNEXPORTABLE_MIME_TYPES.contains::<str>(&mime)
+        {
+            return Ok(format!(
+                "UNEXPORTABLE_FILE: The MIME type of this \
                      file is {:?}, which can not be exported from Drive. Web \
                      content link provided by Drive: {:?}\n",
-                    mime,
-                    self.get_file_metadata(drive_id)
-                        .ok()
-                        .map(|metadata| metadata.web_view_link)
-                        .unwrap_or_default()
-                )
-                .as_bytes()
-                .to_vec());
-            }
+                mime,
+                self.get_file_metadata(drive_id)
+                    .ok()
+                    .map(|metadata| metadata.web_view_link)
+                    .unwrap_or_default()
+            )
+            .as_bytes()
+            .to_vec());
+        }
 
         let export_type: Option<&'static str> = mime_type
             .and_then(|ref t| MIME_TYPES.get::<str>(t))
@@ -228,9 +232,7 @@ impl DriveFacade {
         };
 
         let content: Vec<u8> = rt
-            .block_on(async {
-                response.into_body().collect().await
-            })?
+            .block_on(async { response.into_body().collect().await })?
             .to_bytes()
             .to_vec();
         Ok(content)
@@ -297,7 +299,9 @@ impl DriveFacade {
                 .into_iter()
                 .take(1)
                 .next()
-                .ok_or_else(|| err_msg("No files on drive. Can't deduce drive id for 'My Drive'"))?;
+                .ok_or_else(|| {
+                    err_msg("No files on drive. Can't deduce drive id for 'My Drive'")
+                })?;
 
             self.root_id = Some(parent);
         }
@@ -524,7 +528,13 @@ impl DriveFacade {
         id: DriveIdRef,
         parent: DriveIdRef,
         new_name: &str,
-    ) -> Result<(Response<http_body_util::combinators::BoxBody<bytes::Bytes, hyper::Error>>, drive3::api::File), Error> {
+    ) -> Result<
+        (
+            Response<http_body_util::combinators::BoxBody<bytes::Bytes, hyper::Error>>,
+            drive3::api::File,
+        ),
+        Error,
+    > {
         let current_parents = self
             .get_file_metadata(id)?
             .parents
@@ -595,7 +605,13 @@ impl DriveFacade {
         &mut self,
         id: DriveId,
         data: &[u8],
-    ) -> Result<(Response<http_body_util::combinators::BoxBody<bytes::Bytes, hyper::Error>>, drive3::api::File), Error> {
+    ) -> Result<
+        (
+            Response<http_body_util::combinators::BoxBody<bytes::Bytes, hyper::Error>>,
+            drive3::api::File,
+        ),
+        Error,
+    > {
         let mime_guess = data.sniff_mime_type().unwrap_or("application/octet-stream");
         debug!(
             "Updating file content for {}. Mime type guess based on content: {}",

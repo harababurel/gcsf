@@ -350,10 +350,9 @@ impl Filesystem for Gcsf {
             drive_file: Some(drive3::api::File {
                 name: Some(filename),
                 mime_type: None,
-                parents: Some(vec![self
-                    .manager
-                    .get_drive_id(&FileId::Inode(parent))
-                    .unwrap()]),
+                parents: Some(vec![
+                    self.manager.get_drive_id(&FileId::Inode(parent)).unwrap(),
+                ]),
                 ..Default::default()
             }),
         };
@@ -467,10 +466,9 @@ impl Filesystem for Gcsf {
             drive_file: Some(drive3::api::File {
                 name: Some(dirname),
                 mime_type: Some("application/vnd.google-apps.folder".to_string()),
-                parents: Some(vec![self
-                    .manager
-                    .get_drive_id(&FileId::Inode(parent))
-                    .unwrap()]),
+                parents: Some(vec![
+                    self.manager.get_drive_id(&FileId::Inode(parent)).unwrap(),
+                ]),
                 ..Default::default()
             }),
         };

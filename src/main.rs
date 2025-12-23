@@ -12,11 +12,11 @@ extern crate serde_json;
 extern crate xdg;
 
 use clap::{Parser, Subcommand};
-use failure::{err_msg, Error};
+use failure::{Error, err_msg};
 use std::fs;
 use std::io::prelude::*;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time;
 
@@ -51,7 +51,9 @@ const INFO_LOG: &str =
 #[command(version = "0.3.5")]
 #[command(author = "Sergiu Puscas <srg.pscs@gmail.com>")]
 #[command(about = "File system based on Google Drive")]
-#[command(after_help = "Note: this is a work in progress. It might cause data loss. Use with caution.")]
+#[command(
+    after_help = "Note: this is a work in progress. It might cause data loss. Use with caution."
+)]
 #[command(subcommand_required = true)]
 #[command(arg_required_else_help = true)]
 struct Cli {
@@ -394,8 +396,12 @@ fn main() {
 
             if config.client_secret.is_none() {
                 error!("No Google OAuth client secret was provided.");
-                error!("Try deleting your config file to force GCSF to generate it with the default credentials.");
-                error!("Alternatively, you can create your own credentials or manually set the default ones from https://github.com/harababurel/gcsf/blob/master/sample_config.toml");
+                error!(
+                    "Try deleting your config file to force GCSF to generate it with the default credentials."
+                );
+                error!(
+                    "Alternatively, you can create your own credentials or manually set the default ones from https://github.com/harababurel/gcsf/blob/master/sample_config.toml"
+                );
                 return;
             }
 

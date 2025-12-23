@@ -1,4 +1,4 @@
-use failure::{err_msg, Error};
+use failure::{Error, err_msg};
 use fuser::{FileAttr, FileType};
 use id_tree::NodeId;
 use std::collections::HashMap;
@@ -68,9 +68,11 @@ impl File {
                 FileType::RegularFile
             };
 
-        let times: Vec<std::time::SystemTime> = [&drive_file.created_time,
+        let times: Vec<std::time::SystemTime> = [
+            &drive_file.created_time,
             &drive_file.modified_time,
-            &drive_file.viewed_by_me_time]
+            &drive_file.viewed_by_me_time,
+        ]
         .iter()
         .map(|datetime| datetime.unwrap_or_default().into())
         .collect();

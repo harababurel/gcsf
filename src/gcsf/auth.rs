@@ -5,7 +5,7 @@
 //! redirect (when browser and GCSF are on the same machine) and manual URL paste
 //! (when they're on different machines).
 
-use failure::{err_msg, Error};
+use failure::{Error, err_msg};
 use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
