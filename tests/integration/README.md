@@ -129,5 +129,5 @@ rm -rf ~/gcsf_test_mount/gcsf_ops_test_*
 
 - Tests run in an isolated directory with timestamp to avoid conflicts
 - All tests continue even if some fail
-- Total runtime: typically 30-60 seconds depending on network speed
+- Total runtime: typically <10 minutes depending on network speed
 - The `--accept-risk` flag is required as tests modify your Google Drive
