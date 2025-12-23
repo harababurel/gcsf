@@ -12,7 +12,7 @@ GCSF is a virtual filesystem that allows users to mount their Google Drive accou
 
 ### Requirements
 
-GCSF requires the stable branch of the Rust programming language, which can be installed following the instructions on [rustup.rs](https://rustup.rs). If you already have Rust installed, make sure that it is updated to the latest version (≥1.26):
+GCSF requires the stable branch of the Rust programming language, which can be installed following the instructions on [rustup.rs](https://rustup.rs). If you already have Rust installed, make sure that it is updated to the latest version:
 
 ```bash
 $ rustup update stable
@@ -26,9 +26,9 @@ On Mac OSX, GCSF requires [osxfuse](https://osxfuse.github.io/) and [pkg-config]
 $ brew update; brew install pkg-config; brew tap homebrew/cask; brew install --cask osxfuse
 ```
 
-#### Ubuntu
+#### Ubuntu / Debian
 
-On Ubuntu, GCSF requires [libfuse-dev](https://packages.ubuntu.com/disco/libfuse-dev), [libssl-dev](https://packages.ubuntu.com/disco/libssl-dev) and [pkg-config](https://packages.ubuntu.com/disco/pkg-config):
+On Ubuntu / Debian, GCSF requires [libfuse-dev](https://packages.ubuntu.com/disco/libfuse-dev), [libssl-dev](https://packages.ubuntu.com/disco/libssl-dev) and [pkg-config](https://packages.ubuntu.com/disco/pkg-config):
 
 ```bash
 sudo apt-get install -y fuse3 libfuse-dev libssl-dev pkg-config
