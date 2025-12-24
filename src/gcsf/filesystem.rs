@@ -6,7 +6,7 @@ use fuser::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
     ReplyEntry, ReplyStatfs, ReplyWrite, Request,
 };
-use libc::{EEXIST, EIO, ENOENT, ENOTDIR, EROFS};
+use libc::{EEXIST, EIO, ENOENT, EROFS};
 use lru_time_cache::LruCache;
 use std;
 use std::clone::Clone;
@@ -329,7 +329,7 @@ impl Filesystem for Gcsf {
                 "create: could not find parent inode={} in the file tree",
                 parent
             );
-            reply.error(ENOTDIR);
+            reply.error(ENOENT);
             return;
         }
         if self.manager.contains(&FileId::ParentAndName {
@@ -447,7 +447,7 @@ impl Filesystem for Gcsf {
                 "mkdir: could not find parent inode={} in the file tree",
                 parent
             );
-            reply.error(ENOTDIR);
+            reply.error(ENOENT);
             return;
         }
         if self.manager.contains(&FileId::ParentAndName {
