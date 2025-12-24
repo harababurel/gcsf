@@ -6,7 +6,7 @@ use fuser::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
     ReplyEntry, ReplyStatfs, ReplyWrite, Request,
 };
-use libc::{ENOENT, ENOTDIR, ENOTRECOVERABLE, EREMOTE, EROFS};
+use libc::{EEXIST, EIO, ENOENT, ENOTDIR, EROFS};
 use lru_time_cache::LruCache;
 use std;
 use std::clone::Clone;
@@ -39,7 +39,7 @@ macro_rules! log_result_and_fill_reply {
             }
             Err(e) => {
                 error!("{:?}", e);
-                $reply.error(ENOTRECOVERABLE);
+                $reply.error(EIO);
                 return;
             }
         }
@@ -248,7 +248,7 @@ impl Filesystem for Gcsf {
             if rename_res.is_ok() && trash_res.is_ok() {
                 reply.ok();
             } else {
-                reply.error(EREMOTE);
+                reply.error(EIO);
             }
         } else {
             log_result_and_fill_reply!(self.manager.rename(&id, newparent, newname), reply);
@@ -340,7 +340,7 @@ impl Filesystem for Gcsf {
                 "create: file {:?} of parent(inode={}) already exists",
                 name, parent
             );
-            reply.error(ENOTDIR);
+            reply.error(EEXIST);
             return;
         }
 
@@ -381,7 +381,7 @@ impl Filesystem for Gcsf {
             }
             Err(e) => {
                 error!("create: {}", e);
-                reply.error(EREMOTE);
+                reply.error(EIO);
             }
         }
     }
@@ -422,7 +422,7 @@ impl Filesystem for Gcsf {
             }
             Err(e) => {
                 error!("{:?}", e);
-                reply.error(EREMOTE);
+                reply.error(EIO);
             }
         }
     }
@@ -458,7 +458,7 @@ impl Filesystem for Gcsf {
                 "mkdir: file {:?} of parent(inode={}) already exists",
                 name, parent
             );
-            reply.error(ENOTDIR);
+            reply.error(EEXIST);
             return;
         }
 
@@ -499,7 +499,7 @@ impl Filesystem for Gcsf {
             }
             Err(e) => {
                 error!("mkdir: {}", e);
-                reply.error(EREMOTE);
+                reply.error(EIO);
             }
         }
     }
@@ -519,7 +519,7 @@ impl Filesystem for Gcsf {
             Ok(()) => reply.ok(),
             Err(e) => {
                 error!("{:?}", e);
-                reply.error(EREMOTE);
+                reply.error(EIO);
             }
         }
     }
