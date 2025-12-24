@@ -336,3 +336,28 @@ mod rename_identical_files_tests {
         std::mem::forget(fm);
     }
 }
+
+#[cfg(test)]
+mod read_only_tests {
+    use crate::gcsf::Config;
+
+    #[test]
+    fn test_read_only_default_is_false() {
+        let config = Config::default();
+        assert!(!config.read_only());
+    }
+
+    #[test]
+    fn test_read_only_explicit_true() {
+        let mut config = Config::default();
+        config.read_only = Some(true);
+        assert!(config.read_only());
+    }
+
+    #[test]
+    fn test_read_only_explicit_false() {
+        let mut config = Config::default();
+        config.read_only = Some(false);
+        assert!(!config.read_only());
+    }
+}

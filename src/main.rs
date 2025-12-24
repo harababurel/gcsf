@@ -72,6 +72,10 @@ enum Commands {
         /// Path to mount directory
         #[arg(value_name = "mount_directory")]
         mountpoint: String,
+
+        /// Mount in read-only mode (overrides config)
+        #[arg(long = "read-only", short = 'r')]
+        read_only: bool,
     },
     /// Login to Drive (create a new session).
     Login {
@@ -155,6 +159,14 @@ add_extensions_to_special_files = false
 # instead they get deleted permanently.
 skip_trash = false
 
+# If set to true, the filesystem will be mounted in read-only mode.
+# All write operations (create, delete, rename, write) will be rejected.
+# This is useful for:
+#   - Preventing accidental modifications
+#   - Safely browsing Drive contents
+#   - Backup/archival scenarios
+read_only = false
+
 # The Google OAuth client secret for Google Drive APIs. Create your own
 # credentials at https://console.developers.google.com and paste them here
 client_secret = """
@@ -173,10 +185,15 @@ client_secret = """
 
 fn mount_gcsf(config: Config, mountpoint: &str) {
     // TODO: consider making these configurable in the config file
-    let options = [
+    let mut options = vec![
         fuser::MountOption::FSName(String::from("GCSF")),
         fuser::MountOption::AllowRoot,
     ];
+
+    if config.read_only() {
+        options.push(fuser::MountOption::RO);
+        info!("Mounting in read-only mode");
+    }
 
     if config.mount_check() {
         match fuser::spawn_mount2(NullFs {}, mountpoint, &options) {
@@ -385,8 +402,14 @@ fn main() {
         Commands::Mount {
             session_name,
             mountpoint,
+            read_only,
         } => {
             config.session_name = Some(session_name.clone());
+
+            // CLI flag overrides config if set
+            if read_only {
+                config.read_only = Some(true);
+            }
 
             if !config.token_file().exists() {
                 error!("Token file {:?} does not exist.", config.token_file());

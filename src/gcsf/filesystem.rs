@@ -6,7 +6,7 @@ use fuser::{
     FileAttr, FileType, Filesystem, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty,
     ReplyEntry, ReplyStatfs, ReplyWrite, Request,
 };
-use libc::{ENOENT, ENOTDIR, ENOTRECOVERABLE, EREMOTE};
+use libc::{ENOENT, ENOTDIR, ENOTRECOVERABLE, EREMOTE, EROFS};
 use lru_time_cache::LruCache;
 use std;
 use std::clone::Clone;
@@ -46,6 +46,17 @@ macro_rules! log_result_and_fill_reply {
     };
 }
 
+/// Returns EROFS if filesystem is in read-only mode
+macro_rules! reject_if_readonly {
+    ($self:ident, $reply:ident) => {
+        if $self.read_only {
+            warn!("Rejecting write operation: filesystem is read-only");
+            $reply.error(EROFS);
+            return;
+        }
+    };
+}
+
 /// An empty FUSE file system. It can be used in a mounting test aimed to determine whether or
 /// not the real file system can be mounted as well. If the test fails, the application can fail
 /// early instead of wasting time constructing the real file system.
@@ -56,6 +67,7 @@ impl Filesystem for NullFs {}
 pub struct Gcsf {
     manager: FileManager,
     statfs_cache: LruCache<String, u64>,
+    read_only: bool,
 }
 
 const TTL: std::time::Duration = std::time::Duration::from_secs(1);
@@ -75,6 +87,7 @@ impl Gcsf {
                 config.cache_statfs_seconds(),
                 2,
             ),
+            read_only: config.read_only(),
         })
     }
 }
@@ -159,6 +172,7 @@ impl Filesystem for Gcsf {
         _lock_owner: Option<u64>,
         reply: ReplyWrite,
     ) {
+        reject_if_readonly!(self, reply);
         let offset: usize = cmp::max(offset, 0) as usize;
         self.manager.write(FileId::Inode(ino), offset, data);
 
@@ -214,6 +228,7 @@ impl Filesystem for Gcsf {
         _flags: u32,
         reply: ReplyEmpty,
     ) {
+        reject_if_readonly!(self, reply);
         let name = name.to_str().unwrap().to_string();
         let newname = newname.to_str().unwrap().to_string();
 
@@ -258,6 +273,7 @@ impl Filesystem for Gcsf {
         flags: Option<u32>,
         reply: ReplyAttr,
     ) {
+        reject_if_readonly!(self, reply);
         if !self.manager.contains(&FileId::Inode(ino)) {
             error!("setattr: could not find inode={} in the file tree", ino);
             reply.error(ENOENT);
@@ -304,6 +320,7 @@ impl Filesystem for Gcsf {
         _flags: i32,
         reply: ReplyCreate,
     ) {
+        reject_if_readonly!(self, reply);
         let filename = name.to_str().unwrap().to_string();
 
         // TODO: these two checks might not be necessary
@@ -370,6 +387,7 @@ impl Filesystem for Gcsf {
     }
 
     fn unlink(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
+        reject_if_readonly!(self, reply);
         let id = FileId::ParentAndName {
             parent,
             name: name.to_str().unwrap().to_string(),
@@ -420,6 +438,7 @@ impl Filesystem for Gcsf {
         _umask: u32,
         reply: ReplyEntry,
     ) {
+        reject_if_readonly!(self, reply);
         let dirname = name.to_str().unwrap().to_string();
 
         // TODO: these two checks might not be necessary
@@ -486,10 +505,16 @@ impl Filesystem for Gcsf {
     }
 
     fn rmdir(&mut self, _req: &Request, parent: Inode, name: &OsStr, reply: ReplyEmpty) {
+        reject_if_readonly!(self, reply);
         self.unlink(_req, parent, name, reply);
     }
 
     fn flush(&mut self, _req: &Request, ino: Inode, _fh: u64, _lock_owner: u64, reply: ReplyEmpty) {
+        if self.read_only {
+            // In read-only mode, there are no pending writes, so flush is a no-op
+            reply.ok();
+            return;
+        }
         match self.manager.flush(&FileId::Inode(ino)) {
             Ok(()) => reply.ok(),
             Err(e) => {

@@ -35,6 +35,8 @@ pub struct Config {
     pub client_secret: Option<String>,
     /// Port for OAuth redirect during authentication.
     pub auth_port: Option<u16>,
+    /// If true, mount the filesystem in read-only mode.
+    pub read_only: Option<bool>,
 }
 
 impl Config {
@@ -126,5 +128,11 @@ impl Config {
     /// Port for OAuth redirect during authentication. Default is 8081.
     pub fn auth_port(&self) -> u16 {
         self.auth_port.unwrap_or(8081)
+    }
+
+    /// Whether to mount the filesystem in read-only mode.
+    /// When enabled, all write operations are rejected with EROFS.
+    pub fn read_only(&self) -> bool {
+        self.read_only.unwrap_or(false)
     }
 }
