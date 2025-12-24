@@ -696,7 +696,7 @@ dependencies = [
 
 [[package]]
 name = "gcsf"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "bytes",
  "clap",
