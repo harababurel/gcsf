@@ -184,6 +184,19 @@ This error occurs when `user_allow_other` is not set in `/etc/fuse.conf` or the 
 # sudo chown root:root /etc/fuse.conf
 ```
 
+#### macOS: Could not mount to `$mountpoint` (any error code)
+
+The error code reported on macOS often does not reflect the actual cause. A common cause is that the macFUSE kernel extension has not been approved or loaded:
+
+1. Open System Settings → Privacy & Security and allow the system software from developer "Benjamin Fleischer" (macFUSE).
+2. If nothing is shown there, load the extension manually. This prints the actual error and usually brings up the approval prompt (replace `27` with your macOS major version):
+   ```bash
+   sudo kmutil load -p /Library/Filesystems/macfuse.fs/Contents/Extensions/27/macfuse.kext
+   ```
+3. Restart if prompted, then mount again.
+
+Alternatively, add `"backend=fskit"` to `mount_options` to use macFUSE's FSKit backend (macOS 15.4+), which does not need the kernel extension. The mount point must be under `/Volumes`.
+
 #### `libssl.so.1.0.0`
 
 You installed the prebuilt binaries but couldn't run it. Fix by installing rust and building from source.

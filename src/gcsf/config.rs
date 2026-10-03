@@ -78,6 +78,47 @@ impl Config {
         }
     }
 
+    /// The configuration passed to fuser when mounting, built from `mount_options` and
+    /// `read_only`.
+    ///
+    /// `allow_root` and `allow_other` select who may access the file system instead of being
+    /// passed through, because fuser controls access separately and macFUSE refuses to mount
+    /// when both options reach it. Without either, root and the owner may access the file
+    /// system, as in earlier versions which ignored `mount_options`.
+    pub fn fuser_config(&self) -> fuser::Config {
+        let mut fs_name = String::from("GCSF");
+        let mut acl = fuser::SessionACL::RootAndOwner;
+        let mut options = Vec::new();
+
+        for option in self.mount_options() {
+            let option = option.trim();
+            if option.is_empty() {
+                continue;
+            }
+
+            match option {
+                "allow_root" => acl = fuser::SessionACL::RootAndOwner,
+                "allow_other" => acl = fuser::SessionACL::All,
+                _ => match option.strip_prefix("fsname=") {
+                    Some(name) => fs_name = name.to_string(),
+                    None => options.push(parse_mount_option(option)),
+                },
+            }
+        }
+
+        if self.read_only() && !options.contains(&fuser::MountOption::RO) {
+            options.push(fuser::MountOption::RO);
+        }
+
+        let mut mount_options = vec![fuser::MountOption::FSName(fs_name)];
+        mount_options.extend(options);
+
+        let mut config = fuser::Config::default();
+        config.mount_options = mount_options;
+        config.acl = acl;
+        config
+    }
+
     /// The session name.
     pub fn session_name(&self) -> &String {
         self.session_name.as_ref().unwrap()
@@ -134,5 +175,34 @@ impl Config {
     /// When enabled, all write operations are rejected with EROFS.
     pub fn read_only(&self) -> bool {
         self.read_only.unwrap_or(false)
+    }
+}
+
+/// Converts a mount option from the config file into its fuser representation. Options that
+/// fuser has no variant for (e.g. macFUSE's `backend=fskit` or `volname=...`) are passed
+/// through unchanged.
+fn parse_mount_option(option: &str) -> fuser::MountOption {
+    use fuser::MountOption;
+
+    match option {
+        "auto_unmount" => MountOption::AutoUnmount,
+        "default_permissions" => MountOption::DefaultPermissions,
+        "dev" => MountOption::Dev,
+        "nodev" => MountOption::NoDev,
+        "suid" => MountOption::Suid,
+        "nosuid" => MountOption::NoSuid,
+        "ro" => MountOption::RO,
+        "rw" => MountOption::RW,
+        "exec" => MountOption::Exec,
+        "noexec" => MountOption::NoExec,
+        "atime" => MountOption::Atime,
+        "noatime" => MountOption::NoAtime,
+        "dirsync" => MountOption::DirSync,
+        "sync" => MountOption::Sync,
+        "async" => MountOption::Async,
+        _ => match option.strip_prefix("subtype=") {
+            Some(subtype) => MountOption::Subtype(subtype.to_string()),
+            None => MountOption::CUSTOM(option.to_string()),
+        },
     }
 }

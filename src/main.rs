@@ -135,6 +135,9 @@ mount_options = [
     # Allow file system access to root. This only works if `user_allow_other`
     # is set in /etc/fuse.conf
     "allow_root",
+    # macOS only: use macFUSE's FSKit backend (macOS 15.4+), which does not need
+    # the kernel extension. The mount point must be under /Volumes.
+    # "backend=fskit",
 ]
 
 # If set to true, Google Drive will provide a code after logging in and
@@ -184,20 +187,86 @@ client_secret = """
 }"""
 "#;
 
+/// The operating system refused to mount a file system. Kept as a distinct error type so that
+/// troubleshooting steps can be printed for it.
+#[derive(Debug)]
+struct MountFailure {
+    mountpoint: String,
+    source: std::io::Error,
+}
+
+impl std::fmt::Display for MountFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Could not mount to {}: {}", self.mountpoint, self.source)
+    }
+}
+
+impl std::error::Error for MountFailure {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.source)
+    }
+}
+
+/// Path of the macFUSE kernel extension built for the running macOS release, if it exists.
+#[cfg(target_os = "macos")]
+fn macfuse_kext_path() -> Option<String> {
+    let output = std::process::Command::new("/usr/bin/sw_vers")
+        .arg("-productVersion")
+        .output()
+        .ok()?;
+    let version = String::from_utf8(output.stdout).ok()?;
+    let major = version.trim().split('.').next()?;
+    let path = format!(
+        "/Library/Filesystems/macfuse.fs/Contents/Extensions/{}/macfuse.kext",
+        major
+    );
+    Path::new(&path).exists().then_some(path)
+}
+
+#[cfg(target_os = "macos")]
+fn print_mount_troubleshooting() {
+    let kext_path = macfuse_kext_path().unwrap_or_else(|| {
+        String::from(
+            "/Library/Filesystems/macfuse.fs/Contents/Extensions/<macOS major version>/macfuse.kext",
+        )
+    });
+
+    eprintln!();
+    eprintln!("On macOS, the error code above often does not reflect the actual cause.");
+    eprintln!("A common cause is that the macFUSE kernel extension is not approved or loaded.");
+    eprintln!();
+    eprintln!("To fix:");
+    eprintln!("  1. Open System Settings -> Privacy & Security and allow the system software");
+    eprintln!("     from developer \"Benjamin Fleischer\" (macFUSE).");
+    eprintln!("  2. If nothing is shown there, load the extension manually. This prints the");
+    eprintln!("     actual error and usually brings up the approval prompt:");
+    eprintln!("       sudo kmutil load -p {}", kext_path);
+    eprintln!("  3. Restart if prompted, then mount again.");
+    eprintln!();
+    eprintln!("Alternatively, macFUSE's FSKit backend (macOS 15.4+) does not need the kernel");
+    eprintln!("extension. Add \"backend=fskit\" to mount_options in the config file and use a");
+    eprintln!("mount point under /Volumes. File access is slower with this backend.");
+    eprintln!();
+    eprintln!("Also make sure the mount point exists and is not already mounted.");
+}
+
+#[cfg(not(target_os = "macos"))]
+fn print_mount_troubleshooting() {}
+
 fn mount_gcsf(config: Config, mountpoint: &str) -> Result<(), Error> {
-    // TODO: consider making these configurable in the config file
-    let mut mount_options = vec![fuser::MountOption::FSName(String::from("GCSF"))];
+    let mount_config = config.fuser_config();
 
     if config.read_only() {
-        mount_options.push(fuser::MountOption::RO);
         info!("Mounting in read-only mode");
     }
 
-    let mut mount_config = fuser::Config::default();
-    mount_config.mount_options = mount_options;
-    mount_config.acl = fuser::SessionACL::RootAndOwner;
+    let mount_failure = |source| MountFailure {
+        mountpoint: mountpoint.to_string(),
+        source,
+    };
 
     if config.mount_check() {
+        info!("Checking that {} can be mounted...", mountpoint);
         match fuser::spawn_mount(NullFs {}, mountpoint, &mount_config) {
             Ok(session) => {
                 debug!("Test mount of NullFs successful. Will mount GCSF next.");
@@ -208,10 +277,13 @@ fn mount_gcsf(config: Config, mountpoint: &str) -> Result<(), Error> {
                     )));
                 }
             }
-            Err(e) => {
-                return Err(err_msg(format!("Could not mount to {}: {}", mountpoint, e)));
-            }
+            Err(e) => return Err(mount_failure(e).into()),
         };
+    } else {
+        warn!(
+            "mount_check is disabled in the config file. Mount problems will only be detected \
+             after the whole Drive file list has been fetched."
+        );
     }
 
     info!("Creating and populating file system...");
@@ -267,7 +339,7 @@ fn mount_gcsf(config: Config, mountpoint: &str) -> Result<(), Error> {
                 Err(err_msg(errors.join("; ")))
             }
         }
-        Err(e) => Err(err_msg(format!("Could not mount to {}: {}", mountpoint, e))),
+        Err(e) => Err(mount_failure(e).into()),
     }
 }
 
@@ -514,6 +586,9 @@ fn main() {
 
             if let Err(error) = mount_gcsf(config, &mountpoint) {
                 error!("{}", error);
+                if error.downcast_ref::<MountFailure>().is_some() {
+                    print_mount_troubleshooting();
+                }
                 std::process::exit(1);
             }
         }

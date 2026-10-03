@@ -349,6 +349,75 @@ mod read_only_tests {
 }
 
 #[cfg(test)]
+mod mount_options_tests {
+    use crate::gcsf::Config;
+    use fuser::{MountOption, SessionACL};
+
+    fn config_with(options: &[&str], read_only: bool) -> Config {
+        Config {
+            mount_options: Some(options.iter().map(|o| o.to_string()).collect()),
+            read_only: Some(read_only),
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn defaults_match_previous_behavior() {
+        let config = Config::default().fuser_config();
+        assert_eq!(
+            config.mount_options,
+            vec![MountOption::FSName("GCSF".to_string())]
+        );
+        assert_eq!(config.acl, SessionACL::RootAndOwner);
+    }
+
+    #[test]
+    fn default_config_file_options_match_previous_behavior() {
+        let config = config_with(&["fsname=GCSF", "allow_root"], false).fuser_config();
+        assert_eq!(
+            config.mount_options,
+            vec![MountOption::FSName("GCSF".to_string())]
+        );
+        assert_eq!(config.acl, SessionACL::RootAndOwner);
+    }
+
+    #[test]
+    fn allow_other_selects_acl_instead_of_option() {
+        let config = config_with(&["allow_other"], false).fuser_config();
+        assert_eq!(config.acl, SessionACL::All);
+        assert_eq!(config.mount_options.len(), 1);
+    }
+
+    #[test]
+    fn custom_options_are_passed_through() {
+        let config =
+            config_with(&["backend=fskit", " noatime ", "", "fsname=Drive"], false).fuser_config();
+        assert_eq!(
+            config.mount_options,
+            vec![
+                MountOption::FSName("Drive".to_string()),
+                MountOption::CUSTOM("backend=fskit".to_string()),
+                MountOption::NoAtime,
+            ]
+        );
+    }
+
+    #[test]
+    fn read_only_adds_ro_once() {
+        let config = config_with(&["ro"], true).fuser_config();
+        let ro_count = config
+            .mount_options
+            .iter()
+            .filter(|o| **o == MountOption::RO)
+            .count();
+        assert_eq!(ro_count, 1);
+
+        let config = config_with(&[], true).fuser_config();
+        assert!(config.mount_options.contains(&MountOption::RO));
+    }
+}
+
+#[cfg(test)]
 mod fuser_api_tests {
     use crate::Gcsf;
 
