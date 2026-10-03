@@ -45,7 +45,6 @@
     missing_docs,
     mixed_script_confusables,
     named_arguments_used_positionally,
-    no_mangle_generic_items,
     non_camel_case_types,
     non_fmt_panics,
     non_shorthand_field_patterns,
