@@ -135,9 +135,6 @@ mount_options = [
     # Allow file system access to root. This only works if `user_allow_other`
     # is set in /etc/fuse.conf
     "allow_root",
-    # macOS only: use macFUSE's FSKit backend (macOS 15.4+), which does not need
-    # the kernel extension. The mount point must be under /Volumes.
-    # "backend=fskit",
 ]
 
 # If set to true, Google Drive will provide a code after logging in and
@@ -233,9 +230,8 @@ fn print_mount_troubleshooting() {
 
     eprintln!();
     eprintln!("On macOS, the error code above often does not reflect the actual cause.");
-    eprintln!("A common cause is that the macFUSE kernel extension is not approved or loaded.");
     eprintln!();
-    eprintln!("To fix:");
+    eprintln!("If the macFUSE kernel extension is not approved or loaded:");
     eprintln!("  1. Open System Settings -> Privacy & Security and allow the system software");
     eprintln!("     from developer \"Benjamin Fleischer\" (macFUSE).");
     eprintln!("  2. If nothing is shown there, load the extension manually. This prints the");
@@ -243,9 +239,9 @@ fn print_mount_troubleshooting() {
     eprintln!("       sudo kmutil load -p {}", kext_path);
     eprintln!("  3. Restart if prompted, then mount again.");
     eprintln!();
-    eprintln!("Alternatively, macFUSE's FSKit backend (macOS 15.4+) does not need the kernel");
-    eprintln!("extension. Add \"backend=fskit\" to mount_options in the config file and use a");
-    eprintln!("mount point under /Volumes. File access is slower with this backend.");
+    eprintln!("With macFUSE 5.3 or later, GCSF must be built from its GitHub repository, which");
+    eprintln!("includes a fix for https://github.com/cberner/fuser/issues/752. Builds from");
+    eprintln!("crates.io (`cargo install gcsf`) cannot mount until fuser releases a fix.");
     eprintln!();
     eprintln!("Also make sure the mount point exists and is not already mounted.");
 }

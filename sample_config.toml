@@ -32,9 +32,6 @@ mount_options = [
     # Allow file system access to root. This only works if `user_allow_other`
     # is set in /etc/fuse.conf
     "allow_root",
-    # macOS only: use macFUSE's FSKit backend (macOS 15.4+), which does not need
-    # the kernel extension. The mount point must be under /Volumes.
-    # "backend=fskit",
 ]
 
 # If set to true, Google Drive will provide a code after logging in and
