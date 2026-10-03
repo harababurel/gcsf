@@ -52,6 +52,12 @@ reqwest = { version = "0.13", default-features = false, features = [
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
 xdg = "3.0.0"
 
+# fuser 0.18.0 cannot mount with macFUSE 5.3+ (https://github.com/cberner/fuser/issues/752).
+# This fork only changes fuser's build script to use libfuse3 on macOS. Remove this
+# section once a fuser release fixes the issue. Note that `cargo publish` ignores it.
+[patch.crates-io]
+fuser = { git = "https://github.com/harababurel/fuser", rev = "3d6a8eccea86b89036e1e021e83ba88540863fc1" }
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"

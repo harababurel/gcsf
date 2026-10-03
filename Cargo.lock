@@ -593,8 +593,7 @@ dependencies = [
 [[package]]
 name = "fuser"
 version = "0.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b82b6597d216503555ead6b358f341ef748869bf5c6fbae6a0cb9dd231baecfd"
+source = "git+https://github.com/harababurel/fuser?rev=3d6a8eccea86b89036e1e021e83ba88540863fc1#3d6a8eccea86b89036e1e021e83ba88540863fc1"
 dependencies = [
  "bitflags 2.13.2",
  "libc",
