@@ -169,6 +169,20 @@ Or Thunar:
        width="746px" height="176px">
 </p>
 
+#### Verifying copied files
+
+Each file stored in Drive exposes the checksums Google Drive computed for its content as extended attributes: `user.gcsf.md5` and `user.gcsf.sha256`. Comparing a copy against them checks it end to end against Drive, without reading the file through GCSF again:
+
+```bash
+$ cp /mnt/gcsf/backup.zip /tmp/
+$ getfattr --only-values -n user.gcsf.md5 /mnt/gcsf/backup.zip; echo
+9e107d9d372bb6826bd81d3542a419d6
+$ md5sum /tmp/backup.zip
+9e107d9d372bb6826bd81d3542a419d6  /tmp/backup.zip
+```
+
+On macOS, use `xattr -p user.gcsf.md5 /mnt/gcsf/backup.zip` instead of `getfattr`. Drive provides no checksums for directories and Google Docs, Sheets, Slides, Drawings and Sites, so these files have no such attributes. Neither does a file with modifications that have not been flushed to Drive yet.
+
 ### Why GCSF?
 GCSF stands for "Google Conduce Sistem de Fișiere" which translated from Romanian is "Google Drive Filesystem". However [GDFS](https://github.com/robin-thomas/GDFS) already exists so it remains GCSF.
 

@@ -1,11 +1,12 @@
-use super::{Config, File, FileId, FileManager};
+use super::{Checksums, Config, File, FileId, FileManager};
 use crate::DriveFacade;
 use drive3;
 use failure::{Error, err_msg};
 use fuser::{
     AccessFlags, BsdFileFlags, Errno, FileAttr, FileHandle, FileType, Filesystem, FopenFlags,
     Generation, INodeNo, LockOwner, OpenFlags, RenameFlags, ReplyAttr, ReplyCreate, ReplyData,
-    ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, Request, WriteFlags,
+    ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyStatfs, ReplyWrite, ReplyXattr, Request,
+    WriteFlags,
 };
 use lru_time_cache::LruCache;
 use std;
@@ -103,6 +104,46 @@ impl GcsfControl {
 }
 
 const TTL: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// Extended attribute exposing the MD5 checksum Drive computed for a file's content.
+const XATTR_MD5: &str = "user.gcsf.md5";
+/// Extended attribute exposing the SHA-256 checksum Drive computed for a file's content.
+const XATTR_SHA256: &str = "user.gcsf.sha256";
+
+/// The extended attributes (name, value) available for a file with the given checksums.
+fn checksum_xattrs(checksums: &Checksums) -> Vec<(&'static str, &str)> {
+    [
+        (XATTR_MD5, &checksums.md5),
+        (XATTR_SHA256, &checksums.sha256),
+    ]
+    .into_iter()
+    .filter_map(|(name, value)| value.as_deref().map(|value| (name, value)))
+    .collect()
+}
+
+/// The `listxattr` payload: every attribute name followed by a NUL byte.
+fn xattr_name_list(checksums: &Checksums) -> Vec<u8> {
+    checksum_xattrs(checksums)
+        .into_iter()
+        .flat_map(|(name, _)| name.bytes().chain(std::iter::once(0)))
+        .collect()
+}
+
+/// Answers an xattr request following the FUSE protocol: a `size` of 0 asks for the length of
+/// the value, otherwise the value is returned if it fits in `size` bytes.
+fn reply_xattr(reply: ReplyXattr, size: u32, value: &[u8]) {
+    let Ok(len) = u32::try_from(value.len()) else {
+        reply.error(Errno::E2BIG);
+        return;
+    };
+    if size == 0 {
+        reply.size(len);
+    } else if len > size {
+        reply.error(Errno::ERANGE);
+    } else {
+        reply.data(value);
+    }
+}
 
 impl Gcsf {
     /// Constructs a Gcsf instance using a given Config.
@@ -207,6 +248,35 @@ impl Filesystem for Gcsf {
         } else {
             reply.ok();
         }
+    }
+
+    fn getxattr(&self, _req: &Request, ino: INodeNo, name: &OsStr, size: u32, reply: ReplyXattr) {
+        let state = lock_state!(self, reply);
+        let id = FileId::Inode(ino.0);
+        if !state.manager.contains(&id) {
+            reply.error(Errno::ENOENT);
+            return;
+        }
+        let checksums = state.manager.checksums(&id).unwrap_or_default();
+        let value = checksum_xattrs(&checksums)
+            .into_iter()
+            .find(|(xattr_name, _)| OsStr::new(xattr_name) == name)
+            .map(|(_, value)| value);
+        match value {
+            Some(value) => reply_xattr(reply, size, value.as_bytes()),
+            None => reply.error(Errno::NO_XATTR),
+        }
+    }
+
+    fn listxattr(&self, _req: &Request, ino: INodeNo, size: u32, reply: ReplyXattr) {
+        let state = lock_state!(self, reply);
+        let id = FileId::Inode(ino.0);
+        if !state.manager.contains(&id) {
+            reply.error(Errno::ENOENT);
+            return;
+        }
+        let checksums = state.manager.checksums(&id).unwrap_or_default();
+        reply_xattr(reply, size, &xattr_name_list(&checksums));
     }
 
     fn read(
@@ -814,5 +884,42 @@ impl Filesystem for Gcsf {
             /* namelen: */ 1024,
             /* frsize: */ bsize,
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Checksums, XATTR_MD5, XATTR_SHA256, checksum_xattrs, xattr_name_list};
+
+    #[test]
+    fn xattrs_expose_available_checksums() {
+        let checksums = Checksums {
+            md5: Some("d41d8cd98f00b204e9800998ecf8427e".to_string()),
+            sha256: Some("e3b0c44298fc1c149afbf4c8996fb924".to_string()),
+        };
+        assert_eq!(
+            checksum_xattrs(&checksums),
+            vec![
+                (XATTR_MD5, "d41d8cd98f00b204e9800998ecf8427e"),
+                (XATTR_SHA256, "e3b0c44298fc1c149afbf4c8996fb924"),
+            ]
+        );
+        assert_eq!(
+            xattr_name_list(&checksums),
+            b"user.gcsf.md5\0user.gcsf.sha256\0"
+        );
+    }
+
+    #[test]
+    fn xattrs_omit_missing_checksums() {
+        let md5_only = Checksums {
+            md5: Some("abc".to_string()),
+            sha256: None,
+        };
+        assert_eq!(checksum_xattrs(&md5_only), vec![(XATTR_MD5, "abc")]);
+        assert_eq!(xattr_name_list(&md5_only), b"user.gcsf.md5\0");
+
+        assert!(checksum_xattrs(&Checksums::default()).is_empty());
+        assert!(xattr_name_list(&Checksums::default()).is_empty());
     }
 }

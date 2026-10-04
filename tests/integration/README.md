@@ -42,7 +42,7 @@ fusermount -u ~/gcsf_test_mount
 
 ## What Gets Tested
 
-The test suite includes **15 test categories** covering all typical filesystem operations:
+The test suite includes **16 test categories** covering all typical filesystem operations:
 
 1. **File Creation** - touch, echo, printf, heredoc
 2. **File Writing** - overwrite, append, multiple writes
@@ -59,6 +59,7 @@ The test suite includes **15 test categories** covering all typical filesystem o
 13. **Same Filename, Different Directories** - files in different dirs don't get suffixes
 14. **Nested Directories** - same filename in nested paths behaves correctly
 15. **Large File Sequential Read** - a cached 64MiB file reads back intact and fast, including after a partial overwrite
+16. **Checksum Extended Attributes** - `user.gcsf.md5` and `user.gcsf.sha256` match the uploaded content and follow overwrites (requires `getfattr` from the `attr` package on Linux)
 
 ## Expected Output
 
@@ -82,7 +83,7 @@ The test suite includes **15 test categories** covering all typical filesystem o
 ================================================
   Test Summary
 ================================================
-Tests run:    15
+Tests run:    16
 Tests passed: 60
 Tests failed: 0
 Pass rate:    100%

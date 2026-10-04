@@ -954,6 +954,83 @@ test_large_file_sequential_read() {
 }
 
 #############################################################################
+# TEST 16: Drive Checksums Exposed as Extended Attributes
+#############################################################################
+# Prints the value of extended attribute $2 of file $1, or fails if it is absent.
+read_xattr() {
+    if command -v getfattr >/dev/null 2>&1; then
+        getfattr --only-values -n "$2" "$1" 2>/dev/null
+    else
+        xattr -p "$2" "$1" 2>/dev/null
+    fi
+}
+
+# Asserts that file $1 exposes checksum attribute $2 with value $3. Drive may
+# omit a checksum from an upload response; it then appears once a change sync
+# (triggered by listing the directory) delivers the file's metadata.
+assert_xattr_equals() {
+    local filepath="$1"
+    local name="$2"
+    local expected="$3"
+    local description="$4"
+    local actual=""
+
+    for attempt in {1..6}; do
+        actual=$(read_xattr "$filepath" "$name" || true)
+        if [ "$actual" = "$expected" ]; then
+            log_pass "$description"
+            return 0
+        fi
+        sleep 2
+        ls "$(dirname "$filepath")" >/dev/null
+    done
+
+    log_fail "$description"
+    echo "  Expected: '$expected'"
+    echo "  Got:      '$actual'"
+    return 1
+}
+
+test_checksum_xattrs() {
+    log_test "16" "Drive checksums exposed as extended attributes"
+
+    if ! command -v getfattr >/dev/null 2>&1 && ! command -v xattr >/dev/null 2>&1; then
+        log_fail "Neither getfattr (Linux: attr package) nor xattr (macOS) is installed"
+        return 1
+    fi
+
+    local test_dir="$TEST_DIR/test16"
+    mkdir -p "$test_dir"
+
+    local local_copy
+    local_copy=$(mktemp)
+    head -c $((1024 * 1024)) /dev/urandom > "$local_copy"
+
+    log_info "Uploading 1MiB of random data"
+    cp "$local_copy" "$test_dir/random.dat"
+    wait_for_sync
+    assert_xattr_equals "$test_dir/random.dat" user.gcsf.md5 \
+        "$(md5sum < "$local_copy" | cut -d' ' -f1)" "user.gcsf.md5 matches local md5"
+    assert_xattr_equals "$test_dir/random.dat" user.gcsf.sha256 \
+        "$(sha256sum < "$local_copy" | cut -d' ' -f1)" "user.gcsf.sha256 matches local sha256"
+
+    log_info "Overwriting part of the file"
+    printf 'PATCHED' | dd of="$local_copy" bs=1 seek=1000 conv=notrunc 2>/dev/null
+    printf 'PATCHED' | dd of="$test_dir/random.dat" bs=1 seek=1000 conv=notrunc 2>/dev/null
+    wait_for_sync
+    assert_xattr_equals "$test_dir/random.dat" user.gcsf.md5 \
+        "$(md5sum < "$local_copy" | cut -d' ' -f1)" "user.gcsf.md5 follows content changes"
+
+    if read_xattr "$test_dir" user.gcsf.md5 >/dev/null; then
+        log_fail "Directory unexpectedly has user.gcsf.md5"
+    else
+        log_pass "Directory has no user.gcsf.md5"
+    fi
+
+    rm -f "$local_copy"
+}
+
+#############################################################################
 # Main Execution
 #############################################################################
 main() {
@@ -984,6 +1061,7 @@ main() {
     test_same_name_different_dirs || true
     test_nested_same_names || true
     test_large_file_sequential_read || true
+    test_checksum_xattrs || true
 
     # Print summary
     echo ""

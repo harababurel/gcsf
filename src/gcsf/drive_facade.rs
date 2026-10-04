@@ -1,4 +1,4 @@
-use super::Config;
+use super::{Checksums, Config};
 use drive3::hyper;
 use drive3::hyper_rustls;
 use drive3::yup_oauth2 as oauth2;
@@ -40,6 +40,11 @@ pub struct DriveFacade {
 
     /// The LRU cache used for storing the file contents for any given Drive ID.
     cache: LruCache<DriveId, Vec<u8>>,
+
+    /// Checksums Drive reported for content this instance uploaded (on create or flush). They
+    /// supersede the checksums in the file's listed metadata until the next change sync for the
+    /// file delivers fresh metadata.
+    uploaded_checksums: HashMap<DriveId, Checksums>,
 
     /// Keeps track of the page token used for receiving changes from the `changes.list` API endpoint.
     changes_token: Option<String>,
@@ -84,6 +89,15 @@ lazy_static! {
         "application/vnd.google-apps.form",
         "application/vnd.google-apps.map",
     };
+}
+
+lazy_static! {
+    /// The metadata GCSF needs for every file it lists, whether from `files.list` or
+    /// `changes.list`.
+    static ref LISTED_FILE_FIELDS: String = format!(
+        "name,id,size,mimeType,owners,parents,trashed,modifiedTime,createdTime,viewedByMeTime,{}",
+        Checksums::DRIVE_FIELDS
+    );
 }
 
 lazy_static! {
@@ -151,6 +165,7 @@ impl DriveFacade {
             buff: Vec::new(),
             pending_writes: HashMap::new(),
             cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
+            uploaded_checksums: HashMap::new(),
             root_id: None,
             changes_token: None,
         }
@@ -163,6 +178,7 @@ impl DriveFacade {
             buff: Vec::new(),
             pending_writes: HashMap::new(),
             cache: LruCache::with_capacity(10),
+            uploaded_checksums: HashMap::new(),
             changes_token: None,
             root_id: None,
         }
@@ -501,21 +517,28 @@ impl DriveFacade {
         let mut token = self.changes_token()?.clone();
 
         let rt = Runtime::new().unwrap();
+        let fields = format!(
+            "kind,newStartPageToken,changes(kind,type,time,removed,fileId,file({}))",
+            LISTED_FILE_FIELDS.as_str()
+        );
 
         loop {
-            let (_response, changelist) = rt.block_on(self.hub()?
-                .changes()
-                .list(&token)
-                .param("fields", "kind,newStartPageToken,changes(kind,type,time,removed,fileId,file(name,id,size,mimeType,owners,parents,trashed,modifiedTime,createdTime,viewedByMeTime))")
-                .spaces("drive")
-                .restrict_to_my_drive(true)
-                // Whether to include changes indicating that items have been removed from the list of changes, for example by deletion or loss of access. (Default: true)
-                .include_removed(true)
-                .supports_team_drives(false)
-                .include_team_drive_items(false)
-                .page_size(PAGE_SIZE)
-                .add_scope(drive3::api::Scope::Full)
-                .doit())
+            let (_response, changelist) = rt
+                .block_on(
+                    self.hub()?
+                        .changes()
+                        .list(&token)
+                        .param("fields", &fields)
+                        .spaces("drive")
+                        .restrict_to_my_drive(true)
+                        // Whether to include changes indicating that items have been removed from the list of changes, for example by deletion or loss of access. (Default: true)
+                        .include_removed(true)
+                        .supports_team_drives(false)
+                        .include_team_drive_items(false)
+                        .page_size(PAGE_SIZE)
+                        .add_scope(drive3::api::Scope::Full)
+                        .doit(),
+                )
                 .map_err(|e| err_msg(format!("{:#?}", e)))?;
 
             match changelist.changes {
@@ -549,10 +572,13 @@ impl DriveFacade {
         let mut page_token: Option<String> = None;
         let mut current_page = 1;
         let rt = Runtime::new().unwrap();
+        let fields = format!("nextPageToken,files({})", LISTED_FILE_FIELDS.as_str());
         loop {
-            let mut request = self.hub()?.files()
+            let mut request = self
+                .hub()?
+                .files()
                 .list()
-                .param("fields", "nextPageToken,files(name,id,size,mimeType,owners,parents,trashed,modifiedTime,createdTime,viewedByMeTime)")
+                .param("fields", &fields)
                 .spaces("drive") // TODO: maybe add photos as well
                 .corpora("user")
                 .page_size(PAGE_SIZE)
@@ -697,20 +723,51 @@ impl DriveFacade {
     pub fn create(&mut self, drive_file: &drive3::api::File) -> Result<DriveId, Error> {
         let dummy_file = DummyFile::new(&[]);
         let rt = Runtime::new().unwrap();
-        rt.block_on(
-            self.hub()?
-                .files()
-                .create(drive_file.clone())
-                .use_content_as_indexable_text(true)
-                .supports_team_drives(false)
-                .ignore_default_visibility(true)
-                .upload(dummy_file, "application/octet-stream".parse().unwrap()),
-        )
-        .map_err(|e| err_msg(format!("{:#?}", e)))
-        .and_then(|(_, file)| {
-            file.id
-                .ok_or_else(|| err_msg("Received file from Drive without an id"))
-        })
+        let (_, file) = rt
+            .block_on(
+                self.hub()?
+                    .files()
+                    .create(drive_file.clone())
+                    .use_content_as_indexable_text(true)
+                    .supports_team_drives(false)
+                    .ignore_default_visibility(true)
+                    .param("fields", &format!("id,{}", Checksums::DRIVE_FIELDS))
+                    .upload(dummy_file, "application/octet-stream".parse().unwrap()),
+            )
+            .map_err(|e| err_msg(format!("{:#?}", e)))?;
+        let id = file
+            .id
+            .clone()
+            .ok_or_else(|| err_msg("Received file from Drive without an id"))?;
+        self.uploaded_checksums
+            .insert(id.clone(), Checksums::of(&file));
+        Ok(id)
+    }
+
+    /// Returns the checksums of the file content as it currently is on Drive, preferring those
+    /// reported for this instance's latest upload over `listed` (the checksums from the file's
+    /// listed metadata). Returns `None` while the file has pending operations, because its
+    /// content as seen through GCSF then differs from what Drive has checksummed.
+    pub fn checksums(&self, id: DriveIdRef, listed: Checksums) -> Option<Checksums> {
+        if self.pending_writes.contains_key(id) {
+            return None;
+        }
+        Some(self.uploaded_checksums.get(id).cloned().unwrap_or(listed))
+    }
+
+    /// Discards checksums recorded from uploads, once fresher metadata for the file has arrived
+    /// from Drive.
+    pub fn forget_uploaded_checksums(&mut self, id: DriveIdRef) {
+        self.uploaded_checksums.remove(id);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn record_uploaded_checksums_for_testing(
+        &mut self,
+        id: DriveIdRef,
+        checksums: Checksums,
+    ) {
+        self.uploaded_checksums.insert(id.to_string(), checksums);
     }
 
     /// Writes some data to a Drive file starting at a certain offset.
@@ -919,7 +976,8 @@ impl DriveFacade {
                 error,
                 outcome_indeterminate: false,
             })?;
-        self.update_file_content(DriveId::from(id), &file_data)
+        let (_, uploaded) = self
+            .update_file_content(DriveId::from(id), &file_data)
             .map_err(|error| match error {
                 UpdateFileError::BeforeUpload(error) => FlushFailure {
                     error,
@@ -932,6 +990,8 @@ impl DriveFacade {
             })?;
         self.pending_writes.remove(id);
         self.cache.insert(id.to_string(), file_data);
+        self.uploaded_checksums
+            .insert(id.to_string(), Checksums::of(&uploaded));
 
         Ok(())
     }
@@ -975,6 +1035,7 @@ impl DriveFacade {
     pub fn discard_file_state(&mut self, id: DriveIdRef) {
         self.pending_writes.remove(id);
         self.cache.remove(id);
+        self.uploaded_checksums.remove(id);
     }
 
     /// Updates the content of a file on Drive. The MIME type is guessed appropriately based on the
@@ -1007,6 +1068,7 @@ impl DriveFacade {
             .map_err(UpdateFileError::BeforeUpload)?
             .files()
             .update(file, &id)
+            .param("fields", &format!("id,{}", Checksums::DRIVE_FIELDS))
             .add_scope(drive3::api::Scope::Full);
         let result = if data.is_empty() {
             rt.block_on(request.upload(DummyFile::new(data), mime_guess.parse().unwrap()))
@@ -1098,7 +1160,7 @@ impl Read for DummyFile {
 
 #[cfg(test)]
 mod tests {
-    use super::{DriveFacade, PendingOperation, is_not_found};
+    use super::{Checksums, DriveFacade, PendingOperation, is_not_found};
 
     fn write(offset: usize, data: &[u8]) -> PendingOperation {
         PendingOperation::Write {
@@ -1300,6 +1362,86 @@ mod tests {
                 size
             );
         }
+    }
+
+    fn checksums(md5: &str) -> Checksums {
+        Checksums {
+            md5: Some(md5.to_string()),
+            sha256: Some(format!("sha256-of-{}", md5)),
+        }
+    }
+
+    #[test]
+    fn checksums_come_from_listed_metadata_by_default() {
+        let facade = DriveFacade::new_for_testing();
+        assert_eq!(
+            facade.checksums("file", checksums("listed")),
+            Some(checksums("listed"))
+        );
+    }
+
+    #[test]
+    fn uploaded_checksums_supersede_listed_ones_until_forgotten() {
+        let mut facade = DriveFacade::new_for_testing();
+        facade
+            .uploaded_checksums
+            .insert("file".to_string(), checksums("uploaded"));
+        assert_eq!(
+            facade.checksums("file", checksums("listed")),
+            Some(checksums("uploaded"))
+        );
+
+        facade.forget_uploaded_checksums("file");
+        assert_eq!(
+            facade.checksums("file", checksums("listed")),
+            Some(checksums("listed"))
+        );
+    }
+
+    #[test]
+    fn uploads_without_reported_checksums_hide_listed_ones() {
+        // The listed checksums describe content from before the upload, so they must not be
+        // reported even if Drive did not return checksums for the upload itself.
+        let mut facade = DriveFacade::new_for_testing();
+        facade
+            .uploaded_checksums
+            .insert("file".to_string(), Checksums::default());
+        assert_eq!(
+            facade.checksums("file", checksums("listed")),
+            Some(Checksums::default())
+        );
+    }
+
+    #[test]
+    fn no_checksums_while_operations_are_pending() {
+        let mut facade = DriveFacade::new_for_testing();
+        facade
+            .uploaded_checksums
+            .insert("file".to_string(), checksums("uploaded"));
+        facade.write("file".to_string(), 0, b"new").unwrap();
+        assert_eq!(facade.checksums("file", checksums("listed")), None);
+
+        let mut facade = DriveFacade::new_for_testing();
+        facade.truncate("file".to_string(), 0);
+        assert_eq!(facade.checksums("file", checksums("listed")), None);
+    }
+
+    #[test]
+    fn failed_flush_keeps_checksums_hidden() {
+        let mut facade = DriveFacade::new_for_testing();
+        facade.write("file".to_string(), 0, b"data").unwrap();
+        assert!(facade.flush("file").is_err());
+        assert_eq!(facade.checksums("file", checksums("listed")), None);
+    }
+
+    #[test]
+    fn discarding_file_state_forgets_uploaded_checksums() {
+        let mut facade = DriveFacade::new_for_testing();
+        facade
+            .uploaded_checksums
+            .insert("file".to_string(), checksums("uploaded"));
+        facade.discard_file_state("file");
+        assert!(facade.uploaded_checksums.is_empty());
     }
 
     #[test]

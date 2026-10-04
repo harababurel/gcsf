@@ -22,6 +22,27 @@ pub struct File {
     pub drive_file: Option<drive3::api::File>,
 }
 
+/// Content checksums computed by Google Drive. Drive only provides them for files with binary
+/// content, so they are absent for directories and Docs Editors files.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Checksums {
+    pub md5: Option<String>,
+    pub sha256: Option<String>,
+}
+
+impl Checksums {
+    /// The Drive API `fields` needed to populate `Checksums::of`.
+    pub const DRIVE_FIELDS: &'static str = "md5Checksum,sha256Checksum";
+
+    /// Extracts the checksums reported in a Drive file's metadata.
+    pub fn of(drive_file: &drive3::api::File) -> Self {
+        Checksums {
+            md5: drive_file.md5_checksum.clone(),
+            sha256: drive_file.sha256_checksum.clone(),
+        }
+    }
+}
+
 /// Specifies multiple ways of identifying a file:
 ///
 /// * by inode
