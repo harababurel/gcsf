@@ -1,4 +1,4 @@
-use super::{Checksums, Config, File, FileId, FileManager};
+use super::{Config, DriveAttributes, File, FileId, FileManager};
 use crate::DriveFacade;
 use drive3;
 use failure::{Error, err_msg};
@@ -105,16 +105,19 @@ impl GcsfControl {
 
 const TTL: std::time::Duration = std::time::Duration::from_secs(1);
 
-/// Extended attribute exposing the MD5 checksum Drive computed for a file's content.
-const XATTR_MD5: &str = "user.gcsf.md5";
-/// Extended attribute exposing the SHA-256 checksum Drive computed for a file's content.
-const XATTR_SHA256: &str = "user.gcsf.sha256";
-
-/// The extended attributes (name, value) available for a file with the given checksums.
-fn checksum_xattrs(checksums: &Checksums) -> Vec<(&'static str, &str)> {
+/// The extended attributes (name, value) exposing a file's Drive metadata. Attributes whose
+/// value Drive does not provide for the file are omitted.
+fn drive_xattrs(attributes: &DriveAttributes) -> Vec<(&'static str, &str)> {
+    let content = &attributes.content;
     [
-        (XATTR_MD5, &checksums.md5),
-        (XATTR_SHA256, &checksums.sha256),
+        ("user.gcsf.id", &attributes.id),
+        ("user.gcsf.mime_type", &content.mime_type),
+        ("user.gcsf.owner", &attributes.owners),
+        ("user.gcsf.web_link", &attributes.web_link),
+        ("user.gcsf.md5", &content.md5),
+        ("user.gcsf.sha1", &content.sha1),
+        ("user.gcsf.sha256", &content.sha256),
+        ("user.gcsf.revision", &content.revision),
     ]
     .into_iter()
     .filter_map(|(name, value)| value.as_deref().map(|value| (name, value)))
@@ -122,8 +125,8 @@ fn checksum_xattrs(checksums: &Checksums) -> Vec<(&'static str, &str)> {
 }
 
 /// The `listxattr` payload: every attribute name followed by a NUL byte.
-fn xattr_name_list(checksums: &Checksums) -> Vec<u8> {
-    checksum_xattrs(checksums)
+fn xattr_name_list(attributes: &DriveAttributes) -> Vec<u8> {
+    drive_xattrs(attributes)
         .into_iter()
         .flat_map(|(name, _)| name.bytes().chain(std::iter::once(0)))
         .collect()
@@ -257,8 +260,8 @@ impl Filesystem for Gcsf {
             reply.error(Errno::ENOENT);
             return;
         }
-        let checksums = state.manager.checksums(&id).unwrap_or_default();
-        let value = checksum_xattrs(&checksums)
+        let attributes = state.manager.drive_attributes(&id).unwrap_or_default();
+        let value = drive_xattrs(&attributes)
             .into_iter()
             .find(|(xattr_name, _)| OsStr::new(xattr_name) == name)
             .map(|(_, value)| value);
@@ -275,8 +278,8 @@ impl Filesystem for Gcsf {
             reply.error(Errno::ENOENT);
             return;
         }
-        let checksums = state.manager.checksums(&id).unwrap_or_default();
-        reply_xattr(reply, size, &xattr_name_list(&checksums));
+        let attributes = state.manager.drive_attributes(&id).unwrap_or_default();
+        reply_xattr(reply, size, &xattr_name_list(&attributes));
     }
 
     fn read(
@@ -889,37 +892,56 @@ impl Filesystem for Gcsf {
 
 #[cfg(test)]
 mod tests {
-    use super::{Checksums, XATTR_MD5, XATTR_SHA256, checksum_xattrs, xattr_name_list};
+    use super::{drive_xattrs, xattr_name_list};
+    use crate::gcsf::{ContentMetadata, DriveAttributes};
 
     #[test]
-    fn xattrs_expose_available_checksums() {
-        let checksums = Checksums {
-            md5: Some("d41d8cd98f00b204e9800998ecf8427e".to_string()),
-            sha256: Some("e3b0c44298fc1c149afbf4c8996fb924".to_string()),
+    fn xattrs_expose_all_available_metadata() {
+        let attributes = DriveAttributes {
+            id: Some("id".to_string()),
+            owners: Some("me@example.com".to_string()),
+            web_link: Some("https://example.com/id".to_string()),
+            content: ContentMetadata {
+                md5: Some("md5".to_string()),
+                sha1: Some("sha1".to_string()),
+                sha256: Some("sha256".to_string()),
+                revision: Some("revision".to_string()),
+                mime_type: Some("application/zip".to_string()),
+            },
         };
         assert_eq!(
-            checksum_xattrs(&checksums),
+            drive_xattrs(&attributes),
             vec![
-                (XATTR_MD5, "d41d8cd98f00b204e9800998ecf8427e"),
-                (XATTR_SHA256, "e3b0c44298fc1c149afbf4c8996fb924"),
+                ("user.gcsf.id", "id"),
+                ("user.gcsf.mime_type", "application/zip"),
+                ("user.gcsf.owner", "me@example.com"),
+                ("user.gcsf.web_link", "https://example.com/id"),
+                ("user.gcsf.md5", "md5"),
+                ("user.gcsf.sha1", "sha1"),
+                ("user.gcsf.sha256", "sha256"),
+                ("user.gcsf.revision", "revision"),
             ]
         );
         assert_eq!(
-            xattr_name_list(&checksums),
-            b"user.gcsf.md5\0user.gcsf.sha256\0"
+            xattr_name_list(&attributes),
+            b"user.gcsf.id\0user.gcsf.mime_type\0user.gcsf.owner\0user.gcsf.web_link\0\
+              user.gcsf.md5\0user.gcsf.sha1\0user.gcsf.sha256\0user.gcsf.revision\0"
         );
     }
 
     #[test]
-    fn xattrs_omit_missing_checksums() {
-        let md5_only = Checksums {
-            md5: Some("abc".to_string()),
-            sha256: None,
+    fn xattrs_omit_missing_metadata() {
+        let md5_only = DriveAttributes {
+            content: ContentMetadata {
+                md5: Some("abc".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
         };
-        assert_eq!(checksum_xattrs(&md5_only), vec![(XATTR_MD5, "abc")]);
+        assert_eq!(drive_xattrs(&md5_only), vec![("user.gcsf.md5", "abc")]);
         assert_eq!(xattr_name_list(&md5_only), b"user.gcsf.md5\0");
 
-        assert!(checksum_xattrs(&Checksums::default()).is_empty());
-        assert!(xattr_name_list(&Checksums::default()).is_empty());
+        assert!(drive_xattrs(&DriveAttributes::default()).is_empty());
+        assert!(xattr_name_list(&DriveAttributes::default()).is_empty());
     }
 }

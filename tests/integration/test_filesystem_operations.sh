@@ -954,7 +954,7 @@ test_large_file_sequential_read() {
 }
 
 #############################################################################
-# TEST 16: Drive Checksums Exposed as Extended Attributes
+# TEST 16: Drive Metadata Exposed as Extended Attributes
 #############################################################################
 # Prints the value of extended attribute $2 of file $1, or fails if it is absent.
 read_xattr() {
@@ -965,19 +965,19 @@ read_xattr() {
     fi
 }
 
-# Asserts that file $1 exposes checksum attribute $2 with value $3. Drive may
-# omit a checksum from an upload response; it then appears once a change sync
-# (triggered by listing the directory) delivers the file's metadata.
-assert_xattr_equals() {
+# Asserts that extended attribute $2 of file $1 matches the extended regex $3.
+# Drive may omit a field from an upload response; it then appears once a
+# change sync (triggered by listing the directory) delivers the metadata.
+assert_xattr_matches() {
     local filepath="$1"
     local name="$2"
-    local expected="$3"
+    local pattern="$3"
     local description="$4"
     local actual=""
 
     for attempt in {1..6}; do
         actual=$(read_xattr "$filepath" "$name" || true)
-        if [ "$actual" = "$expected" ]; then
+        if [[ "$actual" =~ $pattern ]]; then
             log_pass "$description"
             return 0
         fi
@@ -986,13 +986,43 @@ assert_xattr_equals() {
     done
 
     log_fail "$description"
-    echo "  Expected: '$expected'"
-    echo "  Got:      '$actual'"
+    echo "  Expected to match: '$pattern'"
+    echo "  Got:               '$actual'"
     return 1
 }
 
-test_checksum_xattrs() {
-    log_test "16" "Drive checksums exposed as extended attributes"
+# Asserts that extended attribute $2 of file $1 equals $3 exactly.
+assert_xattr_equals() {
+    assert_xattr_matches "$1" "$2" "^$3\$" "$4"
+}
+
+# Asserts that extended attribute $2 of file $1 is set and differs from $3.
+assert_xattr_differs() {
+    local actual=""
+    for attempt in {1..6}; do
+        actual=$(read_xattr "$1" "$2" || true)
+        if [ -n "$actual" ] && [ "$actual" != "$3" ]; then
+            log_pass "$4"
+            return 0
+        fi
+        sleep 2
+        ls "$(dirname "$1")" >/dev/null
+    done
+    log_fail "$4 (still '$actual')"
+    return 1
+}
+
+# Asserts that file $1 has no extended attribute $2.
+assert_xattr_absent() {
+    if read_xattr "$1" "$2" >/dev/null; then
+        log_fail "$3"
+        return 1
+    fi
+    log_pass "$3"
+}
+
+test_drive_xattrs() {
+    log_test "16" "Drive metadata exposed as extended attributes"
 
     if ! command -v getfattr >/dev/null 2>&1 && ! command -v xattr >/dev/null 2>&1; then
         log_fail "Neither getfattr (Linux: attr package) nor xattr (macOS) is installed"
@@ -1001,31 +1031,46 @@ test_checksum_xattrs() {
 
     local test_dir="$TEST_DIR/test16"
     mkdir -p "$test_dir"
+    local file="$test_dir/random.dat"
 
     local local_copy
     local_copy=$(mktemp)
     head -c $((1024 * 1024)) /dev/urandom > "$local_copy"
 
     log_info "Uploading 1MiB of random data"
-    cp "$local_copy" "$test_dir/random.dat"
+    cp "$local_copy" "$file"
     wait_for_sync
-    assert_xattr_equals "$test_dir/random.dat" user.gcsf.md5 \
+    assert_xattr_equals "$file" user.gcsf.md5 \
         "$(md5sum < "$local_copy" | cut -d' ' -f1)" "user.gcsf.md5 matches local md5"
-    assert_xattr_equals "$test_dir/random.dat" user.gcsf.sha256 \
+    assert_xattr_equals "$file" user.gcsf.sha1 \
+        "$(sha1sum < "$local_copy" | cut -d' ' -f1)" "user.gcsf.sha1 matches local sha1"
+    assert_xattr_equals "$file" user.gcsf.sha256 \
         "$(sha256sum < "$local_copy" | cut -d' ' -f1)" "user.gcsf.sha256 matches local sha256"
+    assert_xattr_matches "$file" user.gcsf.id '^[A-Za-z0-9_-]{10,}$' "user.gcsf.id is a Drive id"
+    assert_xattr_matches "$file" user.gcsf.mime_type '^[a-z]+/[^ ]+$' "user.gcsf.mime_type is a MIME type"
+    assert_xattr_matches "$file" user.gcsf.owner '^[^@,]+@[^@,]+(,[^@,]+@[^@,]+)*$' "user.gcsf.owner is an email"
+    assert_xattr_matches "$file" user.gcsf.web_link '^https://' "user.gcsf.web_link is a URL"
+    assert_xattr_matches "$file" user.gcsf.revision '.+' "user.gcsf.revision is set"
+
+    local id revision
+    id=$(read_xattr "$file" user.gcsf.id || true)
+    revision=$(read_xattr "$file" user.gcsf.revision || true)
 
     log_info "Overwriting part of the file"
     printf 'PATCHED' | dd of="$local_copy" bs=1 seek=1000 conv=notrunc 2>/dev/null
-    printf 'PATCHED' | dd of="$test_dir/random.dat" bs=1 seek=1000 conv=notrunc 2>/dev/null
+    printf 'PATCHED' | dd of="$file" bs=1 seek=1000 conv=notrunc 2>/dev/null
     wait_for_sync
-    assert_xattr_equals "$test_dir/random.dat" user.gcsf.md5 \
+    assert_xattr_equals "$file" user.gcsf.md5 \
         "$(md5sum < "$local_copy" | cut -d' ' -f1)" "user.gcsf.md5 follows content changes"
+    assert_xattr_differs "$file" user.gcsf.revision "$revision" \
+        "user.gcsf.revision changes with the content"
+    assert_xattr_equals "$file" user.gcsf.id "$id" "user.gcsf.id is stable across content changes"
 
-    if read_xattr "$test_dir" user.gcsf.md5 >/dev/null; then
-        log_fail "Directory unexpectedly has user.gcsf.md5"
-    else
-        log_pass "Directory has no user.gcsf.md5"
-    fi
+    log_info "Checking directory attributes"
+    assert_xattr_matches "$test_dir" user.gcsf.id '^[A-Za-z0-9_-]{10,}$' "Directory has user.gcsf.id"
+    assert_xattr_equals "$test_dir" user.gcsf.mime_type 'application/vnd\.google-apps\.folder' \
+        "Directory has the folder MIME type"
+    assert_xattr_absent "$test_dir" user.gcsf.md5 "Directory has no user.gcsf.md5"
 
     rm -f "$local_copy"
 }
@@ -1061,7 +1106,7 @@ main() {
     test_same_name_different_dirs || true
     test_nested_same_names || true
     test_large_file_sequential_read || true
-    test_checksum_xattrs || true
+    test_drive_xattrs || true
 
     # Print summary
     echo ""

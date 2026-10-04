@@ -1,4 +1,4 @@
-use super::{Checksums, File, FileId};
+use super::{ContentMetadata, DriveAttributes, File, FileId};
 use crate::DriveFacade;
 use crate::drive3;
 use failure::{Error, err_msg};
@@ -120,7 +120,7 @@ impl FileManager {
             let drive_f = change
                 .file
                 .ok_or_else(|| err_msg("Drive change did not include file metadata"))?;
-            self.adopt_checksums_from_change(&id, &drive_f);
+            self.adopt_content_metadata_from_change(&id, &drive_f);
 
             // New file. Create it locally
             if !self.contains(&id) {
@@ -404,8 +404,16 @@ impl FileManager {
             .drive_file
             .as_ref()
             .ok_or_else(|| err_msg("Cannot create a file without Drive metadata"))?;
-        let drive_id = self.df.create(drive_file)?;
+        let created = self.df.create(drive_file)?;
+        let drive_id = created
+            .id
+            .clone()
+            .ok_or_else(|| err_msg("Drive created a file without an id"))?;
         file.set_drive_id(drive_id.clone());
+        if let Some(drive_file) = file.drive_file.as_mut() {
+            drive_file.owners = created.owners;
+            drive_file.web_view_link = created.web_view_link;
+        }
         if let Err(local_error) = self.add_file_locally(file, parent) {
             return match self.df.delete_permanently(&drive_id) {
                 Ok(true) => Err(local_error),
@@ -423,28 +431,31 @@ impl FileManager {
         Ok(())
     }
 
-    /// Returns the Drive-computed checksums of a file's content, or `None` if the file is unknown,
-    /// has no Drive counterpart, or has local modifications that Drive has not checksummed yet.
-    pub fn checksums(&self, id: &FileId) -> Option<Checksums> {
+    /// Returns the Drive metadata exposed as extended attributes, or `None` if the file is
+    /// unknown or has no Drive counterpart. Checksums and the revision are omitted while the file
+    /// has local modifications that Drive has not checksummed yet.
+    pub fn drive_attributes(&self, id: &FileId) -> Option<DriveAttributes> {
         let drive_file = self.get_file(id)?.drive_file.as_ref()?;
         let drive_id = drive_file.id.as_ref()?;
-        self.df.checksums(drive_id, Checksums::of(drive_file))
+        let content = self
+            .df
+            .content_metadata(drive_id, ContentMetadata::of(drive_file));
+        Some(DriveAttributes::of(drive_file, content))
     }
 
     /// Change entries carry a file's current metadata, which is at least as recent as anything this
-    /// instance uploaded before the changes were listed. The listed checksums therefore replace
-    /// the ones recorded from uploads. Both are updated together so that a sync aborted midway
-    /// cannot leave older listed checksums exposed.
-    fn adopt_checksums_from_change(&mut self, id: &FileId, drive_f: &drive3::api::File) {
+    /// instance uploaded before the changes were listed. The listed content metadata therefore
+    /// replaces what was recorded from uploads. Both are updated together so that a sync aborted
+    /// midway cannot leave older listed checksums exposed.
+    fn adopt_content_metadata_from_change(&mut self, id: &FileId, drive_f: &drive3::api::File) {
         if let Some(drive_file) = self
             .get_mut_file(id)
             .and_then(|file| file.drive_file.as_mut())
         {
-            drive_file.md5_checksum = drive_f.md5_checksum.clone();
-            drive_file.sha256_checksum = drive_f.sha256_checksum.clone();
+            ContentMetadata::of(drive_f).apply_to(drive_file);
         }
         if let FileId::DriveId(drive_id) = id {
-            self.df.forget_uploaded_checksums(drive_id);
+            self.df.forget_uploaded_content(drive_id);
         }
     }
 
@@ -920,7 +931,7 @@ impl fmt::Debug for FileManager {
 #[cfg(test)]
 mod tests {
     use super::{FileManager, ROOT_INODE};
-    use crate::gcsf::{Checksums, File, FileId};
+    use crate::gcsf::{ContentMetadata, DriveAttributes, File, FileId};
     use fuser::{FileAttr, FileType, INodeNo};
     use std::time::SystemTime;
 
@@ -996,73 +1007,134 @@ mod tests {
         assert_eq!(manager.get_file(&FileId::Inode(11)).unwrap().name(), "same");
     }
 
-    fn file_with_md5(name: &str, inode: u64, drive_id: &str, md5: &str) -> File {
+    fn file_with_metadata(name: &str, inode: u64, drive_id: &str, md5: &str) -> File {
         let mut file = file(name, inode, drive_id, FileType::RegularFile);
         let drive_file = file.drive_file.as_mut().unwrap();
         drive_file.md5_checksum = Some(md5.to_string());
+        drive_file.sha1_checksum = Some(format!("sha1-of-{}", md5));
         drive_file.sha256_checksum = Some(format!("sha256-of-{}", md5));
+        drive_file.head_revision_id = Some(format!("revision-of-{}", md5));
+        drive_file.mime_type = Some("application/zip".to_string());
+        drive_file.web_view_link = Some(format!("https://example.com/{}", drive_id));
+        drive_file.owners = Some(vec![
+            drive3::api::User {
+                email_address: Some("a@example.com".to_string()),
+                display_name: Some("A".to_string()),
+                ..Default::default()
+            },
+            drive3::api::User {
+                email_address: Some("b@example.com".to_string()),
+                ..Default::default()
+            },
+        ]);
         file
     }
 
-    fn md5_of(manager: &FileManager, inode: u64) -> Option<Option<String>> {
+    #[test]
+    fn drive_attributes_are_read_from_drive_metadata() {
+        let mut manager = FileManager::new_for_testing(false);
         manager
-            .checksums(&FileId::Inode(inode))
-            .map(|checksums| checksums.md5)
+            .add_test_file(file_with_metadata("f", 10, "f-id", "listed"), ROOT_INODE)
+            .unwrap();
+
+        assert_eq!(
+            manager.drive_attributes(&FileId::Inode(10)),
+            Some(DriveAttributes {
+                id: Some("f-id".to_string()),
+                owners: Some("a@example.com,b@example.com".to_string()),
+                web_link: Some("https://example.com/f-id".to_string()),
+                content: ContentMetadata {
+                    md5: Some("listed".to_string()),
+                    sha1: Some("sha1-of-listed".to_string()),
+                    sha256: Some("sha256-of-listed".to_string()),
+                    revision: Some("revision-of-listed".to_string()),
+                    mime_type: Some("application/zip".to_string()),
+                },
+            })
+        );
     }
 
     #[test]
-    fn checksums_are_read_from_drive_metadata() {
+    fn directories_have_identity_but_no_content_attributes() {
         let mut manager = FileManager::new_for_testing(false);
-        manager
-            .add_test_file(file_with_md5("f", 10, "f-id", "listed"), ROOT_INODE)
-            .unwrap();
         manager
             .add_test_file(file("d", 11, "d-id", FileType::Directory), ROOT_INODE)
             .unwrap();
 
-        assert_eq!(md5_of(&manager, 10), Some(Some("listed".to_string())));
-        assert_eq!(
-            manager.checksums(&FileId::Inode(10)).unwrap().sha256,
-            Some("sha256-of-listed".to_string())
-        );
-        assert_eq!(md5_of(&manager, 11), Some(None));
-        assert_eq!(manager.checksums(&FileId::Inode(ROOT_INODE)), None);
-        assert_eq!(manager.checksums(&FileId::Inode(99)), None);
+        let attributes = manager.drive_attributes(&FileId::Inode(11)).unwrap();
+        assert_eq!(attributes.id, Some("d-id".to_string()));
+        assert_eq!(attributes.owners, None);
+        assert_eq!(attributes.content, ContentMetadata::default());
     }
 
     #[test]
-    fn checksums_are_hidden_while_writes_are_pending() {
+    fn files_without_drive_counterpart_have_no_attributes() {
+        let manager = FileManager::new_for_testing(false);
+        assert_eq!(manager.drive_attributes(&FileId::Inode(ROOT_INODE)), None);
+        assert_eq!(manager.drive_attributes(&FileId::Inode(99)), None);
+    }
+
+    #[test]
+    fn content_identity_is_hidden_while_writes_are_pending() {
         let mut manager = FileManager::new_for_testing(false);
         manager
-            .add_test_file(file_with_md5("f", 10, "f-id", "listed"), ROOT_INODE)
+            .add_test_file(file_with_metadata("f", 10, "f-id", "listed"), ROOT_INODE)
             .unwrap();
         manager.write(&FileId::Inode(10), 0, b"changed").unwrap();
-        assert_eq!(manager.checksums(&FileId::Inode(10)), None);
+
+        let attributes = manager.drive_attributes(&FileId::Inode(10)).unwrap();
+        assert_eq!(attributes.id, Some("f-id".to_string()));
+        assert_eq!(
+            attributes.content,
+            ContentMetadata {
+                mime_type: Some("application/zip".to_string()),
+                ..Default::default()
+            }
+        );
     }
 
     #[test]
-    fn change_metadata_replaces_uploaded_checksums() {
+    fn change_metadata_replaces_uploaded_content_metadata() {
         let mut manager = FileManager::new_for_testing(false);
         manager
-            .add_test_file(file_with_md5("f", 10, "f-id", "stale"), ROOT_INODE)
+            .add_test_file(file_with_metadata("f", 10, "f-id", "stale"), ROOT_INODE)
             .unwrap();
-        manager.df.record_uploaded_checksums_for_testing(
+        manager.df.record_uploaded_content_for_testing(
             "f-id",
-            Checksums {
+            ContentMetadata {
                 md5: Some("uploaded".to_string()),
-                sha256: None,
+                ..Default::default()
             },
         );
-        assert_eq!(md5_of(&manager, 10), Some(Some("uploaded".to_string())));
+        let md5 = |manager: &FileManager| {
+            manager
+                .drive_attributes(&FileId::Inode(10))
+                .unwrap()
+                .content
+                .md5
+        };
+        assert_eq!(md5(&manager), Some("uploaded".to_string()));
 
         let changed = drive3::api::File {
             md5_checksum: Some("changed".to_string()),
+            mime_type: Some("text/plain".to_string()),
             ..Default::default()
         };
-        manager.adopt_checksums_from_change(&FileId::DriveId("f-id".to_string()), &changed);
+        manager.adopt_content_metadata_from_change(&FileId::DriveId("f-id".to_string()), &changed);
 
-        let checksums = manager.checksums(&FileId::Inode(10)).unwrap();
-        assert_eq!(checksums.md5, Some("changed".to_string()));
-        assert_eq!(checksums.sha256, None);
+        let attributes = manager.drive_attributes(&FileId::Inode(10)).unwrap();
+        assert_eq!(
+            attributes.content,
+            ContentMetadata {
+                md5: Some("changed".to_string()),
+                mime_type: Some("text/plain".to_string()),
+                ..Default::default()
+            }
+        );
+        // Metadata unrelated to the content is untouched.
+        assert_eq!(
+            attributes.web_link,
+            Some("https://example.com/f-id".to_string())
+        );
     }
 }

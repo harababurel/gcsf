@@ -1,4 +1,4 @@
-use super::{Checksums, Config};
+use super::{Config, ContentMetadata, DriveAttributes};
 use drive3::hyper;
 use drive3::hyper_rustls;
 use drive3::yup_oauth2 as oauth2;
@@ -41,10 +41,10 @@ pub struct DriveFacade {
     /// The LRU cache used for storing the file contents for any given Drive ID.
     cache: LruCache<DriveId, Vec<u8>>,
 
-    /// Checksums Drive reported for content this instance uploaded (on create or flush). They
-    /// supersede the checksums in the file's listed metadata until the next change sync for the
-    /// file delivers fresh metadata.
-    uploaded_checksums: HashMap<DriveId, Checksums>,
+    /// Content metadata Drive reported for content this instance uploaded (on create or flush).
+    /// It supersedes the content metadata in the file's listed metadata until the next change
+    /// sync for the file delivers fresh metadata.
+    uploaded_content: HashMap<DriveId, ContentMetadata>,
 
     /// Keeps track of the page token used for receiving changes from the `changes.list` API endpoint.
     changes_token: Option<String>,
@@ -95,8 +95,18 @@ lazy_static! {
     /// The metadata GCSF needs for every file it lists, whether from `files.list` or
     /// `changes.list`.
     static ref LISTED_FILE_FIELDS: String = format!(
-        "name,id,size,mimeType,owners,parents,trashed,modifiedTime,createdTime,viewedByMeTime,{}",
-        Checksums::DRIVE_FIELDS
+        "name,size,parents,trashed,modifiedTime,createdTime,viewedByMeTime,{},{}",
+        DriveAttributes::DRIVE_FIELDS,
+        ContentMetadata::DRIVE_FIELDS
+    );
+}
+
+lazy_static! {
+    /// The metadata requested for files created by GCSF.
+    static ref CREATED_FILE_FIELDS: String = format!(
+        "{},{}",
+        DriveAttributes::DRIVE_FIELDS,
+        ContentMetadata::DRIVE_FIELDS
     );
 }
 
@@ -165,7 +175,7 @@ impl DriveFacade {
             buff: Vec::new(),
             pending_writes: HashMap::new(),
             cache: LruCache::<String, Vec<u8>>::with_expiry_duration_and_capacity(ttl, max_count),
-            uploaded_checksums: HashMap::new(),
+            uploaded_content: HashMap::new(),
             root_id: None,
             changes_token: None,
         }
@@ -178,7 +188,7 @@ impl DriveFacade {
             buff: Vec::new(),
             pending_writes: HashMap::new(),
             cache: LruCache::with_capacity(10),
-            uploaded_checksums: HashMap::new(),
+            uploaded_content: HashMap::new(),
             changes_token: None,
             root_id: None,
         }
@@ -719,8 +729,9 @@ impl DriveFacade {
         window
     }
 
-    /// Creates a new file on Drive. If successful, returns the file id.
-    pub fn create(&mut self, drive_file: &drive3::api::File) -> Result<DriveId, Error> {
+    /// Creates a new file on Drive. If successful, returns the metadata Drive assigned to it,
+    /// which includes the file id and everything in `DriveAttributes::DRIVE_FIELDS`.
+    pub fn create(&mut self, drive_file: &drive3::api::File) -> Result<drive3::api::File, Error> {
         let dummy_file = DummyFile::new(&[]);
         let rt = Runtime::new().unwrap();
         let (_, file) = rt
@@ -731,7 +742,7 @@ impl DriveFacade {
                     .use_content_as_indexable_text(true)
                     .supports_team_drives(false)
                     .ignore_default_visibility(true)
-                    .param("fields", &format!("id,{}", Checksums::DRIVE_FIELDS))
+                    .param("fields", &CREATED_FILE_FIELDS)
                     .upload(dummy_file, "application/octet-stream".parse().unwrap()),
             )
             .map_err(|e| err_msg(format!("{:#?}", e)))?;
@@ -739,35 +750,36 @@ impl DriveFacade {
             .id
             .clone()
             .ok_or_else(|| err_msg("Received file from Drive without an id"))?;
-        self.uploaded_checksums
-            .insert(id.clone(), Checksums::of(&file));
-        Ok(id)
+        self.uploaded_content.insert(id, ContentMetadata::of(&file));
+        Ok(file)
     }
 
-    /// Returns the checksums of the file content as it currently is on Drive, preferring those
-    /// reported for this instance's latest upload over `listed` (the checksums from the file's
-    /// listed metadata). Returns `None` while the file has pending operations, because its
-    /// content as seen through GCSF then differs from what Drive has checksummed.
-    pub fn checksums(&self, id: DriveIdRef, listed: Checksums) -> Option<Checksums> {
+    /// Returns the content metadata of a file as it currently is on Drive, preferring what was
+    /// reported for this instance's latest upload over `listed` (taken from the file's listed
+    /// metadata). While the file has pending operations, its content as seen through GCSF
+    /// differs from what Drive has checksummed, so only the MIME type is returned.
+    pub fn content_metadata(&self, id: DriveIdRef, listed: ContentMetadata) -> ContentMetadata {
+        let content = self.uploaded_content.get(id).cloned().unwrap_or(listed);
         if self.pending_writes.contains_key(id) {
-            return None;
+            content.without_content_identity()
+        } else {
+            content
         }
-        Some(self.uploaded_checksums.get(id).cloned().unwrap_or(listed))
     }
 
-    /// Discards checksums recorded from uploads, once fresher metadata for the file has arrived
-    /// from Drive.
-    pub fn forget_uploaded_checksums(&mut self, id: DriveIdRef) {
-        self.uploaded_checksums.remove(id);
+    /// Discards content metadata recorded from uploads, once fresher metadata for the file has
+    /// arrived from Drive.
+    pub fn forget_uploaded_content(&mut self, id: DriveIdRef) {
+        self.uploaded_content.remove(id);
     }
 
     #[cfg(test)]
-    pub(crate) fn record_uploaded_checksums_for_testing(
+    pub(crate) fn record_uploaded_content_for_testing(
         &mut self,
         id: DriveIdRef,
-        checksums: Checksums,
+        content: ContentMetadata,
     ) {
-        self.uploaded_checksums.insert(id.to_string(), checksums);
+        self.uploaded_content.insert(id.to_string(), content);
     }
 
     /// Writes some data to a Drive file starting at a certain offset.
@@ -990,8 +1002,8 @@ impl DriveFacade {
             })?;
         self.pending_writes.remove(id);
         self.cache.insert(id.to_string(), file_data);
-        self.uploaded_checksums
-            .insert(id.to_string(), Checksums::of(&uploaded));
+        self.uploaded_content
+            .insert(id.to_string(), ContentMetadata::of(&uploaded));
 
         Ok(())
     }
@@ -1035,7 +1047,7 @@ impl DriveFacade {
     pub fn discard_file_state(&mut self, id: DriveIdRef) {
         self.pending_writes.remove(id);
         self.cache.remove(id);
-        self.uploaded_checksums.remove(id);
+        self.uploaded_content.remove(id);
     }
 
     /// Updates the content of a file on Drive. The MIME type is guessed appropriately based on the
@@ -1068,7 +1080,7 @@ impl DriveFacade {
             .map_err(UpdateFileError::BeforeUpload)?
             .files()
             .update(file, &id)
-            .param("fields", &format!("id,{}", Checksums::DRIVE_FIELDS))
+            .param("fields", &format!("id,{}", ContentMetadata::DRIVE_FIELDS))
             .add_scope(drive3::api::Scope::Full);
         let result = if data.is_empty() {
             rt.block_on(request.upload(DummyFile::new(data), mime_guess.parse().unwrap()))
@@ -1160,7 +1172,7 @@ impl Read for DummyFile {
 
 #[cfg(test)]
 mod tests {
-    use super::{Checksums, DriveFacade, PendingOperation, is_not_found};
+    use super::{ContentMetadata, DriveFacade, PendingOperation, is_not_found};
 
     fn write(offset: usize, data: &[u8]) -> PendingOperation {
         PendingOperation::Write {
@@ -1364,37 +1376,47 @@ mod tests {
         }
     }
 
-    fn checksums(md5: &str) -> Checksums {
-        Checksums {
+    fn content(md5: &str) -> ContentMetadata {
+        ContentMetadata {
             md5: Some(md5.to_string()),
+            sha1: Some(format!("sha1-of-{}", md5)),
             sha256: Some(format!("sha256-of-{}", md5)),
+            revision: Some(format!("revision-of-{}", md5)),
+            mime_type: Some(format!("mime-of-{}", md5)),
+        }
+    }
+
+    fn mime_only(md5: &str) -> ContentMetadata {
+        ContentMetadata {
+            mime_type: Some(format!("mime-of-{}", md5)),
+            ..Default::default()
         }
     }
 
     #[test]
-    fn checksums_come_from_listed_metadata_by_default() {
+    fn content_metadata_comes_from_listed_metadata_by_default() {
         let facade = DriveFacade::new_for_testing();
         assert_eq!(
-            facade.checksums("file", checksums("listed")),
-            Some(checksums("listed"))
+            facade.content_metadata("file", content("listed")),
+            content("listed")
         );
     }
 
     #[test]
-    fn uploaded_checksums_supersede_listed_ones_until_forgotten() {
+    fn uploaded_content_metadata_supersedes_listed_until_forgotten() {
         let mut facade = DriveFacade::new_for_testing();
         facade
-            .uploaded_checksums
-            .insert("file".to_string(), checksums("uploaded"));
+            .uploaded_content
+            .insert("file".to_string(), content("uploaded"));
         assert_eq!(
-            facade.checksums("file", checksums("listed")),
-            Some(checksums("uploaded"))
+            facade.content_metadata("file", content("listed")),
+            content("uploaded")
         );
 
-        facade.forget_uploaded_checksums("file");
+        facade.forget_uploaded_content("file");
         assert_eq!(
-            facade.checksums("file", checksums("listed")),
-            Some(checksums("listed"))
+            facade.content_metadata("file", content("listed")),
+            content("listed")
         );
     }
 
@@ -1404,44 +1426,81 @@ mod tests {
         // reported even if Drive did not return checksums for the upload itself.
         let mut facade = DriveFacade::new_for_testing();
         facade
-            .uploaded_checksums
-            .insert("file".to_string(), Checksums::default());
+            .uploaded_content
+            .insert("file".to_string(), ContentMetadata::default());
         assert_eq!(
-            facade.checksums("file", checksums("listed")),
-            Some(Checksums::default())
+            facade.content_metadata("file", content("listed")),
+            ContentMetadata::default()
         );
     }
 
     #[test]
-    fn no_checksums_while_operations_are_pending() {
+    fn only_mime_type_is_reported_while_operations_are_pending() {
         let mut facade = DriveFacade::new_for_testing();
         facade
-            .uploaded_checksums
-            .insert("file".to_string(), checksums("uploaded"));
+            .uploaded_content
+            .insert("file".to_string(), content("uploaded"));
         facade.write("file".to_string(), 0, b"new").unwrap();
-        assert_eq!(facade.checksums("file", checksums("listed")), None);
+        assert_eq!(
+            facade.content_metadata("file", content("listed")),
+            mime_only("uploaded")
+        );
 
         let mut facade = DriveFacade::new_for_testing();
         facade.truncate("file".to_string(), 0);
-        assert_eq!(facade.checksums("file", checksums("listed")), None);
+        assert_eq!(
+            facade.content_metadata("file", content("listed")),
+            mime_only("listed")
+        );
     }
 
     #[test]
-    fn failed_flush_keeps_checksums_hidden() {
+    fn failed_flush_keeps_content_identity_hidden() {
         let mut facade = DriveFacade::new_for_testing();
         facade.write("file".to_string(), 0, b"data").unwrap();
         assert!(facade.flush("file").is_err());
-        assert_eq!(facade.checksums("file", checksums("listed")), None);
+        assert_eq!(
+            facade.content_metadata("file", content("listed")),
+            mime_only("listed")
+        );
     }
 
     #[test]
-    fn discarding_file_state_forgets_uploaded_checksums() {
+    fn discarding_file_state_forgets_uploaded_content_metadata() {
         let mut facade = DriveFacade::new_for_testing();
         facade
-            .uploaded_checksums
-            .insert("file".to_string(), checksums("uploaded"));
+            .uploaded_content
+            .insert("file".to_string(), content("uploaded"));
         facade.discard_file_state("file");
-        assert!(facade.uploaded_checksums.is_empty());
+        assert!(facade.uploaded_content.is_empty());
+    }
+
+    #[test]
+    fn listing_requests_every_exposed_field_exactly_once() {
+        for fields in [
+            super::LISTED_FILE_FIELDS.as_str(),
+            super::CREATED_FILE_FIELDS.as_str(),
+        ] {
+            let names: Vec<&str> = fields.split(',').collect();
+            for required in [
+                "id",
+                "owners(emailAddress)",
+                "webViewLink",
+                "mimeType",
+                "md5Checksum",
+                "sha1Checksum",
+                "sha256Checksum",
+                "headRevisionId",
+            ] {
+                assert_eq!(
+                    names.iter().filter(|name| **name == required).count(),
+                    1,
+                    "{} in {}",
+                    required,
+                    fields
+                );
+            }
+        }
     }
 
     #[test]

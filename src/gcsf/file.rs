@@ -22,23 +22,88 @@ pub struct File {
     pub drive_file: Option<drive3::api::File>,
 }
 
-/// Content checksums computed by Google Drive. Drive only provides them for files with binary
-/// content, so they are absent for directories and Docs Editors files.
+/// Drive metadata that changes whenever a file's content is uploaded. Drive only computes
+/// checksums and revisions for files with binary content, so they are absent for directories
+/// and Docs Editors files.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Checksums {
+pub struct ContentMetadata {
     pub md5: Option<String>,
+    pub sha1: Option<String>,
     pub sha256: Option<String>,
+    pub revision: Option<String>,
+    /// Drive re-derives the MIME type from the content of every upload.
+    pub mime_type: Option<String>,
 }
 
-impl Checksums {
-    /// The Drive API `fields` needed to populate `Checksums::of`.
-    pub const DRIVE_FIELDS: &'static str = "md5Checksum,sha256Checksum";
+impl ContentMetadata {
+    /// The Drive API `fields` needed to populate `ContentMetadata::of`.
+    pub const DRIVE_FIELDS: &'static str =
+        "md5Checksum,sha1Checksum,sha256Checksum,headRevisionId,mimeType";
 
-    /// Extracts the checksums reported in a Drive file's metadata.
+    /// Extracts the content metadata reported in a Drive file's metadata.
     pub fn of(drive_file: &drive3::api::File) -> Self {
-        Checksums {
+        ContentMetadata {
             md5: drive_file.md5_checksum.clone(),
+            sha1: drive_file.sha1_checksum.clone(),
             sha256: drive_file.sha256_checksum.clone(),
+            revision: drive_file.head_revision_id.clone(),
+            mime_type: drive_file.mime_type.clone(),
+        }
+    }
+
+    /// Copies this content metadata into a Drive file's metadata.
+    pub fn apply_to(&self, drive_file: &mut drive3::api::File) {
+        drive_file.md5_checksum = self.md5.clone();
+        drive_file.sha1_checksum = self.sha1.clone();
+        drive_file.sha256_checksum = self.sha256.clone();
+        drive_file.head_revision_id = self.revision.clone();
+        drive_file.mime_type = self.mime_type.clone();
+    }
+
+    /// Drops everything that describes the exact content. Used while the content seen through
+    /// GCSF has local modifications that Drive has not checksummed yet.
+    pub fn without_content_identity(self) -> Self {
+        ContentMetadata {
+            mime_type: self.mime_type,
+            ..Default::default()
+        }
+    }
+}
+
+/// The Drive metadata GCSF exposes as extended attributes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DriveAttributes {
+    pub id: Option<String>,
+    /// Comma-separated email addresses of the file's owners.
+    pub owners: Option<String>,
+    pub web_link: Option<String>,
+    pub content: ContentMetadata,
+}
+
+impl DriveAttributes {
+    /// The Drive API `fields` needed, besides `ContentMetadata::DRIVE_FIELDS`, to populate
+    /// `DriveAttributes::of`.
+    pub const DRIVE_FIELDS: &'static str = "id,owners(emailAddress),webViewLink";
+
+    /// Collects the attributes from a Drive file's metadata, with `content` describing its
+    /// current content.
+    pub fn of(drive_file: &drive3::api::File, content: ContentMetadata) -> Self {
+        let owners = drive_file
+            .owners
+            .as_ref()
+            .map(|owners| {
+                owners
+                    .iter()
+                    .filter_map(|owner| owner.email_address.as_deref())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .filter(|owners| !owners.is_empty());
+        DriveAttributes {
+            id: drive_file.id.clone(),
+            owners,
+            web_link: drive_file.web_view_link.clone(),
+            content,
         }
     }
 }

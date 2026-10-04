@@ -59,7 +59,7 @@ The test suite includes **16 test categories** covering all typical filesystem o
 13. **Same Filename, Different Directories** - files in different dirs don't get suffixes
 14. **Nested Directories** - same filename in nested paths behaves correctly
 15. **Large File Sequential Read** - a cached 64MiB file reads back intact and fast, including after a partial overwrite
-16. **Checksum Extended Attributes** - `user.gcsf.md5` and `user.gcsf.sha256` match the uploaded content and follow overwrites (requires `getfattr` from the `attr` package on Linux)
+16. **Drive Metadata Extended Attributes** - `user.gcsf.*` checksums match the uploaded content and follow overwrites; id, MIME type, owner, web link and revision are well-formed (requires `getfattr` from the `attr` package on Linux)
 
 ## Expected Output
 

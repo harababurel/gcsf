@@ -169,9 +169,26 @@ Or Thunar:
        width="746px" height="176px">
 </p>
 
+#### Drive metadata as extended attributes
+
+GCSF exposes Drive metadata of every file and directory as extended attributes:
+
+| Attribute | Contents |
+|---|---|
+| `user.gcsf.id` | Drive file id, e.g. for use with the Drive API or rclone |
+| `user.gcsf.mime_type` | MIME type of the file on Drive |
+| `user.gcsf.owner` | Email address of the owner (comma-separated if there are several) |
+| `user.gcsf.web_link` | Link for opening the file in a browser |
+| `user.gcsf.md5`, `user.gcsf.sha1`, `user.gcsf.sha256` | Checksums Drive computed for the file's content |
+| `user.gcsf.revision` | Id of the current content revision; changes whenever the content does |
+
+List them all with `getfattr -d /mnt/gcsf/some_file`, or `xattr -l` on macOS.
+
+Drive provides no checksums or revisions for directories and Google Docs, Sheets, Slides, Drawings and Sites, so these have no such attributes. Neither does a file with modifications that have not been flushed to Drive yet.
+
 #### Verifying copied files
 
-Each file stored in Drive exposes the checksums Google Drive computed for its content as extended attributes: `user.gcsf.md5` and `user.gcsf.sha256`. Comparing a copy against them checks it end to end against Drive, without reading the file through GCSF again:
+The checksums let you verify a copy end to end against Drive, without reading the file through GCSF again:
 
 ```bash
 $ cp /mnt/gcsf/backup.zip /tmp/
@@ -181,7 +198,7 @@ $ md5sum /tmp/backup.zip
 9e107d9d372bb6826bd81d3542a419d6  /tmp/backup.zip
 ```
 
-On macOS, use `xattr -p user.gcsf.md5 /mnt/gcsf/backup.zip` instead of `getfattr`. Drive provides no checksums for directories and Google Docs, Sheets, Slides, Drawings and Sites, so these files have no such attributes. Neither does a file with modifications that have not been flushed to Drive yet.
+On macOS, use `xattr -p user.gcsf.md5 /mnt/gcsf/backup.zip` instead of `getfattr`.
 
 ### Why GCSF?
 GCSF stands for "Google Conduce Sistem de Fișiere" which translated from Romanian is "Google Drive Filesystem". However [GDFS](https://github.com/robin-thomas/GDFS) already exists so it remains GCSF.
