@@ -604,6 +604,11 @@ impl DriveFacade {
 
     /// Reads the contents of a Drive file starting at a certain offset.
     /// Prefers reading from cache if possible, otherwise fetches the content from Drive.
+    ///
+    /// The cache always holds the content as it is on Drive; pending operations are overlaid on
+    /// the requested window only. A read therefore costs O(`size` + pending operations) rather
+    /// than O(file size), which matters because the kernel splits sequential reads of a large
+    /// file into many small requests.
     pub fn read(
         &mut self,
         drive_id: DriveIdRef,
@@ -611,30 +616,81 @@ impl DriveFacade {
         offset: usize,
         size: usize,
     ) -> Option<&[u8]> {
-        let data = match self.cache.get(drive_id).cloned() {
-            Some(data) => data,
-            None => match self.get_file_content(drive_id, mime_type) {
-                Ok(data) => data,
+        if self.cache.get(drive_id).is_none() {
+            match self.get_file_content(drive_id, mime_type) {
+                Ok(data) => {
+                    self.cache.insert(drive_id.to_string(), data);
+                }
                 Err(e) => {
                     error!("Got error: {:?}", e);
                     return None;
                 }
-            },
-        };
-
-        match self.data_with_pending_operations(drive_id, data) {
-            Ok(data) => {
-                let start = cmp::min(data.len(), offset);
-                let end = cmp::min(data.len(), offset.saturating_add(size));
-                self.buff = data[start..end].to_vec();
-                self.cache.insert(drive_id.to_string(), data);
-                Some(&self.buff)
-            }
-            Err(e) => {
-                error!("Got error: {:?}", e);
-                None
             }
         }
+
+        let base = self.cache.peek(drive_id)?;
+        let operations = self
+            .pending_writes
+            .get(drive_id)
+            .map_or(&[][..], Vec::as_slice);
+        self.buff = Self::read_window(base, operations, offset, size);
+        Some(&self.buff)
+    }
+
+    /// Returns bytes `[offset, offset + size)` of the content obtained by applying `operations` to
+    /// `base`, clamped to the resulting length. Only the requested window is materialized, so the
+    /// cost does not depend on the size of `base`.
+    fn read_window(
+        base: &[u8],
+        operations: &[PendingOperation],
+        offset: usize,
+        size: usize,
+    ) -> Vec<u8> {
+        let final_len = operations
+            .iter()
+            .fold(base.len(), |len, operation| match operation {
+                PendingOperation::Write { offset, data } => {
+                    cmp::max(len, offset.saturating_add(data.len()))
+                }
+                PendingOperation::Truncate { size } => *size,
+            });
+        let start = cmp::min(final_len, offset);
+        let end = cmp::min(final_len, offset.saturating_add(size));
+
+        // Bytes past the end of the base content start out as zeros, which is what growing the
+        // file (sparse writes or extending truncates) fills them with.
+        let mut window = vec![0; end - start];
+        let base_end = cmp::min(base.len(), end);
+        if start < base_end {
+            window[..base_end - start].copy_from_slice(&base[start..base_end]);
+        }
+
+        for operation in operations {
+            match operation {
+                PendingOperation::Write {
+                    offset: write_offset,
+                    data,
+                } => {
+                    let write_end = write_offset.saturating_add(data.len());
+                    let from = cmp::max(start, *write_offset);
+                    let to = cmp::min(end, write_end);
+                    if from < to {
+                        window[from - start..to - start]
+                            .copy_from_slice(&data[from - write_offset..to - write_offset]);
+                    }
+                }
+                // Shrinking discards the tail; if the file later grows again, the regrown
+                // region reads as zeros. Within the window both cases mean zeroing.
+                PendingOperation::Truncate { size } => {
+                    let from = cmp::max(start, *size);
+                    if from < end {
+                        window[from - start..].fill(0);
+                    }
+                }
+            }
+        }
+
+        window
     }
 
     /// Creates a new file on Drive. If successful, returns the file id.
@@ -1179,5 +1235,80 @@ mod tests {
         facade.truncate("file".to_string(), 5);
 
         assert_eq!(facade.read("file", None, 0, 20), Some(&b"abXYe"[..]));
+    }
+
+    #[test]
+    fn reads_do_not_copy_or_modify_the_cached_content() {
+        // Regression test: read() used to clone the whole cached file on every call, making each
+        // small read O(file size) and sequential reads of large files quadratic. The cached
+        // buffer must be served in place and must keep holding the content as it is on Drive.
+        let mut facade = DriveFacade::new_for_testing();
+        facade.cache.insert("file".to_string(), b"abcdef".to_vec());
+        let cached_ptr = facade.cache.peek("file").unwrap().as_ptr();
+
+        assert_eq!(facade.read("file", None, 1, 2), Some(&b"bc"[..]));
+        assert_eq!(facade.read("file", None, 4, 10), Some(&b"ef"[..]));
+        assert_eq!(facade.read("file", None, 10, 10), Some(&b""[..]));
+
+        facade.write("file".to_string(), 0, b"XY").unwrap();
+        assert_eq!(facade.read("file", None, 0, 3), Some(&b"XYc"[..]));
+
+        let cached = facade.cache.peek("file").unwrap();
+        assert_eq!(cached.as_ptr(), cached_ptr);
+        assert_eq!(cached, b"abcdef");
+    }
+
+    #[test]
+    fn read_window_matches_applying_operations_to_whole_file() {
+        // Deterministic pseudo-random differential test against apply_pending_operations, which
+        // is the reference for what the file content looks like after the pending operations.
+        let mut seed: u64 = 0x9e37_79b9_7f4a_7c15;
+        let mut next = |bound: usize| {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ((seed >> 33) as usize) % bound
+        };
+
+        for _ in 0..2000 {
+            let base: Vec<u8> = (0..next(24)).map(|i| b'a' + (i % 26) as u8).collect();
+            let operations: Vec<PendingOperation> = (0..next(5))
+                .map(|_| {
+                    if next(3) == 0 {
+                        PendingOperation::Truncate { size: next(32) }
+                    } else {
+                        let len = next(8);
+                        write(next(32), &vec![b'A' + next(26) as u8; len])
+                    }
+                })
+                .collect();
+            let offset = next(40);
+            let size = next(40);
+
+            let mut expected = base.clone();
+            DriveFacade::apply_pending_operations(&operations, &mut expected).unwrap();
+            let start = expected.len().min(offset);
+            let end = expected.len().min(offset + size);
+
+            assert_eq!(
+                DriveFacade::read_window(&base, &operations, offset, size),
+                &expected[start..end],
+                "base={:?} operations={:?} offset={} size={}",
+                base,
+                operations,
+                offset,
+                size
+            );
+        }
+    }
+
+    #[test]
+    fn read_window_handles_extreme_offsets() {
+        let base = b"abc";
+        assert_eq!(
+            DriveFacade::read_window(base, &[], usize::MAX, usize::MAX),
+            b""
+        );
+        assert_eq!(DriveFacade::read_window(base, &[], 1, usize::MAX), b"bc");
     }
 }

@@ -67,7 +67,7 @@ if [ "$ACCEPT_RISK" = false ]; then
     echo "  • Create files and directories in your mounted Google Drive"
     echo "  • Write, modify, and delete test data"
     echo "  • Move files between directories"
-    echo "  • Create files up to 10MB in size"
+    echo "  • Create files up to 64MB in size"
     echo ""
     echo -e "${CYAN}Mount point:${NC} $MOUNT_POINT"
     echo -e "${CYAN}Test directory:${NC} $MOUNT_POINT/gcsf_integration_test_*"
@@ -887,6 +887,73 @@ test_nested_same_names() {
 }
 
 #############################################################################
+# TEST 15: Sequential Read Throughput of a Cached Large File
+#############################################################################
+# Regression test: every read() used to copy the entire cached file, so reading
+# a file sequentially in kernel-sized chunks was quadratic in its size (a 3GB
+# file read at ~120kB/s). A cached read must cost O(chunk), not O(file).
+test_large_file_sequential_read() {
+    log_test "15" "Sequential read throughput of a cached large file"
+
+    local test_dir="$TEST_DIR/test15"
+    mkdir -p "$test_dir"
+
+    local size_mib=64
+    # With the bug, this read takes tens of seconds; when fixed, well under one.
+    local max_seconds=5
+
+    local local_copy
+    local_copy=$(mktemp)
+    head -c $((size_mib * 1024 * 1024)) /dev/urandom > "$local_copy"
+    local expected_sum
+    expected_sum=$(sha256sum < "$local_copy" | cut -d' ' -f1)
+
+    log_info "Uploading ${size_mib}MiB of random data"
+    cp "$local_copy" "$test_dir/random.dat"
+    wait_for_sync
+
+    # The first read may download the file from Drive; it must not be timed.
+    log_info "Warming the cache and verifying content"
+    local actual_sum
+    actual_sum=$(sha256sum < "$test_dir/random.dat" | cut -d' ' -f1)
+    if [ "$actual_sum" = "$expected_sum" ]; then
+        log_pass "Large file content matches after upload"
+    else
+        log_fail "Large file content differs after upload"
+    fi
+
+    # GCSF does not set FOPEN_KEEP_CACHE, so this re-open bypasses the kernel
+    # page cache and every chunk is served by GCSF from its own cache.
+    log_info "Timing sequential read in 128KiB chunks"
+    local start_ns end_ns elapsed_ms
+    start_ns=$(date +%s%N)
+    dd if="$test_dir/random.dat" of=/dev/null bs=128k 2>/dev/null
+    end_ns=$(date +%s%N)
+    elapsed_ms=$(((end_ns - start_ns) / 1000000))
+    if [ "$elapsed_ms" -lt $((max_seconds * 1000)) ]; then
+        log_pass "Sequential read of ${size_mib}MiB took ${elapsed_ms}ms (limit ${max_seconds}s)"
+    else
+        log_fail "Sequential read of ${size_mib}MiB took ${elapsed_ms}ms (limit ${max_seconds}s)"
+    fi
+
+    # A partial overwrite must be visible on subsequent reads of the large file.
+    log_info "Overwriting bytes in the middle of the large file"
+    local patch_offset=$((size_mib * 1024 * 1024 / 2 + 3))
+    printf 'PATCHED' | dd of="$local_copy" bs=1 seek="$patch_offset" conv=notrunc 2>/dev/null
+    printf 'PATCHED' | dd of="$test_dir/random.dat" bs=1 seek="$patch_offset" conv=notrunc 2>/dev/null
+    wait_for_sync
+    expected_sum=$(sha256sum < "$local_copy" | cut -d' ' -f1)
+    actual_sum=$(sha256sum < "$test_dir/random.dat" | cut -d' ' -f1)
+    if [ "$actual_sum" = "$expected_sum" ]; then
+        log_pass "Partial overwrite of large file reads back correctly"
+    else
+        log_fail "Partial overwrite of large file reads back incorrectly"
+    fi
+
+    rm -f "$local_copy"
+}
+
+#############################################################################
 # Main Execution
 #############################################################################
 main() {
@@ -916,6 +983,7 @@ main() {
     test_duplicate_same_directory || true
     test_same_name_different_dirs || true
     test_nested_same_names || true
+    test_large_file_sequential_read || true
 
     # Print summary
     echo ""
